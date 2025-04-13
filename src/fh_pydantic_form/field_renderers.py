@@ -1,0 +1,920 @@
+import logging
+from datetime import date, time
+from typing import (
+    Any,
+    get_args,
+    get_origin,
+)
+
+import fasthtml.common as fh
+import monsterui.all as mui
+from fastcore.xml import FT
+from pydantic import ValidationError
+from pydantic.fields import FieldInfo
+
+from fh_pydantic_form.registry import FieldRendererRegistry
+from fh_pydantic_form.type_helpers import (
+    _get_underlying_type_if_optional,
+    _is_optional_type,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class BaseFieldRenderer:
+    """
+    Base class for field renderers
+
+    Field renderers are responsible for:
+    - Rendering a label for the field
+    - Rendering an appropriate input element for the field
+    - Combining the label and input with proper spacing
+
+    Subclasses must implement render_input()
+    """
+
+    def __init__(
+        self,
+        field_name: str,
+        field_info: FieldInfo,
+        value: Any = None,
+        prefix: str = "",
+    ):
+        """
+        Initialize the field renderer
+
+        Args:
+            field_name: The name of the field
+            field_info: The FieldInfo for the field
+            value: The current value of the field (optional)
+            prefix: Optional prefix for the field name (used for nested fields)
+        """
+        self.field_name = f"{prefix}{field_name}" if prefix else field_name
+        self.original_field_name = field_name
+        self.field_info = field_info
+        self.value = value
+        self.prefix = prefix
+        self.is_optional = _is_optional_type(field_info.annotation)
+
+    def render_label(self) -> FT:
+        """
+        Render label for the field
+
+        Returns:
+            A FastHTML component for the label
+        """
+        # Get field description from field_info
+        description = getattr(self.field_info, "description", None)
+
+        # Prepare label text and attributes
+        label_text = self.original_field_name.replace("_", " ").title()
+        label_attrs = {"For": self.field_name}
+
+        # Add tooltip if description is available
+        if description:
+            label_attrs["uk_tooltip"] = description
+
+        # Create and return the label - using standard fh.Label with appropriate styling
+        return fh.Label(
+            label_text,
+            **label_attrs,
+            cls="block text-sm font-medium text-gray-700 mb-1",
+        )
+
+    def render_input(self) -> FT:
+        """
+        Render input element for the field
+
+        Returns:
+            A FastHTML component for the input element
+
+        Raises:
+            NotImplementedError: Subclasses must implement this method
+        """
+        raise NotImplementedError("Subclasses must implement render_input")
+
+    def render(self) -> FT:
+        """
+        Render the complete field (label + input) with spacing
+
+        Returns:
+            A FastHTML component containing the complete field
+        """
+        return fh.Div(self.render_label(), self.render_input(), cls="mb-4")
+
+
+# ---- Specific Field Renderers ----
+
+
+class StringFieldRenderer(BaseFieldRenderer):
+    """Renderer for string fields"""
+
+    def render_input(self) -> FT:
+        """
+        Render input element for the field
+
+        Returns:
+            A TextInput component appropriate for string values
+        """
+        is_field_required = (
+            not self.is_optional
+            and self.field_info.default is None
+            and getattr(self.field_info, "default_factory", None) is None
+        )
+
+        placeholder_text = f"Enter {self.original_field_name.replace('_', ' ')}"
+        if self.is_optional:
+            placeholder_text += " (Optional)"
+
+        return mui.Input(
+            value=self.value or "",
+            id=self.field_name,
+            name=self.field_name,
+            placeholder=placeholder_text,
+            required=is_field_required,
+            cls="w-full",
+        )
+
+
+class NumberFieldRenderer(BaseFieldRenderer):
+    """Renderer for number fields (int, float)"""
+
+    def render_input(self) -> FT:
+        """
+        Render input element for the field
+
+        Returns:
+            A NumberInput component appropriate for numeric values
+        """
+        is_field_required = (
+            not self.is_optional
+            and self.field_info.default is None
+            and getattr(self.field_info, "default_factory", None) is None
+        )
+
+        placeholder_text = f"Enter {self.original_field_name.replace('_', ' ')}"
+        if self.is_optional:
+            placeholder_text += " (Optional)"
+
+        return mui.Input(
+            value=str(self.value) if self.value is not None else "",
+            id=self.field_name,
+            name=self.field_name,
+            type="number",
+            placeholder=placeholder_text,
+            required=is_field_required,
+            cls="w-full",
+            step="any"
+            if self.field_info.annotation is float
+            or get_origin(self.field_info.annotation) is float
+            else "1",
+        )
+
+
+class BooleanFieldRenderer(BaseFieldRenderer):
+    """Renderer for boolean fields"""
+
+    def render_input(self) -> FT:
+        """
+        Render input element for the field
+
+        Returns:
+            A CheckboxX component appropriate for boolean values
+        """
+        return mui.CheckboxX(
+            id=self.field_name,
+            name=self.field_name,
+            checked=bool(self.value),
+        )
+
+
+class DateFieldRenderer(BaseFieldRenderer):
+    """Renderer for date fields"""
+
+    def render_input(self) -> FT:
+        """
+        Render input element for the field
+
+        Returns:
+            A DateInput component appropriate for date values
+        """
+        formatted_value = ""
+        if (
+            isinstance(self.value, str) and len(self.value) == 10
+        ):  # Basic check for YYYY-MM-DD format
+            # Assume it's the correct string format from the form
+            formatted_value = self.value
+        elif isinstance(self.value, date):
+            formatted_value = self.value.isoformat()  # YYYY-MM-DD
+
+        is_field_required = (
+            not self.is_optional
+            and self.field_info.default is None
+            and getattr(self.field_info, "default_factory", None) is None
+        )
+
+        placeholder_text = f"Select {self.original_field_name.replace('_', ' ')}"
+        if self.is_optional:
+            placeholder_text += " (Optional)"
+
+        return mui.Input(
+            value=formatted_value,
+            id=self.field_name,
+            name=self.field_name,
+            type="date",
+            placeholder=placeholder_text,
+            required=is_field_required,
+            cls="w-full",
+        )
+
+
+class TimeFieldRenderer(BaseFieldRenderer):
+    """Renderer for time fields"""
+
+    def render_input(self) -> FT:
+        """
+        Render input element for the field
+
+        Returns:
+            A TimeInput component appropriate for time values
+        """
+        formatted_value = ""
+        if (
+            isinstance(self.value, str) and len(self.value) == 5
+        ):  # Basic check for HH:MM format
+            # Assume it's the correct string format from the form
+            formatted_value = self.value
+        elif isinstance(self.value, time):
+            formatted_value = self.value.strftime("%H:%M")  # HH:MM
+
+        is_field_required = (
+            not self.is_optional
+            and self.field_info.default is None
+            and getattr(self.field_info, "default_factory", None) is None
+        )
+
+        placeholder_text = f"Select {self.original_field_name.replace('_', ' ')}"
+        if self.is_optional:
+            placeholder_text += " (Optional)"
+
+        return mui.Input(
+            value=formatted_value,
+            id=self.field_name,
+            name=self.field_name,
+            type="time",
+            placeholder=placeholder_text,
+            required=is_field_required,
+            cls="w-full",
+        )
+
+
+class LiteralFieldRenderer(BaseFieldRenderer):
+    """Renderer for Literal fields as dropdown selects"""
+
+    def render_input(self) -> FT:
+        """
+        Render input element for the field as a select dropdown
+
+        Returns:
+            A Select component with options based on the Literal values
+        """
+        # Get the Literal values from annotation
+        annotation = _get_underlying_type_if_optional(self.field_info.annotation)
+        literal_values = get_args(annotation)
+
+        if not literal_values:
+            return mui.Alert(
+                f"No literal values found for {self.field_name}", cls=mui.AlertT.warning
+            )
+
+        # Determine if field is required
+        is_field_required = (
+            not self.is_optional
+            and self.field_info.default is None
+            and getattr(self.field_info, "default_factory", None) is None
+        )
+
+        # Create options for each literal value
+        options = []
+        current_value_str = str(self.value) if self.value is not None else None
+
+        # Add empty option for optional fields
+        if self.is_optional:
+            options.append(
+                fh.Option("-- None --", value="", selected=(self.value is None))
+            )
+
+        # Add options for each literal value
+        for value in literal_values:
+            value_str = str(value)
+            is_selected = current_value_str == value_str
+            options.append(
+                fh.Option(
+                    value_str,  # Display text
+                    value=value_str,  # Value attribute
+                    selected=is_selected,
+                )
+            )
+
+        placeholder_text = f"Select {self.original_field_name.replace('_', ' ')}"
+        if self.is_optional:
+            placeholder_text += " (Optional)"
+
+        # Render the select element
+        return mui.Select(
+            *options,
+            id=self.field_name,
+            name=self.field_name,
+            required=is_field_required,
+            placeholder=placeholder_text,
+            cls="w-full",
+        )
+
+
+class BaseModelFieldRenderer(BaseFieldRenderer):
+    """Renderer for nested Pydantic BaseModel fields"""
+
+    def render_input(self) -> FT:
+        """
+        Render input elements for nested model fields
+
+        Returns:
+            A Card component containing nested form fields
+        """
+        # Get the nested model class from annotation
+        nested_model_class = _get_underlying_type_if_optional(
+            self.field_info.annotation
+        )
+
+        if nested_model_class is None or not hasattr(
+            nested_model_class, "model_fields"
+        ):
+            return mui.Alert(
+                f"No nested model class found for {self.field_name}",
+                cls=mui.AlertT.error,
+            )
+
+        # Prepare values dict
+        values_dict = (
+            self.value.model_dump()
+            if hasattr(self.value, "model_dump")
+            else self.value
+            if isinstance(self.value, dict)
+            else {}
+        )
+
+        # Create nested field inputs directly instead of using FormRenderer
+        nested_inputs = []
+
+        for (
+            nested_field_name,
+            nested_field_info,
+        ) in nested_model_class.model_fields.items():
+            # Determine initial value
+            nested_field_value = (
+                values_dict.get(nested_field_name) if values_dict else None
+            )
+
+            # Apply default if needed
+            if nested_field_value is None:
+                if nested_field_info.default is not None:
+                    nested_field_value = nested_field_info.default
+                elif getattr(nested_field_info, "default_factory", None) is not None:
+                    try:
+                        nested_field_value = nested_field_info.default_factory()
+                    except Exception:
+                        nested_field_value = None
+
+            # Get renderer for this nested field
+            registry = FieldRendererRegistry()  # Get singleton instance
+            renderer_cls = registry.get_renderer(nested_field_name, nested_field_info)
+
+            if not renderer_cls:
+                # Fall back to StringFieldRenderer if no renderer found
+                renderer_cls = StringFieldRenderer
+
+            # The prefix for nested fields is simply the field_name of this BaseModel instance + underscore
+            # field_name already includes the form prefix, so we don't need to add self.prefix again
+            nested_prefix = f"{self.field_name}_"
+
+            # Create and render the nested field
+            renderer = renderer_cls(
+                field_name=nested_field_name,
+                field_info=nested_field_info,
+                value=nested_field_value,
+                prefix=nested_prefix,
+            )
+
+            nested_inputs.append(renderer.render())
+
+        # Create container for nested inputs
+        nested_form_content = mui.DivVStacked(
+            *nested_inputs, cls="space-y-3 items-stretch"
+        )
+
+        # Wrap in card for visual distinction
+        return mui.Card(
+            nested_form_content,
+            cls="p-3 mt-1 border rounded",
+        )
+
+
+class ListFieldRenderer(BaseFieldRenderer):
+    """Renderer for list fields containing any type"""
+
+    def render(self) -> FT:
+        """
+        Render the complete field (label + input) with spacing, adding a refresh icon for list fields.
+
+        Returns:
+            A FastHTML component containing the complete field with refresh icon
+        """
+        # Extract form name from prefix (removing trailing underscore if present)
+        form_name = self.prefix.rstrip("_") if self.prefix else None
+
+        # Get the original label
+        original_label = self.render_label()
+
+        # Only add refresh icon if we have a form name
+        if form_name:
+            # Create the smaller icon component
+            refresh_icon_component = mui.UkIcon(
+                "refresh-ccw",
+                cls="w-3 h-3 text-gray-500 hover:text-blue-600",  # Smaller size
+            )
+
+            # Create the clickable span wrapper for the icon
+            refresh_icon_trigger = fh.Span(
+                refresh_icon_component,
+                cls="ml-1 inline-block align-middle cursor-pointer",  # Add margin, ensure inline-like behavior
+                hx_post=f"/form/{form_name}/refresh",
+                hx_target=f"#{form_name}-inputs-wrapper",
+                hx_swap="innerHTML",
+                hx_include=f"#{form_name}-form",
+                uk_tooltip="Refresh form display to update list summaries",
+            )
+
+            # Combine label and icon
+            label_with_icon = fh.Div(
+                original_label, refresh_icon_trigger, cls="flex items-center"
+            )
+        else:
+            # If no form name, just use the original label
+            label_with_icon = original_label
+
+        # Return container with label+icon and input
+        return fh.Div(label_with_icon, self.render_input(), cls="mb-4")
+
+    def render_input(self) -> FT:
+        """
+        Render a list of items with add/delete/move capabilities
+
+        Returns:
+            A component containing the list items and controls
+        """
+        # Initialize the value as an empty list, ensuring it's always a list
+        items = [] if not isinstance(self.value, list) else self.value
+        logger.info(
+            f"ListFieldRenderer.render_input for field '{self.field_name}' with {len(items)} items"
+        )
+
+        # Log the items for debugging
+        if items:
+            for i, item in enumerate(items[:3]):  # Log first 3 items at most
+                item_type = type(item).__name__
+                item_preview = (
+                    str(item)[:50] + "..." if len(str(item)) > 50 else str(item)
+                )
+                logger.info(f"  - Item {i}: {item_type} = {item_preview}")
+            if len(items) > 3:
+                logger.info(f"  - ... and {len(items) - 3} more items")
+
+        annotation = getattr(self.field_info, "annotation", None)
+        for i, item in enumerate(items[:3]):  # Log first 3 items at most
+            item_type = type(item).__name__
+            item_preview = str(item)[:50] + "..." if len(str(item)) > 50 else str(item)
+            logger.info(f"  - Item {i}: {item_type} = {item_preview}")
+        if len(items) > 3:
+            logger.info(f"  - ... and {len(items) - 3} more items")
+
+        if (
+            annotation is not None
+            and hasattr(annotation, "__origin__")
+            and annotation.__origin__ is list
+        ):
+            item_type = annotation.__args__[0]
+            item_type_name = (
+                item_type.__name__ if hasattr(item_type, "__name__") else str(item_type)
+            )
+            logger.info(f"Determined item type: {item_type_name}")
+
+        if not item_type:
+            logger.error(f"Cannot determine item type for list field {self.field_name}")
+            return mui.Alert(
+                f"Cannot determine item type for list field {self.field_name}",
+                cls=mui.AlertT.error,
+            )
+
+        # Create list items
+        item_elements = []
+        for idx, item in enumerate(items):
+            try:
+                logger.info(f"Rendering item {idx} for list field '{self.field_name}'")
+                item_card = self._render_item_card(item, idx, item_type)
+                item_elements.append(item_card)
+                logger.info(f"Successfully rendered item {idx}")
+            except Exception as e:
+                logger.error(f"Error rendering item {idx}: {str(e)}", exc_info=True)
+                error_message = f"Error rendering item {idx}: {str(e)}"
+
+                # Add more context to the error for debugging
+                if isinstance(item, dict):
+                    error_message += f" (Dict keys: {list(item.keys())})"
+
+                item_elements.append(
+                    fh.Li(
+                        mui.Alert(
+                            error_message,
+                            cls=mui.AlertT.error,
+                        ),
+                        cls="mb-2",
+                    )
+                )
+                item_card = self._render_item_card(item, idx, item_type)
+                item_elements.append(item_card)
+                logger.info(f"Successfully rendered item {idx}")
+            except Exception as e:
+                logger.error(f"Error rendering item {idx}: {str(e)}", exc_info=True)
+                error_message = f"Error rendering item {idx}: {str(e)}"
+
+                # Add more context to the error for debugging
+                if isinstance(item, dict):
+                    error_message += f" (Dict keys: {list(item.keys())})"
+
+                item_elements.append(
+                    fh.Li(
+                        mui.Alert(
+                            error_message,
+                            cls=mui.AlertT.error,
+                        ),
+                        cls="mb-2",
+                    )
+                )
+
+        # Container for list items with form-specific prefix in ID
+        container_id = f"{self.prefix}{self.original_field_name}_items_container"
+
+        items_container = fh.Ul(
+            *item_elements,
+            id=container_id,
+            cls="space-y-2 list-none p-0",
+            uk_accordion="collapsible: true; multiple: true",  # Enable accordion behavior
+        )
+
+        # Empty state message if no items
+        empty_state = ""
+        if not items:
+            # Extract form name from prefix if available
+            form_name = self.prefix.rstrip("_") if self.prefix else None
+            logger.info(
+                f"Form name extracted from prefix: {form_name}, full prefix: {self.prefix}"
+            )
+
+            # Check if it's a simple type or BaseModel
+            is_model = hasattr(item_type, "model_fields")
+            logger.info(f"Item is {'a model' if is_model else 'a simple type'}")
+            add_url = (
+                f"/form/{form_name}/list/add/{self.original_field_name}"
+                if form_name
+                else f"/list/add/{self.field_name}"
+            )
+
+            empty_state = mui.Alert(
+                fh.Div(
+                    mui.UkIcon("info", cls="mr-2"),
+                    "No items in this list. Click 'Add Item' to create one.",
+                    mui.Button(
+                        "Add Item",
+                        cls="uk-button-primary uk-button-small mt-2",
+                        hx_post=add_url,
+                        hx_target=f"#{container_id}",
+                        hx_swap="beforeend",
+                        type="button",
+                    ),
+                    cls="flex flex-col items-start",
+                ),
+                cls=mui.AlertT.info,
+            )
+
+        # Return the complete component
+        return fh.Div(
+            items_container,
+            empty_state,
+            cls="mb-4 border rounded-md p-4",
+        )
+
+    def _render_item_card(self, item, idx, item_type, is_open=False) -> FT:
+        """
+        Render a card for a single item in the list
+
+        Args:
+            item: The item data
+            idx: The index of the item
+            item_type: The type of the item
+            is_open: Whether the accordion item should be open by default
+
+        Returns:
+            A FastHTML component for the item card
+        """
+        try:
+            # Create a unique ID for this item
+            item_id = f"{self.field_name}_{idx}"
+            item_card_id = f"{item_id}_card"
+            logger.info(
+                f"Rendering list item card: {item_id}, type={item_type.__name__ if hasattr(item_type, '__name__') else type(item_type)}"
+            )
+            logger.info(
+                f"Item data type: {type(item).__name__}, value={str(item)[:50]}"
+            )
+            item_card_id = f"{item_id}_card"
+            logger.info(
+                f"Rendering list item card: {item_id}, type={item_type.__name__ if hasattr(item_type, '__name__') else type(item_type)}"
+            )
+            logger.info(
+                f"Item data type: {type(item).__name__}, value={str(item)[:50]}"
+            )
+
+            # Extract form name from prefix if available
+            form_name = self.prefix.rstrip("_") if self.prefix else None
+            logger.info(
+                f"Form name extracted from prefix: {form_name}, full prefix: {self.prefix}"
+            )
+
+            # Check if it's a simple type or BaseModel
+            is_model = hasattr(item_type, "model_fields")
+            logger.info(f"Item is {'a model' if is_model else 'a simple type'}")
+
+            # --- Generate item summary for the accordion title ---
+            if is_model:
+                try:
+                    # Determine how to get the string representation based on item type
+                    if isinstance(item, item_type):
+                        # Item is already a model instance
+                        model_for_display = item
+                        logger.info(
+                            f"Item is already an instance of {item_type.__name__}"
+                        )
+                    elif isinstance(item, dict):
+                        # Item is a dict, try to create a model instance for display
+                        logger.info(f"Item is a dict with keys: {list(item.keys())}")
+                        model_for_display = item_type.model_validate(item)
+                        logger.info("Successfully created model instance from dict")
+                    else:
+                        # Handle cases where item is None or unexpected type
+                        model_for_display = None
+                        logger.warning(
+                            f"Item is neither a model instance nor a dict: {type(item).__name__}"
+                        )
+
+                    if model_for_display is not None:
+                        # Use the model's __str__ method
+                        item_summary_text = (
+                            f"{item_type.__name__}: {str(model_for_display)}"
+                        )
+                        logger.info(f"Generated summary text: {item_summary_text}")
+                    else:
+                        # Fallback for None or unexpected types
+                        item_summary_text = f"{item_type.__name__}: (Unknown format: {type(item).__name__})"
+                        logger.warning(
+                            f"Using fallback summary text: {item_summary_text}"
+                        )
+                except ValidationError as e:
+                    # Handle validation errors when creating model from dict
+                    logger.warning(
+                        f"Validation error creating display string for {item_type.__name__}: {e}"
+                    )
+                    if isinstance(item, dict):
+                        logger.warning(
+                            f"Validation failed for dict keys: {list(item.keys())}"
+                        )
+                        logger.warning(f"Dict values sample: {str(item)[:100]}")
+                    item_summary_text = f"{item_type.__name__}: (Invalid data)"
+                except Exception as e:
+                    # Catch any other unexpected errors
+                    logger.error(
+                        f"Error creating display string for {item_type.__name__}: {e}",
+                        exc_info=True,
+                    )
+                    item_summary_text = f"{item_type.__name__}: (Error displaying item)"
+                    # Catch any other unexpected errors
+                    logger.error(
+                        f"Error creating display string for {item_type.__name__}: {e}",
+                        exc_info=True,
+                    )
+                    item_summary_text = f"{item_type.__name__}: (Error displaying item)"
+            else:
+                item_summary_text = str(item)
+                logger.info(f"Simple type summary: {item_summary_text}")
+                logger.info(f"Simple type summary: {item_summary_text}")
+
+            # --- Render item content elements ---
+            item_content_elements = []
+
+            if is_model:
+                # Handle BaseModel items - include the form prefix in nested items
+                # Form name prefix + field name + index + _
+                name_prefix = f"{self.prefix}{self.original_field_name}_{idx}_"
+
+                nested_values = (
+                    item.model_dump()
+                    if hasattr(item, "model_dump")
+                    else item
+                    if isinstance(item, dict)
+                    else {}
+                )
+
+                # Check if there's a specific renderer registered for this item_type
+                registry = FieldRendererRegistry()
+                # Create a dummy FieldInfo for the renderer lookup
+                item_field_info = FieldInfo(annotation=item_type)
+                # Look up potential custom renderer for this item type
+                item_renderer_cls = registry.get_renderer(
+                    f"item_{idx}", item_field_info
+                )
+
+                # Get the default BaseModelFieldRenderer class for comparison
+                from_imports = globals()
+                BaseModelFieldRenderer_cls = from_imports.get("BaseModelFieldRenderer")
+
+                # Check if a specific renderer (different from BaseModelFieldRenderer) was found
+                if (
+                    item_renderer_cls
+                    and item_renderer_cls is not BaseModelFieldRenderer_cls
+                ):
+                    # Use the custom renderer for the entire item
+                    item_renderer = item_renderer_cls(
+                        field_name=f"{self.original_field_name}_{idx}",
+                        field_info=item_field_info,
+                        value=item,
+                        prefix=self.prefix,
+                    )
+                    # Add the rendered input to content elements
+                    item_content_elements.append(item_renderer.render_input())
+                else:
+                    # Fall back to original behavior: render each field individually
+                    for (
+                        nested_field_name,
+                        nested_field_info,
+                    ) in item_type.model_fields.items():
+                        nested_field_value = nested_values.get(nested_field_name)
+
+                        # Apply default if needed
+                        if (
+                            nested_field_value is None
+                            and hasattr(nested_field_info, "default")
+                            and nested_field_info.default is not None
+                        ):
+                            nested_field_value = nested_field_info.default
+                        elif (
+                            nested_field_value is None
+                            and hasattr(nested_field_info, "default_factory")
+                            and nested_field_info.default_factory is not None
+                        ):
+                            try:
+                                nested_field_value = nested_field_info.default_factory()
+                            except Exception:
+                                pass
+
+                        # Get renderer and render field
+                        renderer_cls = FieldRendererRegistry().get_renderer(
+                            nested_field_name, nested_field_info
+                        )
+                        renderer = renderer_cls(
+                            field_name=nested_field_name,
+                            field_info=nested_field_info,
+                            value=nested_field_value,
+                            prefix=name_prefix,
+                        )
+
+                        # Add rendered field to content elements
+                        item_content_elements.append(renderer.render())
+            else:
+                # Handle simple type items
+                field_info = FieldInfo(annotation=item_type)
+                renderer_cls = FieldRendererRegistry().get_renderer(
+                    f"item_{idx}", field_info
+                )
+                # Calculate the base name for the item within the list
+                item_base_name = f"{self.original_field_name}_{idx}"  # e.g., "tags_0"
+
+                simple_renderer = renderer_cls(
+                    field_name=item_base_name,  # Correct: Use name relative to list field
+                    field_info=field_info,
+                    value=item,
+                    prefix=self.prefix,  # Correct: Provide the form prefix
+                )
+                input_element = simple_renderer.render_input()
+                item_content_elements.append(fh.Div(input_element, cls="p-3"))
+
+            # --- Create action buttons with form-specific URLs ---
+            # Generate HTMX endpoints with form name if available
+            delete_url = (
+                f"/form/{form_name}/list/delete/{self.original_field_name}"
+                if form_name
+                else f"/list/delete/{self.field_name}"
+            )
+
+            add_url = (
+                f"/form/{form_name}/list/add/{self.original_field_name}"
+                if form_name
+                else f"/list/add/{self.field_name}"
+            )
+
+            # Use the full ID (with prefix) for targeting
+            full_card_id = (
+                f"{self.prefix}{item_card_id}" if self.prefix else item_card_id
+            )
+
+            delete_button = mui.Button(
+                mui.UkIcon("trash"),
+                cls="uk-button-danger uk-button-small",
+                hx_delete=delete_url,
+                hx_target=f"#{full_card_id}",
+                hx_swap="outerHTML",
+                uk_tooltip="Delete this item",
+                hx_params=f"idx={idx}",
+                hx_confirm="Are you sure you want to delete this item?",
+                type="button",  # Prevent form submission
+            )
+
+            add_below_button = mui.Button(
+                mui.UkIcon("plus-circle"),
+                cls="uk-button-secondary uk-button-small ml-2",
+                hx_post=add_url,
+                hx_target=f"#{full_card_id}",
+                hx_swap="afterend",
+                uk_tooltip="Insert new item below",
+                type="button",  # Prevent form submission
+            )
+
+            move_up_button = mui.Button(
+                mui.UkIcon("arrow-up"),
+                cls="uk-button-link move-up-btn",
+                onclick="moveItemUp(this); return false;",
+                uk_tooltip="Move up",
+                type="button",  # Prevent form submission
+            )
+
+            move_down_button = mui.Button(
+                mui.UkIcon("arrow-down"),
+                cls="uk-button-link move-down-btn ml-2",
+                onclick="moveItemDown(this); return false;",
+                uk_tooltip="Move down",
+                type="button",  # Prevent form submission
+            )
+
+            # Assemble actions div
+            actions = fh.Div(
+                fh.Div(  # Left side buttons
+                    delete_button, add_below_button, cls="flex items-center"
+                ),
+                fh.Div(  # Right side buttons
+                    move_up_button, move_down_button, cls="flex items-center space-x-1"
+                ),
+                cls="flex justify-between w-full mt-3 pt-3 border-t border-gray-200",
+            )
+
+            # --- Assemble and return the complete item card ---
+            # Add uk-open class if item should be open by default
+            card_classes = "uk-card uk-card-default uk-margin-small-bottom"
+            if is_open:
+                card_classes += " uk-open"
+                logger.info(f"Creating item card {idx} in open state")
+
+            return fh.Li(
+                fh.A(  # Accordion title
+                    fh.Div(
+                        fh.Span(item_summary_text, cls="ml-2 text-gray-600 font-bold"),
+                        cls="flex items-center",
+                    ),
+                    href="#",  # Necessary for UIkit accordion
+                    cls="uk-accordion-title",
+                ),
+                fh.Div(  # Accordion content
+                    *item_content_elements,
+                    actions,
+                    cls="uk-accordion-content p-4",
+                ),
+                id=full_card_id,  # ID for targeting with the full prefix
+                cls=card_classes,  # Styling with conditional uk-open
+            )
+
+        except Exception as e:
+            # Return error representation
+            return fh.Li(
+                mui.Alert(
+                    f"Error rendering item {idx}: {str(e)}", cls=mui.AlertT.error
+                ),
+                cls="mb-2",
+                id=f"{self.field_name}_{idx}_error_card",
+            )
