@@ -4,7 +4,7 @@ import fasthtml.common as fh
 import monsterui.all as mui
 from pydantic import BaseModel, Field, ValidationError
 
-from fh_pydantic_form import LIST_MANIPULATION_JS, FormRenderer
+from fh_pydantic_form import LIST_MANIPULATION_JS, PydanticFormRenderer
 
 app, rt = fh.fast_app(
     hdrs=[
@@ -23,7 +23,7 @@ class ListModel(BaseModel):
     tags: List[str] = Field(["tag1", "tag2"])
 
 
-form_renderer = FormRenderer("list_model", ListModel)
+form_renderer = PydanticFormRenderer("list_model", ListModel)
 form_renderer.register_routes(rt)
 
 

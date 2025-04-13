@@ -13,7 +13,7 @@ from fh_pydantic_form.field_renderers import (
     StringFieldRenderer,
     TimeFieldRenderer,
 )
-from fh_pydantic_form.form_renderer import LIST_MANIPULATION_JS, FormRenderer
+from fh_pydantic_form.form_renderer import LIST_MANIPULATION_JS, PydanticFormRenderer
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import (
     _get_underlying_type_if_optional,

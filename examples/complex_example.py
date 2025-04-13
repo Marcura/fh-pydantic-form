@@ -6,7 +6,7 @@ import fasthtml.common as fh
 import monsterui.all as mui
 from pydantic import BaseModel, Field, ValidationError
 
-from fh_pydantic_form import LIST_MANIPULATION_JS, FormRenderer
+from fh_pydantic_form import LIST_MANIPULATION_JS, PydanticFormRenderer
 from fh_pydantic_form.field_renderers import BaseFieldRenderer
 
 logging.basicConfig(level=logging.DEBUG)
@@ -157,11 +157,10 @@ initial_values = ComplexSchema(
     ],
 )
 
-# Instantiate the form renderer for the main form
-form_renderer = FormRenderer(
-    name="main_form",
+form_renderer = PydanticFormRenderer(
+    form_name="main_form",
     model_class=ComplexSchema,
-    initial_data=initial_values,
+    initial_values=initial_values,
     custom_renderers=[
         (CustomDetail, CustomDetailFieldRenderer)
     ],  # Register Detail renderer
@@ -209,15 +208,6 @@ def get():
 
 @rt("/submit_form")
 async def post_main_form(req):
-    """
-    Handle form submission for the main form
-
-    Args:
-        req: The request object
-
-    Returns:
-        A component showing validation results or errors
-    """
     form_data = await req.form()
     form_dict = dict(form_data)
 

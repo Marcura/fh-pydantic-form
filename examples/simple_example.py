@@ -2,7 +2,7 @@ import fasthtml.common as fh
 import monsterui.all as mui
 from pydantic import BaseModel
 
-from fh_pydantic_form.form_renderer import FormRenderer
+from fh_pydantic_form.form_renderer import PydanticFormRenderer
 
 app, rt = fh.fast_app(
     hdrs=[
@@ -21,14 +21,14 @@ class SimpleModel(BaseModel):
     score: float = 88.5
 
 
-form_renderer = FormRenderer("simple_model", SimpleModel)
+form_renderer = PydanticFormRenderer("simple_model", SimpleModel)
 
 
 @rt("/")
 def get():
     return fh.Div(
         mui.Container(
-            mui.H1("SimplePydantic Form Demo"),
+            mui.H1("Simple Pydantic Form Demo"),
             mui.Card(
                 mui.CardBody(mui.Form(*form_renderer.render_inputs())),
             ),

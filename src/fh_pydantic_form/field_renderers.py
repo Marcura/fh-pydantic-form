@@ -474,28 +474,8 @@ class ListFieldRenderer(BaseFieldRenderer):
         """
         # Initialize the value as an empty list, ensuring it's always a list
         items = [] if not isinstance(self.value, list) else self.value
-        logger.info(
-            f"ListFieldRenderer.render_input for field '{self.field_name}' with {len(items)} items"
-        )
-
-        # Log the items for debugging
-        if items:
-            for i, item in enumerate(items[:3]):  # Log first 3 items at most
-                item_type = type(item).__name__
-                item_preview = (
-                    str(item)[:50] + "..." if len(str(item)) > 50 else str(item)
-                )
-                logger.info(f"  - Item {i}: {item_type} = {item_preview}")
-            if len(items) > 3:
-                logger.info(f"  - ... and {len(items) - 3} more items")
 
         annotation = getattr(self.field_info, "annotation", None)
-        for i, item in enumerate(items[:3]):  # Log first 3 items at most
-            item_type = type(item).__name__
-            item_preview = str(item)[:50] + "..." if len(str(item)) > 50 else str(item)
-            logger.info(f"  - Item {i}: {item_type} = {item_preview}")
-        if len(items) > 3:
-            logger.info(f"  - ... and {len(items) - 3} more items")
 
         if (
             annotation is not None
@@ -503,10 +483,6 @@ class ListFieldRenderer(BaseFieldRenderer):
             and annotation.__origin__ is list
         ):
             item_type = annotation.__args__[0]
-            item_type_name = (
-                item_type.__name__ if hasattr(item_type, "__name__") else str(item_type)
-            )
-            logger.info(f"Determined item type: {item_type_name}")
 
         if not item_type:
             logger.error(f"Cannot determine item type for list field {self.field_name}")
@@ -519,10 +495,8 @@ class ListFieldRenderer(BaseFieldRenderer):
         item_elements = []
         for idx, item in enumerate(items):
             try:
-                logger.info(f"Rendering item {idx} for list field '{self.field_name}'")
                 item_card = self._render_item_card(item, idx, item_type)
                 item_elements.append(item_card)
-                logger.info(f"Successfully rendered item {idx}")
             except Exception as e:
                 logger.error(f"Error rendering item {idx}: {str(e)}", exc_info=True)
                 error_message = f"Error rendering item {idx}: {str(e)}"
@@ -542,7 +516,6 @@ class ListFieldRenderer(BaseFieldRenderer):
                 )
                 item_card = self._render_item_card(item, idx, item_type)
                 item_elements.append(item_card)
-                logger.info(f"Successfully rendered item {idx}")
             except Exception as e:
                 logger.error(f"Error rendering item {idx}: {str(e)}", exc_info=True)
                 error_message = f"Error rendering item {idx}: {str(e)}"
@@ -576,13 +549,9 @@ class ListFieldRenderer(BaseFieldRenderer):
         if not items:
             # Extract form name from prefix if available
             form_name = self.prefix.rstrip("_") if self.prefix else None
-            logger.info(
-                f"Form name extracted from prefix: {form_name}, full prefix: {self.prefix}"
-            )
 
             # Check if it's a simple type or BaseModel
             is_model = hasattr(item_type, "model_fields")
-            logger.info(f"Item is {'a model' if is_model else 'a simple type'}")
             add_url = (
                 f"/form/{form_name}/list/add/{self.original_field_name}"
                 if form_name
@@ -630,29 +599,14 @@ class ListFieldRenderer(BaseFieldRenderer):
             # Create a unique ID for this item
             item_id = f"{self.field_name}_{idx}"
             item_card_id = f"{item_id}_card"
-            logger.info(
-                f"Rendering list item card: {item_id}, type={item_type.__name__ if hasattr(item_type, '__name__') else type(item_type)}"
-            )
-            logger.info(
-                f"Item data type: {type(item).__name__}, value={str(item)[:50]}"
-            )
+
             item_card_id = f"{item_id}_card"
-            logger.info(
-                f"Rendering list item card: {item_id}, type={item_type.__name__ if hasattr(item_type, '__name__') else type(item_type)}"
-            )
-            logger.info(
-                f"Item data type: {type(item).__name__}, value={str(item)[:50]}"
-            )
 
             # Extract form name from prefix if available
             form_name = self.prefix.rstrip("_") if self.prefix else None
-            logger.info(
-                f"Form name extracted from prefix: {form_name}, full prefix: {self.prefix}"
-            )
 
             # Check if it's a simple type or BaseModel
             is_model = hasattr(item_type, "model_fields")
-            logger.info(f"Item is {'a model' if is_model else 'a simple type'}")
 
             # --- Generate item summary for the accordion title ---
             if is_model:
@@ -661,14 +615,12 @@ class ListFieldRenderer(BaseFieldRenderer):
                     if isinstance(item, item_type):
                         # Item is already a model instance
                         model_for_display = item
-                        logger.info(
-                            f"Item is already an instance of {item_type.__name__}"
-                        )
+
                     elif isinstance(item, dict):
                         # Item is a dict, try to create a model instance for display
-                        logger.info(f"Item is a dict with keys: {list(item.keys())}")
+
                         model_for_display = item_type.model_validate(item)
-                        logger.info("Successfully created model instance from dict")
+
                     else:
                         # Handle cases where item is None or unexpected type
                         model_for_display = None
@@ -681,7 +633,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                         item_summary_text = (
                             f"{item_type.__name__}: {str(model_for_display)}"
                         )
-                        logger.info(f"Generated summary text: {item_summary_text}")
+
                     else:
                         # Fallback for None or unexpected types
                         item_summary_text = f"{item_type.__name__}: (Unknown format: {type(item).__name__})"
@@ -714,8 +666,6 @@ class ListFieldRenderer(BaseFieldRenderer):
                     item_summary_text = f"{item_type.__name__}: (Error displaying item)"
             else:
                 item_summary_text = str(item)
-                logger.info(f"Simple type summary: {item_summary_text}")
-                logger.info(f"Simple type summary: {item_summary_text}")
 
             # --- Render item content elements ---
             item_content_elements = []

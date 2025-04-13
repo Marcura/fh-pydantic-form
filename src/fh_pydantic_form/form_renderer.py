@@ -109,7 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
 """
 
 
-class FormRenderer:
+class PydanticFormRenderer:
     """
     Renders a form from a Pydantic model class
 
@@ -125,25 +125,25 @@ class FormRenderer:
 
     def __init__(
         self,
-        name: str,
+        form_name: str,
         model_class: Type[BaseModel],
-        initial_data: Optional[BaseModel] = None,
+        initial_values: Optional[BaseModel] = None,
         custom_renderers: Optional[List[Tuple[Type, Type[BaseFieldRenderer]]]] = None,
     ):
         """
         Initialize the form renderer
 
         Args:
-            name: Unique name for this form
+            form_name: Unique name for this form
             model_class: The Pydantic model class to render
-            initial_data: Optional initial Pydantic model instance
+            initial_values: Optional initial Pydantic model instance
             custom_renderers: Optional list of tuples (field_type, renderer_cls) to register
         """
-        self.name = name
+        self.name = form_name
         self.model_class = model_class
-        self.initial_data_model = initial_data  # Store original model for fallback
-        self.values_dict = initial_data.model_dump() if initial_data else {}
-        self.base_prefix = f"{name}_"
+        self.initial_data_model = initial_values  # Store original model for fallback
+        self.values_dict = initial_values.model_dump() if initial_values else {}
+        self.base_prefix = f"{form_name}_"
 
         # Register custom renderers with the global registry if provided
         if custom_renderers:
@@ -160,11 +160,8 @@ class FormRenderer:
         """
         form_inputs = []
         registry = FieldRendererRegistry()  # Get singleton instance
-        logger.info(
+        logger.debug(
             f"Starting render_inputs for form '{self.name}' with {len(self.model_class.model_fields)} fields"
-        )
-        logger.info(
-            f"values_dict contains {len(self.values_dict) if self.values_dict else 0} keys"
         )
 
         for field_name, field_info in self.model_class.model_fields.items():
@@ -180,9 +177,9 @@ class FormRenderer:
                     value_size = f"size={len(initial_value)}"
                 else:
                     value_size = ""
-                logger.info(f"Field '{field_name}': {value_type} {value_size}")
+                logger.debug(f"Field '{field_name}': {value_type} {value_size}")
             else:
-                logger.info(
+                logger.debug(
                     f"Field '{field_name}': None (will use default if available)"
                 )
 
@@ -203,7 +200,6 @@ class FormRenderer:
 
             # Get renderer from global registry
             renderer_cls = registry.get_renderer(field_name, field_info)
-            renderer_name = renderer_cls.__name__ if renderer_cls else "None"
 
             if not renderer_cls:
                 # Fall back to StringFieldRenderer if no renderer found
@@ -211,8 +207,6 @@ class FormRenderer:
                 logger.warning(
                     f"  - No renderer found for '{field_name}', falling back to StringFieldRenderer"
                 )
-            else:
-                logger.info(f"  - Using renderer {renderer_name} for '{field_name}'")
 
             # Create and render the field
             renderer = renderer_cls(
@@ -225,23 +219,15 @@ class FormRenderer:
             rendered_field = renderer.render()
             form_inputs.append(rendered_field)
 
-            # Special debug for ListFieldRenderer which often causes issues
-            if renderer_name == "ListFieldRenderer" and isinstance(initial_value, list):
-                logger.info(
-                    f"  - List field '{field_name}' with {len(initial_value)} items rendered"
-                )
-
         # Create container for inputs, ensuring items stretch to full width
-        logger.info(f"Rendered {len(form_inputs)} field components")
         inputs_container = mui.DivVStacked(*form_inputs, cls="space-y-3 items-stretch")
 
         # Define the ID for the wrapper div - this is what the HTMX request targets
         form_content_wrapper_id = f"{self.name}-inputs-wrapper"
-        logger.info(f"Creating form inputs wrapper with ID: {form_content_wrapper_id}")
+        logger.debug(f"Creating form inputs wrapper with ID: {form_content_wrapper_id}")
 
         # Return only the inner container without the wrapper div
         # The wrapper will be added by the main route handler instead
-        logger.info("Completed render_inputs, returning inner inputs container")
         return inputs_container
 
     # ---- Form Renderer Methods (continued) ----
@@ -258,23 +244,14 @@ class FormRenderer:
         """
         form_data = await req.form()
         form_dict = dict(form_data)
-        logger.info(
-            f"Refresh request for form '{self.name}' received raw data: {form_dict}"
-        )
-        logger.info(f"Form data keys count: {len(form_dict.keys())} keys")
+        logger.info(f"Refresh request for form '{self.name}'")
 
         parsed_data = {}
         alert_ft = None  # Changed to hold an FT object instead of a string
         try:
             # Use the instance's parse method directly
-            logger.info(
-                f"Starting parse() for form '{self.name}' with base_prefix: '{self.base_prefix}'"
-            )
+
             parsed_data = self.parse(form_dict)
-            logger.info(f"Parsed data for refresh: {parsed_data}")
-            logger.info(
-                f"Parsed data contains {len(parsed_data.keys())} top-level keys"
-            )
 
             # Log some specific field types for debugging
             for key, value in parsed_data.items():
@@ -298,33 +275,21 @@ class FormRenderer:
             )
 
         # Create Temporary Renderer instance
-        temp_renderer = FormRenderer(
-            name=self.name,
+        temp_renderer = PydanticFormRenderer(
+            form_name=self.name,
             model_class=self.model_class,
             # No initial_data needed here, we set values_dict below
         )
         # Set the values based on the parsed (or fallback) data
         temp_renderer.values_dict = parsed_data
-        logger.info(
-            f"Temporary renderer created with {len(temp_renderer.values_dict.keys())} values"
-        )
 
         # Verify field values in temp_renderer
         for field_name in self.model_class.model_fields:
             if field_name in temp_renderer.values_dict:
                 value = temp_renderer.values_dict[field_name]
-                value_type = type(value).__name__
-                value_summary = (
-                    str(value)[:50] + "..." if len(str(value)) > 50 else str(value)
-                )
-                logger.info(
-                    f"Temp renderer field '{field_name}': {value_type} = {value_summary}"
-                )
             else:
                 logger.warning(f"Temp renderer missing field '{field_name}'")
 
-        # Re-render Form Inputs using the temporary renderer with current data
-        logger.info("Calling render_inputs() on temporary renderer")
         refreshed_inputs_component = temp_renderer.render_inputs()
 
         if refreshed_inputs_component is None:
@@ -335,19 +300,13 @@ class FormRenderer:
             )
             # Emergency fallback - use original renderer's inputs
             refreshed_inputs_component = self.render_inputs()
-            logger.info("Used emergency fallback to original renderer")
-
-        # Log information about what we're returning
-        logger.info(f"Returning refreshed FT components for form '{self.name}'")
 
         # Return the FT components directly instead of creating a Response object
         if alert_ft:
             # Return both the alert and the form inputs as a tuple
-            logger.info("Returning alert and refreshed inputs as tuple")
             return (alert_ft, refreshed_inputs_component)
         else:
             # Return just the form inputs
-            logger.info("Returning refreshed inputs only")
             return refreshed_inputs_component
 
     async def handle_reset_request(self) -> FT:
@@ -357,15 +316,12 @@ class FormRenderer:
         Returns:
             HTML response with reset form inputs
         """
-        logger.info(
-            f"Handling reset request for form '{self.name}' using initial data."
-        )
 
         # Create a temporary renderer with the original initial data
-        temp_renderer = FormRenderer(
-            name=self.name,
+        temp_renderer = PydanticFormRenderer(
+            form_name=self.name,
             model_class=self.model_class,
-            initial_data=self.initial_data_model,  # Use the originally stored model
+            initial_values=self.initial_data_model,  # Use the originally stored model
         )
 
         # Render inputs with the initial data
@@ -387,16 +343,8 @@ class FormRenderer:
         Returns:
             Dictionary with parsed data in a structure matching the model
         """
-        logger.info(
-            f"Starting parse() for form '{self.name}' with prefix '{self.base_prefix}'"
-        )
-        logger.info(f"Form dict contains {len(form_dict)} keys")
 
         # Count how many keys actually have the prefix
-        prefix_count = sum(1 for key in form_dict if key.startswith(self.base_prefix))
-        logger.info(
-            f"Form has {prefix_count} keys with the expected prefix '{self.base_prefix}'"
-        )
 
         # Log a sample of keys for debugging
         key_sample = list(form_dict.keys())[:5]  # First 5 keys
@@ -405,51 +353,18 @@ class FormRenderer:
 
         # Identify list field definitions
         list_field_defs = _identify_list_fields(self.model_class)
-        logger.info(f"Identified {len(list_field_defs)} list fields in the model")
-        for field_name, field_def in list_field_defs.items():
-            is_model = field_def["is_model_type"]
-            item_type = field_def["item_type"]
-            item_type_name = (
-                item_type.__name__ if hasattr(item_type, "__name__") else str(item_type)
-            )
-            logger.info(
-                f"  - List field '{field_name}': {item_type_name} (is_model={is_model})"
-            )
 
         # Parse non-list fields first - pass the base_prefix
-        logger.info("Parsing non-list fields")
+
         result = _parse_non_list_fields(
             form_dict, self.model_class, list_field_defs, self.base_prefix
         )
-        logger.info(f"Non-list field parsing resulted in {len(result)} fields")
 
         # Parse list fields based on keys present in form_dict - pass the base_prefix
-        logger.info("Parsing list fields")
         list_results = _parse_list_fields(form_dict, list_field_defs, self.base_prefix)
-        logger.info(f"List field parsing resulted in {len(list_results)} fields")
-
-        # Log the parsed list fields
-        for field_name, items in list_results.items():
-            if isinstance(items, list):
-                logger.info(f"  - Parsed list '{field_name}' with {len(items)} items")
-                # Log a sample of the first item if available
-                if items and len(items) > 0:
-                    first_item = items[0]
-                    if isinstance(first_item, dict):
-                        logger.info(f"    - First item keys: {list(first_item.keys())}")
-                    else:
-                        item_preview = str(first_item)[:50]
-                        logger.info(
-                            f"    - First item ({type(first_item).__name__}): {item_preview}"
-                        )
-            else:
-                logger.warning(
-                    f"  - Parsed field '{field_name}' is not a list: {type(items).__name__}"
-                )
 
         # Merge list results into the main result
         result.update(list_results)
-        logger.info(f"Final parsed result contains {len(result)} fields")
 
         return result
 
@@ -468,11 +383,11 @@ class FormRenderer:
         async def _instance_specific_refresh_handler(req):
             """Handle form refresh request for this specific form instance"""
             # Add entry point logging to confirm the route is being hit
-            logger.info(f"Received POST request on {refresh_route_path}")
+            logger.debug(f"Received POST request on {refresh_route_path}")
             # Calls the instance method to handle the logic
             return await self.handle_refresh_request(req)
 
-        logger.info(
+        logger.debug(
             f"Registered refresh route for form '{self.name}' at {refresh_route_path}"
         )
 
@@ -482,11 +397,11 @@ class FormRenderer:
         @rt(reset_route_path, methods=["POST"])
         async def _instance_specific_reset_handler(req):
             """Handle form reset request for this specific form instance"""
-            logger.info(f"Received POST request on {reset_route_path}")
+            logger.debug(f"Received POST request on {reset_route_path}")
             # Calls the instance method to handle the logic
             return await self.handle_reset_request()
 
-        logger.info(
+        logger.debug(
             f"Registered reset route for form '{self.name}' at {reset_route_path}"
         )
 
@@ -516,12 +431,6 @@ class FormRenderer:
                     and annotation.__origin__ is list
                 ):
                     item_type = annotation.__args__[0]
-                    item_type_name = (
-                        item_type.__name__
-                        if hasattr(item_type, "__name__")
-                        else str(item_type)
-                    )
-                    logger.info(f"Determined item type: {item_type_name}")
 
                 if not item_type:
                     logger.error(
@@ -604,6 +513,9 @@ class FormRenderer:
                 Empty string to delete the target element
             """
             # Return empty string to delete the target element
+            logger.debug(
+                f"Received DELETE request for {field_name} for form '{self.name}'"
+            )
             return fh.Response(status_code=200, content="")
 
     def get_refresh_button(self, text: Optional[str] = None, **kwargs) -> FT:
