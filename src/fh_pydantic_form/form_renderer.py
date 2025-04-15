@@ -14,7 +14,7 @@ from typing import (
 import fasthtml.common as fh
 import monsterui.all as mui
 from fastcore.xml import FT
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from fh_pydantic_form.field_renderers import (
     BaseFieldRenderer,
@@ -33,7 +33,9 @@ logger = logging.getLogger(__name__)
 # TypeVar for generic model typing
 ModelType = TypeVar("ModelType", bound=BaseModel)
 
-LIST_MANIPULATION_JS = """  
+
+def list_manipulation_js():
+    return fh.Script("""  
 function moveItem(buttonElement, direction) {
     // Find the card container (may need to adjust selector)
     const card = buttonElement.closest('.uk-card');
@@ -109,9 +111,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateMoveButtons(event.detail.target);
             }
         }
-    });
+    }); 
 });
-"""
+""")
 
 
 class PydanticFormRenderer(Generic[ModelType]):
@@ -234,7 +236,7 @@ class PydanticFormRenderer(Generic[ModelType]):
 
         # Return only the inner container without the wrapper div
         # The wrapper will be added by the main route handler instead
-        return inputs_container
+        return fh.Div(inputs_container, id=form_content_wrapper_id)
 
     # ---- Form Renderer Methods (continued) ----
 
@@ -374,7 +376,7 @@ class PydanticFormRenderer(Generic[ModelType]):
 
         return result
 
-    def register_routes(self, rt):
+    def register_list_manipulation_routes(self, app):
         """
         Register HTMX routes for list manipulation and form refresh
 
@@ -385,7 +387,7 @@ class PydanticFormRenderer(Generic[ModelType]):
         # --- Register the form-specific refresh route ---
         refresh_route_path = f"/form/{self.name}/refresh"
 
-        @rt(refresh_route_path, methods=["POST"])
+        @app.route(refresh_route_path, methods=["POST"])
         async def _instance_specific_refresh_handler(req):
             """Handle form refresh request for this specific form instance"""
             # Add entry point logging to confirm the route is being hit
@@ -400,7 +402,7 @@ class PydanticFormRenderer(Generic[ModelType]):
         # --- Register the form-specific reset route ---
         reset_route_path = f"/form/{self.name}/reset"
 
-        @rt(reset_route_path, methods=["POST"])
+        @app.route(reset_route_path, methods=["POST"])
         async def _instance_specific_reset_handler(req):
             """Handle form reset request for this specific form instance"""
             logger.debug(f"Received POST request on {reset_route_path}")
@@ -411,7 +413,7 @@ class PydanticFormRenderer(Generic[ModelType]):
             f"Registered reset route for form '{self.name}' at {reset_route_path}"
         )
 
-        @rt(f"/form/{self.name}/list/add/{{field_name}}")
+        @app.route(f"/form/{self.name}/list/add/{{field_name}}")
         async def post_list_add(req, field_name: str):
             """
             Handle adding an item to a list for this specific form
@@ -506,7 +508,7 @@ class PydanticFormRenderer(Generic[ModelType]):
 
             return new_item_card
 
-        @rt(f"/form/{self.name}/list/delete/{{field_name}}", methods=["DELETE"])
+        @app.route(f"/form/{self.name}/list/delete/{{field_name}}", methods=["DELETE"])
         async def delete_list_item(req, field_name: str):
             """
             Handle deleting an item from a list for this specific form
@@ -524,7 +526,7 @@ class PydanticFormRenderer(Generic[ModelType]):
             )
             return fh.Response(status_code=200, content="")
 
-    def get_refresh_button(self, text: Optional[str] = None, **kwargs) -> FT:
+    def refresh_button(self, text: Optional[str] = None, **kwargs) -> FT:
         """
         Generates the HTML component for the form's refresh button.
 
@@ -565,7 +567,7 @@ class PydanticFormRenderer(Generic[ModelType]):
         # Create and return the button
         return mui.Button(mui.UkIcon("refresh-ccw"), button_text, **button_attrs)
 
-    def get_reset_button(self, text: Optional[str] = None, **kwargs) -> FT:
+    def reset_button(self, text: Optional[str] = None, **kwargs) -> FT:
         """
         Generates the HTML component for the form's reset button.
 
@@ -605,35 +607,35 @@ class PydanticFormRenderer(Generic[ModelType]):
             button_text,
             **button_attrs,
         )
-        
+
     async def model_validate_request(self, req: Any) -> ModelType:
         """
         Extracts form data from a request, parses it, and validates against the model.
-        
+
         This method encapsulates the common pattern of:
         1. Extracting form data from a request
         2. Converting it to a dictionary
         3. Parsing with the renderer's logic (handling prefixes, etc.)
         4. Validating against the Pydantic model
-        
+
         Args:
             req: The request object (must have an awaitable .form() method)
-            
+
         Returns:
             A validated instance of the model class
-            
+
         Raises:
             ValidationError: If validation fails based on the model's rules
         """
         logger.debug(f"Validating request for form '{self.name}'")
         form_data = await req.form()
         form_dict = dict(form_data)
-        
+
         # Parse the form data using the renderer's logic
         parsed_data = self.parse(form_dict)
-        
+
         # Validate against the model - allow ValidationError to propagate
         validated_model = self.model_class.model_validate(parsed_data)
         logger.info(f"Request validation successful for form '{self.name}'")
-        
+
         return validated_model

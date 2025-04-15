@@ -28,9 +28,9 @@ form_renderer = PydanticFormRenderer("simple_model", SimpleModel)
 def get():
     return fh.Div(
         mui.Container(
-            mui.H1("Simple Pydantic Form Demo"),
+            mui.CardHeader("Simple Pydantic Form Demo"),
             mui.Card(
-                mui.CardBody(mui.Form(*form_renderer.render_inputs())),
+                mui.CardBody(mui.Form(form_renderer.render_inputs())),
             ),
         ),
     )

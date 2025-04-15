@@ -4,12 +4,12 @@ import fasthtml.common as fh
 import monsterui.all as mui
 from pydantic import BaseModel, Field, ValidationError
 
-from fh_pydantic_form import LIST_MANIPULATION_JS, PydanticFormRenderer
+from fh_pydantic_form import PydanticFormRenderer, list_manipulation_js
 
 app, rt = fh.fast_app(
     hdrs=[
         mui.Theme.blue.headers(),
-        fh.Script(LIST_MANIPULATION_JS),
+        list_manipulation_js(),
     ],
     pico=False,
     live=True,
@@ -17,25 +17,25 @@ app, rt = fh.fast_app(
 
 
 class ListModel(BaseModel):
-    """Model representing a simple model"""
-
     name: str = ""
     tags: List[str] = Field(["tag1", "tag2"])
 
 
 form_renderer = PydanticFormRenderer("list_model", ListModel)
-form_renderer.register_routes(rt)
+form_renderer.register_list_manipulation_routes(app)
 
 
 @rt("/")
 def get():
     return fh.Div(
         mui.Container(
-            mui.H1("SimplePydantic Form Demo"),
+            mui.CardHeader(
+                mui.H2("Simple PydanticFormRenderer Demo with editable List field")
+            ),
             mui.Card(
                 mui.CardBody(
                     mui.Form(
-                        *form_renderer.render_inputs(),
+                        form_renderer.render_inputs(),
                         mui.Button("Submit", type="submit", cls=mui.ButtonT.primary),
                         hx_post="/submit_form",
                         hx_target="#result",
@@ -50,18 +50,8 @@ def get():
 
 @rt("/submit_form")
 async def post_main_form(req):
-    """
-    Handle form submission for the main form
-
-    Args:
-        req: The request object
-
-    Returns:
-        A component showing validation results or errors
-    """
     try:
-        # Use the new model_validate_request method
-        validated: ListModel = await form_renderer.model_validate_request(req)
+        validated = await form_renderer.model_validate_request(req)
 
         return mui.Card(
             mui.CardHeader(fh.H3("Validation Successful")),

@@ -14,8 +14,6 @@ app, rt = fh.fast_app(
 
 
 class SimpleModel(BaseModel):
-    """Model representing a simple model"""
-
     name: str = "Simple Model"
     age: int = 42
     score: float = 88.5
@@ -32,7 +30,7 @@ def get():
                 mui.CardHeader("Validate Pydantic Form Demo"),
                 mui.CardBody(
                     mui.Form(
-                        *form_renderer.render_inputs(),
+                        form_renderer.render_inputs(),
                         mui.Button("Submit", cls=mui.ButtonT.primary),
                         hx_post="/submit_form",
                         hx_target="#result",
@@ -47,18 +45,8 @@ def get():
 
 @rt("/submit_form")
 async def post_main_form(req):
-    """
-    Handle form submission for the main form
-
-    Args:
-        req: The request object
-
-    Returns:
-        A component showing validation results or errors
-    """
     try:
-        # Use the new model_validate_request method
-        validated: SimpleModel = await form_renderer.model_validate_request(req)
+        validated = await form_renderer.model_validate_request(req)
 
         return mui.Card(
             mui.CardHeader(fh.H3("Validation Successful")),

@@ -13,7 +13,7 @@ from fh_pydantic_form.field_renderers import (
     StringFieldRenderer,
     TimeFieldRenderer,
 )
-from fh_pydantic_form.form_renderer import LIST_MANIPULATION_JS, PydanticFormRenderer
+from fh_pydantic_form.form_renderer import PydanticFormRenderer, list_manipulation_js
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import (
     _get_underlying_type_if_optional,
@@ -87,4 +87,4 @@ def register_default_renderers() -> None:
 register_default_renderers()
 
 
-__all__ = ["LIST_MANIPULATION_JS", "PydanticFormRenderer", "FieldRendererRegistry"]
+__all__ = ["PydanticFormRenderer", "FieldRendererRegistry", "list_manipulation_js"]
