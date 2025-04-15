@@ -1,6 +1,6 @@
 import fasthtml.common as fh
 import monsterui.all as mui
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from fh_pydantic_form.form_renderer import PydanticFormRenderer
 
@@ -17,7 +17,9 @@ class SimpleModel(BaseModel):
     """Model representing a simple model"""
 
     name: str = "Simple Model"
-    age: int = 42
+    age: int = Field(
+        description="Age of the customer"
+    )  # description will be rendered as tooltip
     score: float = 88.5
 
 

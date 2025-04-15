@@ -40,48 +40,38 @@ class CustomDetail(BaseModel):
 
 
 class CustomDetailFieldRenderer(BaseFieldRenderer):
+    """display value input and dropdown side by side for Detail"""
+
     def render_input(self):
-        # 1. Get current value and confidence
-        logger.debug(f"Rendering DetailFieldRenderer for {self.field_name}")
-        value_text = ""
-        confidence_level = "MEDIUM"
-        if isinstance(self.value, CustomDetail):
-            value_text = self.value.value
-            confidence_level = self.value.confidence
-        elif isinstance(self.value, dict):
-            value_text = self.value.get("value", "")
-            confidence_level = self.value.get("confidence", "MEDIUM")
-        else:
-            value_text = ""
-            confidence_level = "MEDIUM"
-
-        confidence_options_ft = [
-            fh.Option(opt, value=opt, selected=(opt == confidence_level))
-            for opt in ["HIGH", "MEDIUM", "LOW"]
-        ]
-
         value_input = fh.Div(
             mui.Input(
-                value=value_text,
+                value=self.value.get("value", ""),
                 id=f"{self.field_name}_value",
                 name=f"{self.field_name}_value",
                 placeholder=f"Enter {self.original_field_name.replace('_', ' ')} value",
-                cls="uk-input w-full",
+                cls="uk-input w-full",  # apply some custom css
             ),
             cls="flex-grow",
         )
+
+        confidence_options_ft = [
+            fh.Option(
+                opt, value=opt, selected=(opt == self.value.get("confidence", "MEDIUM"))
+            )
+            for opt in ["HIGH", "MEDIUM", "LOW"]
+        ]
 
         confidence_select = mui.Select(
             *confidence_options_ft,
             id=f"{self.field_name}_confidence",
             name=f"{self.field_name}_confidence",
-            cls_wrapper="w-[110px] min-w-[110px] flex-shrink-0",
-        )  #
+            cls_wrapper="w-[110px] min-w-[110px] flex-shrink-0",  # apply some custom css
+        )
 
         return fh.Div(
             value_input,
             confidence_select,
-            cls="flex items-start gap-2 w-full",
+            cls="flex items-start gap-2 w-full",  # apply some custom css
         )
 
 
@@ -93,35 +83,52 @@ class ComplexSchema(BaseModel):
     showcase all the rendering capabilities of the form system.
     """
 
-    name: str = "Demo User"
-    age: int = 42
-    score: float = 88.5
-    is_active: bool = True
-    description: Optional[str] = None
+    name: str = Field(description="Name of the customer")
+    age: int = Field(description="Age of the customer")
+    score: float = Field(description="Score of the customer")
+    is_active: bool = Field(description="Is the customer active")
+    description: Optional[str] = Field(description="Description of the customer")
 
     # Date and time fields
-    creation_date: datetime.date = Field(default_factory=datetime.date.today)
+    creation_date: datetime.date = Field(
+        default_factory=datetime.date.today, description="Creation date of the customer"
+    )
     start_time: datetime.time = Field(
-        default_factory=lambda: datetime.datetime.now().time().replace(microsecond=0)
+        default_factory=lambda: datetime.datetime.now().time().replace(microsecond=0),
+        description="Start time of the customer",
     )
 
     # Literal/enum field
-    status: Literal["PENDING", "PROCESSING", "COMPLETED"] = "PENDING"
+    status: Literal["PENDING", "PROCESSING", "COMPLETED"] = Field(
+        description="Status of the customer"
+    )
     # Optional fields
-    optional_status: Optional[Literal["PENDING", "PROCESSING", "COMPLETED"]] = None
+    optional_status: Optional[Literal["PENDING", "PROCESSING", "COMPLETED"]] = Field(
+        description="Optional status of the customer"
+    )
 
     # Lists of simple types
-    tags: List[str] = Field(default_factory=lambda: ["tag1", "tag2"])
+    tags: List[str] = Field(
+        default_factory=lambda: ["tag1", "tag2"], description="Tags of the customer"
+    )
 
     # Nested model
-    main_address: Address = Field(default_factory=Address)
+    main_address: Address = Field(
+        default_factory=Address, description="Main address of the customer"
+    )
     # list of nested models
-    other_addresses: List[Address] = Field(default_factory=list)
+    other_addresses: List[Address] = Field(
+        default_factory=list, description="Other addresses of the customer"
+    )
 
     # single custom nested model
-    custom_detail: CustomDetail = Field(default_factory=CustomDetail)
+    custom_detail: CustomDetail = Field(
+        default_factory=CustomDetail, description="Custom detail of the customer"
+    )
     # list of custom nested models
-    more_custom_details: List[CustomDetail] = Field(default_factory=list)
+    more_custom_details: List[CustomDetail] = Field(
+        default_factory=list, description="More custom details of the customer"
+    )
 
 
 # Create an initial model with example data
@@ -158,7 +165,7 @@ form_renderer = PydanticFormRenderer(
     ],  # Register Detail renderer
 )
 
-form_renderer.register_list_manipulation_routes(app)
+form_renderer.register_routes(app)
 
 
 @rt("/")

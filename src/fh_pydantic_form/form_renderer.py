@@ -376,7 +376,7 @@ class PydanticFormRenderer(Generic[ModelType]):
 
         return result
 
-    def register_list_manipulation_routes(self, app):
+    def register_routes(self, app):
         """
         Register HTMX routes for list manipulation and form refresh
 

@@ -22,7 +22,7 @@ class ListModel(BaseModel):
 
 
 form_renderer = PydanticFormRenderer("list_model", ListModel)
-form_renderer.register_list_manipulation_routes(app)
+form_renderer.register_routes(app)
 
 
 @rt("/")
