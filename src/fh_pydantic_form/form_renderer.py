@@ -3,16 +3,18 @@ import time as pytime
 from typing import (
     Any,
     Dict,
+    Generic,
     List,
     Optional,
     Tuple,
     Type,
+    TypeVar,
 )
 
 import fasthtml.common as fh
 import monsterui.all as mui
 from fastcore.xml import FT
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from fh_pydantic_form.field_renderers import (
     BaseFieldRenderer,
@@ -27,6 +29,9 @@ from fh_pydantic_form.form_parser import (
 from fh_pydantic_form.registry import FieldRendererRegistry
 
 logger = logging.getLogger(__name__)
+
+# TypeVar for generic model typing
+ModelType = TypeVar("ModelType", bound=BaseModel)
 
 LIST_MANIPULATION_JS = """  
 function moveItem(buttonElement, direction) {
@@ -109,7 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
 """
 
 
-class PydanticFormRenderer:
+class PydanticFormRenderer(Generic[ModelType]):
     """
     Renders a form from a Pydantic model class
 
@@ -121,13 +126,14 @@ class PydanticFormRenderer:
     - Parsing form data back to Pydantic model format
     - Handling refresh and reset requests
     - providing refresh and reset buttons
+    - validating request data against the model
     """
 
     def __init__(
         self,
         form_name: str,
-        model_class: Type[BaseModel],
-        initial_values: Optional[BaseModel] = None,
+        model_class: Type[ModelType],
+        initial_values: Optional[ModelType] = None,
         custom_renderers: Optional[List[Tuple[Type, Type[BaseFieldRenderer]]]] = None,
     ):
         """
@@ -599,3 +605,35 @@ class PydanticFormRenderer:
             button_text,
             **button_attrs,
         )
+        
+    async def model_validate_request(self, req: Any) -> ModelType:
+        """
+        Extracts form data from a request, parses it, and validates against the model.
+        
+        This method encapsulates the common pattern of:
+        1. Extracting form data from a request
+        2. Converting it to a dictionary
+        3. Parsing with the renderer's logic (handling prefixes, etc.)
+        4. Validating against the Pydantic model
+        
+        Args:
+            req: The request object (must have an awaitable .form() method)
+            
+        Returns:
+            A validated instance of the model class
+            
+        Raises:
+            ValidationError: If validation fails based on the model's rules
+        """
+        logger.debug(f"Validating request for form '{self.name}'")
+        form_data = await req.form()
+        form_dict = dict(form_data)
+        
+        # Parse the form data using the renderer's logic
+        parsed_data = self.parse(form_dict)
+        
+        # Validate against the model - allow ValidationError to propagate
+        validated_model = self.model_class.model_validate(parsed_data)
+        logger.info(f"Request validation successful for form '{self.name}'")
+        
+        return validated_model

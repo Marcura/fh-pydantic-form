@@ -87,4 +87,4 @@ def register_default_renderers() -> None:
 register_default_renderers()
 
 
-__all__ = ["LIST_MANIPULATION_JS", "FormRenderer", "FieldRendererRegistry"]
+__all__ = ["LIST_MANIPULATION_JS", "PydanticFormRenderer", "FieldRendererRegistry"]

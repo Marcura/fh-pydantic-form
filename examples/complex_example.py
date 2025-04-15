@@ -208,12 +208,9 @@ def get():
 
 @rt("/submit_form")
 async def post_main_form(req):
-    form_data = await req.form()
-    form_dict = dict(form_data)
-
     try:
-        parsed_data = form_renderer.parse(form_dict)
-        validated = form_renderer.model_class.model_validate(parsed_data)
+        # Use the new model_validate_request method with type hint
+        validated: ComplexSchema = await form_renderer.model_validate_request(req)
 
         return mui.Card(
             mui.CardHeader(fh.H3("Validation Successful")),
