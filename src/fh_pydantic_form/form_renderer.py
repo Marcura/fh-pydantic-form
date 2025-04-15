@@ -79,6 +79,69 @@ function updateMoveButtons(container) {
     });
 }
 
+// Function to toggle all list items open or closed
+function toggleListItems(containerId) {
+    const containerElement = document.getElementById(containerId);
+    if (!containerElement) {
+        console.warn('Accordion container not found:', containerId);
+        return;
+    }
+
+    // Find all direct li children (the accordion items)
+    const items = Array.from(containerElement.children).filter(el => el.tagName === 'LI');
+    if (!items.length) {
+        return; // No items to toggle
+    }
+
+    // Determine if we should open all (if any are closed) or close all (if all are open)
+    const shouldOpen = items.some(item => !item.classList.contains('uk-open'));
+
+    // Toggle each item accordingly
+    items.forEach(item => {
+        if (shouldOpen) {
+            // Open the item if it's not already open
+            if (!item.classList.contains('uk-open')) {
+                item.classList.add('uk-open');
+                // Make sure the content is expanded
+                const content = item.querySelector('.uk-accordion-content');
+                if (content) {
+                    content.style.height = 'auto';
+                    content.hidden = false;
+                }
+            }
+        } else {
+            // Close the item
+            item.classList.remove('uk-open');
+            // Hide the content
+            const content = item.querySelector('.uk-accordion-content');
+            if (content) {
+                content.hidden = true;
+            }
+        }
+    });
+
+    // Attempt to use UIkit's API if available (more reliable)
+    if (window.UIkit && UIkit.accordion) {
+        try {
+            const accordion = UIkit.accordion(containerElement);
+            if (accordion) {
+                // In UIkit, indices typically start at 0
+                items.forEach((item, index) => {
+                    const isOpen = item.classList.contains('uk-open');
+                    if (shouldOpen && !isOpen) {
+                        accordion.toggle(index, false); // Open item without animation
+                    } else if (!shouldOpen && isOpen) {
+                        accordion.toggle(index, false); // Close item without animation
+                    }
+                });
+            }
+        } catch (e) {
+            console.warn('UIkit accordion API failed, falling back to manual toggle', e);
+            // The manual toggle above should have handled it
+        }
+    }
+}
+
 // Wait for the DOM to be fully loaded before initializing
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize button states for elements present on initial load
