@@ -66,17 +66,24 @@ class BaseFieldRenderer:
         # Get field description from field_info
         description = getattr(self.field_info, "description", None)
 
-        # Prepare label text and attributes
+        # Prepare label text
         label_text = self.original_field_name.replace("_", " ").title()
-        label_attrs = {"For": self.field_name}
-
-        # Add tooltip if description is available
+        
+        # Create span attributes with tooltip if description is available
+        span_attrs = {}
         if description:
-            label_attrs["uk_tooltip"] = description
+            span_attrs["uk_tooltip"] = description
+            span_attrs["cls"] = "cursor-help"  # Visual indicator for tooltip
+            
+        # Create the span with the label text and tooltip
+        label_text_span = fh.Span(label_text, **span_attrs)
+            
+        # Prepare label attributes
+        label_attrs = {"For": self.field_name}
 
         # Create and return the label - using standard fh.Label with appropriate styling
         return fh.Label(
-            label_text,
+            label_text_span,
             **label_attrs,
             cls="block text-sm font-medium text-gray-700 mb-1",
         )
