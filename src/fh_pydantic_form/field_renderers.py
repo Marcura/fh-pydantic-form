@@ -2,6 +2,7 @@ import logging
 from datetime import date, time
 from typing import (
     Any,
+    Optional,
     get_args,
     get_origin,
 )
@@ -86,7 +87,7 @@ class BaseFieldRenderer:
 
         # Prepare label attributes
         label_attrs = {"For": self.field_name}
-        
+
         # Apply color styling if specified
         if self.label_color:
             label_attrs["style"] = f"color: {self.label_color};"
@@ -152,11 +153,11 @@ class StringFieldRenderer(BaseFieldRenderer):
             "required": is_field_required,
             "cls": "w-full",
         }
-        
+
         # Only add the disabled attribute if the field should actually be disabled
         if self.disabled:
             input_attrs["disabled"] = True
-            
+
         return mui.Input(**input_attrs)
 
 
@@ -193,11 +194,11 @@ class NumberFieldRenderer(BaseFieldRenderer):
             or get_origin(self.field_info.annotation) is float
             else "1",
         }
-        
+
         # Only add the disabled attribute if the field should actually be disabled
         if self.disabled:
             input_attrs["disabled"] = True
-            
+
         return mui.Input(**input_attrs)
 
 
@@ -216,11 +217,11 @@ class BooleanFieldRenderer(BaseFieldRenderer):
             "name": self.field_name,
             "checked": bool(self.value),
         }
-        
+
         # Only add the disabled attribute if the field should actually be disabled
         if self.disabled:
             checkbox_attrs["disabled"] = True
-            
+
         return mui.CheckboxX(**checkbox_attrs)
 
 
@@ -262,11 +263,11 @@ class DateFieldRenderer(BaseFieldRenderer):
             "required": is_field_required,
             "cls": "w-full",
         }
-        
+
         # Only add the disabled attribute if the field should actually be disabled
         if self.disabled:
             input_attrs["disabled"] = True
-            
+
         return mui.Input(**input_attrs)
 
 
@@ -308,11 +309,11 @@ class TimeFieldRenderer(BaseFieldRenderer):
             "required": is_field_required,
             "cls": "w-full",
         }
-        
+
         # Only add the disabled attribute if the field should actually be disabled
         if self.disabled:
             input_attrs["disabled"] = True
-            
+
         return mui.Input(**input_attrs)
 
 
@@ -376,7 +377,7 @@ class LiteralFieldRenderer(BaseFieldRenderer):
             "placeholder": placeholder_text,
             "cls": "w-full",
         }
-        
+
         # Only add the disabled attribute if the field should actually be disabled
         if self.disabled:
             select_attrs["disabled"] = True
@@ -633,19 +634,16 @@ class ListFieldRenderer(BaseFieldRenderer):
                 "hx_swap": "beforeend",
                 "type": "button",
             }
-            
+
             # Only add disabled attribute if field should be disabled
             if self.disabled:
                 add_button_attrs["disabled"] = True
-                
+
             empty_state = mui.Alert(
                 fh.Div(
                     mui.UkIcon("info", cls="mr-2"),
                     "No items in this list. Click 'Add Item' to create one.",
-                    mui.Button(
-                        "Add Item",
-                        **add_button_attrs
-                    ),
+                    mui.Button("Add Item", **add_button_attrs),
                     cls="flex flex-col items-start",
                 ),
                 cls=mui.AlertT.info,
@@ -875,7 +873,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                 "hx_confirm": "Are you sure you want to delete this item?",
                 "type": "button",  # Prevent form submission
             }
-            
+
             add_below_button_attrs = {
                 "cls": "uk-button-secondary uk-button-small ml-2",
                 "hx_post": add_url,
@@ -884,21 +882,21 @@ class ListFieldRenderer(BaseFieldRenderer):
                 "uk_tooltip": "Insert new item below",
                 "type": "button",  # Prevent form submission
             }
-            
+
             move_up_button_attrs = {
                 "cls": "uk-button-link move-up-btn",
                 "onclick": "moveItemUp(this); return false;",
                 "uk_tooltip": "Move up",
                 "type": "button",  # Prevent form submission
             }
-            
+
             move_down_button_attrs = {
                 "cls": "uk-button-link move-down-btn ml-2",
                 "onclick": "moveItemDown(this); return false;",
                 "uk_tooltip": "Move down",
                 "type": "button",  # Prevent form submission
             }
-            
+
             # Only add disabled attribute if the field should actually be disabled
             if self.disabled:
                 delete_button_attrs["disabled"] = True
@@ -907,24 +905,16 @@ class ListFieldRenderer(BaseFieldRenderer):
                 move_down_button_attrs["disabled"] = True
 
             # Create buttons using attribute dictionaries
-            delete_button = mui.Button(
-                mui.UkIcon("trash"),
-                **delete_button_attrs
-            )
+            delete_button = mui.Button(mui.UkIcon("trash"), **delete_button_attrs)
 
             add_below_button = mui.Button(
-                mui.UkIcon("plus-circle"),
-                **add_below_button_attrs
+                mui.UkIcon("plus-circle"), **add_below_button_attrs
             )
 
-            move_up_button = mui.Button(
-                mui.UkIcon("arrow-up"),
-                **move_up_button_attrs
-            )
+            move_up_button = mui.Button(mui.UkIcon("arrow-up"), **move_up_button_attrs)
 
             move_down_button = mui.Button(
-                mui.UkIcon("arrow-down"),
-                **move_down_button_attrs
+                mui.UkIcon("arrow-down"), **move_down_button_attrs
             )
 
             # Assemble actions div
