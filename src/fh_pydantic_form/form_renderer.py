@@ -202,6 +202,7 @@ class PydanticFormRenderer(Generic[ModelType]):
         custom_renderers: Optional[List[Tuple[Type, Type[BaseFieldRenderer]]]] = None,
         disabled: bool = False,
         disabled_fields: Optional[List[str]] = None,
+        label_colors: Optional[Dict[str, str]] = None,
     ):
         """
         Initialize the form renderer
@@ -213,6 +214,7 @@ class PydanticFormRenderer(Generic[ModelType]):
             custom_renderers: Optional list of tuples (field_type, renderer_cls) to register
             disabled: Whether all form inputs should be disabled
             disabled_fields: Optional list of top-level field names to disable specifically
+            label_colors: Optional dictionary mapping field names to label colors (CSS color values)
         """
         self.name = form_name
         self.model_class = model_class
@@ -221,6 +223,7 @@ class PydanticFormRenderer(Generic[ModelType]):
         self.base_prefix = f"{form_name}_"
         self.disabled = disabled
         self.disabled_fields = disabled_fields or []  # Store as list for easier checking
+        self.label_colors = label_colors or {}  # Store label colors mapping
 
         # Register custom renderers with the global registry if provided
         if custom_renderers:
@@ -289,6 +292,9 @@ class PydanticFormRenderer(Generic[ModelType]):
             is_field_disabled = self.disabled or (field_name in self.disabled_fields)
             logger.debug(f"Field '{field_name}' disabled state: {is_field_disabled} (Global: {self.disabled}, Specific: {field_name in self.disabled_fields})")
 
+            # Get label color for this field if specified
+            label_color = self.label_colors.get(field_name)
+
             # Create and render the field
             renderer = renderer_cls(
                 field_name=field_name,
@@ -296,6 +302,7 @@ class PydanticFormRenderer(Generic[ModelType]):
                 value=initial_value,
                 prefix=self.base_prefix,
                 disabled=is_field_disabled,  # Pass the calculated disabled state
+                label_color=label_color,  # Pass the label color if specified
             )
 
             rendered_field = renderer.render()

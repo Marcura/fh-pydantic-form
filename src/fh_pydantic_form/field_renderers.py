@@ -40,6 +40,7 @@ class BaseFieldRenderer:
         value: Any = None,
         prefix: str = "",
         disabled: bool = False,
+        label_color: Optional[str] = None,
     ):
         """
         Initialize the field renderer
@@ -50,6 +51,7 @@ class BaseFieldRenderer:
             value: The current value of the field (optional)
             prefix: Optional prefix for the field name (used for nested fields)
             disabled: Whether the field should be rendered as disabled
+            label_color: Optional CSS color value for the field label
         """
         self.field_name = f"{prefix}{field_name}" if prefix else field_name
         self.original_field_name = field_name
@@ -58,6 +60,7 @@ class BaseFieldRenderer:
         self.prefix = prefix
         self.is_optional = _is_optional_type(field_info.annotation)
         self.disabled = disabled
+        self.label_color = label_color
 
     def render_label(self) -> FT:
         """
@@ -83,6 +86,10 @@ class BaseFieldRenderer:
 
         # Prepare label attributes
         label_attrs = {"For": self.field_name}
+        
+        # Apply color styling if specified
+        if self.label_color:
+            label_attrs["style"] = f"color: {self.label_color};"
 
         # Create and return the label - using standard fh.Label with appropriate styling
         return fh.Label(
