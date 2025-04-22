@@ -1010,7 +1010,7 @@ class ListFieldRenderer(BaseFieldRenderer):
             )
 
             # Return the accordion item
-            title_component = fh.Span(item_summary_text, cls="text-gray-600 font-bold")
+            title_component = fh.Span(item_summary_text, cls="text-gray-700 font-medium pl-4")
             li_attrs = {"id": full_card_id}
 
             return mui.AccordionItem(
