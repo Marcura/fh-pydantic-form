@@ -5,7 +5,8 @@
 `fh-pydantic-form` simplifies creating web forms for [FastHTML](https://github.com/AnswerDotAI/fasthtml) by automatically generating the necessary HTML input elements based on your Pydantic model definitions. It integrates seamlessly with  and leverages [MonsterUI](https://github.com/AnswerDotAI/monsterui) components for styling.
 
 
-https://github.com/user-attachments/assets/e5c3387c-ca24-4132-9f93-462fd09deda
+<video src="https://github.com/user-attachments/assets/e5c3387c-ca24-4132-9f93-462fd09deda" controls="controls" style="max-width: 730px;">
+</video>
 
 ## Purpose
 
