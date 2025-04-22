@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 # Remove imports from examples
 from fh_pydantic_form import PydanticFormRenderer, list_manipulation_js
 
+
 # Define test-specific Address model
 class AddressTestModel(BaseModel):
     street: str = "123 Main St"
@@ -17,6 +18,7 @@ class AddressTestModel(BaseModel):
     def __str__(self) -> str:
         return f"{self.street}, {self.city} ({'billing' if self.is_billing else 'shipping'})"
 
+
 # Define test-specific CustomDetail model
 class CustomDetailTestModel(BaseModel):
     value: str = "Default value"
@@ -25,11 +27,13 @@ class CustomDetailTestModel(BaseModel):
     def __str__(self) -> str:
         return f"{self.value} ({self.confidence})"
 
+
 # Define test-specific ComplexSchema
 class ComplexTestSchema(BaseModel):
     """
     Test model mirroring the structure of ComplexSchema from examples
     """
+
     name: str = Field(description="Name of the customer")
     age: int = Field(description="Age of the customer")
     score: float = Field(description="Score of the customer")
@@ -55,9 +59,7 @@ class ComplexTestSchema(BaseModel):
     )
 
     # Lists of simple types
-    tags: List[str] = Field(
-        default_factory=list, description="Tags of the customer"
-    )
+    tags: List[str] = Field(default_factory=list, description="Tags of the customer")
 
     # Nested model
     main_address: AddressTestModel = Field(
@@ -70,25 +72,31 @@ class ComplexTestSchema(BaseModel):
 
     # single custom nested model
     custom_detail: CustomDetailTestModel = Field(
-        default_factory=CustomDetailTestModel, description="Custom detail of the customer"
+        default_factory=CustomDetailTestModel,
+        description="Custom detail of the customer",
     )
     # list of custom nested models
     more_custom_details: List[CustomDetailTestModel] = Field(
         default_factory=list, description="More custom details of the customer"
     )
 
+
 # Define SimpleTestModel outside of fixture for use in actual test client
 class SimpleTestModel(BaseModel):
     """Simple test model for client fixtures."""
+
     name: str = "Test Model"
     age: int = 25
     score: float = 92.5
 
+
 # Define ListTestModel outside of fixture for use in actual test client
 class ListTestModel(BaseModel):
     """List test model for client fixtures."""
+
     name: str = ""
     tags: List[str] = Field(["tag1", "tag2"])
+
 
 @pytest.fixture(scope="module")
 def simple_client():
@@ -105,12 +113,15 @@ def simple_client():
             mui.Container(
                 mui.CardHeader("Simple Test Form"),
                 mui.Card(
-                    mui.CardBody(mui.Form(form_renderer.render_inputs(), id="test-simple-form")),
+                    mui.CardBody(
+                        mui.Form(form_renderer.render_inputs(), id="test-simple-form")
+                    ),
                 ),
             ),
         )
 
     return TestClient(app)
+
 
 @pytest.fixture(scope="module")
 def globally_disabled_simple_client():
@@ -118,7 +129,9 @@ def globally_disabled_simple_client():
     import fasthtml.common as fh
     import monsterui.all as mui
 
-    form_renderer = PydanticFormRenderer("test_simple_globally_disabled", SimpleTestModel, disabled=True)
+    form_renderer = PydanticFormRenderer(
+        "test_simple_globally_disabled", SimpleTestModel, disabled=True
+    )
     app, rt = fh.fast_app(hdrs=[mui.Theme.blue.headers()], pico=False, live=False)
 
     @rt("/")
@@ -127,12 +140,18 @@ def globally_disabled_simple_client():
             mui.Container(
                 mui.CardHeader("Simple Test Form (Globally Disabled)"),
                 mui.Card(
-                    mui.CardBody(mui.Form(form_renderer.render_inputs(), id="test-simple-globally-disabled-form")),
+                    mui.CardBody(
+                        mui.Form(
+                            form_renderer.render_inputs(),
+                            id="test-simple-globally-disabled-form",
+                        )
+                    ),
                 ),
             ),
         )
 
     return TestClient(app)
+
 
 @pytest.fixture(scope="module")
 def partially_disabled_simple_client():
@@ -140,7 +159,9 @@ def partially_disabled_simple_client():
     import fasthtml.common as fh
     import monsterui.all as mui
 
-    form_renderer = PydanticFormRenderer("test_simple_partially_disabled", SimpleTestModel, disabled_fields=["age"])
+    form_renderer = PydanticFormRenderer(
+        "test_simple_partially_disabled", SimpleTestModel, disabled_fields=["age"]
+    )
     app, rt = fh.fast_app(hdrs=[mui.Theme.blue.headers()], pico=False, live=False)
 
     @rt("/")
@@ -149,12 +170,18 @@ def partially_disabled_simple_client():
             mui.Container(
                 mui.CardHeader("Simple Test Form (Partially Disabled)"),
                 mui.Card(
-                    mui.CardBody(mui.Form(form_renderer.render_inputs(), id="test-simple-partially-disabled-form")),
+                    mui.CardBody(
+                        mui.Form(
+                            form_renderer.render_inputs(),
+                            id="test-simple-partially-disabled-form",
+                        )
+                    ),
                 ),
             ),
         )
 
     return TestClient(app)
+
 
 @pytest.fixture(scope="module")
 def validation_client():
@@ -168,18 +195,20 @@ def validation_client():
 
     @rt("/")
     def get():
-         return fh.Div(
+        return fh.Div(
             mui.Container(
                 mui.Card(
                     mui.CardHeader("Validate Test Form"),
                     mui.CardBody(
                         mui.Form(
                             form_renderer.render_inputs(),
-                            mui.Button("Submit", type="submit", cls=mui.ButtonT.primary),
+                            mui.Button(
+                                "Submit", type="submit", cls=mui.ButtonT.primary
+                            ),
                             hx_post="/submit_form",
                             hx_target="#result",
                             hx_swap="innerHTML",
-                            id="test-validation-form"
+                            id="test-validation-form",
                         )
                     ),
                 ),
@@ -193,15 +222,16 @@ def validation_client():
             validated = await form_renderer.model_validate_request(req)
             return mui.Card(
                 mui.CardHeader(fh.H3("Validation Successful")),
-                mui.CardBody(fh.Pre(validated.model_dump_json(indent=2)))
+                mui.CardBody(fh.Pre(validated.model_dump_json(indent=2))),
             )
         except ValidationError as e:
             return mui.Card(
                 mui.CardHeader(fh.H3("Validation Error", cls="text-red-500")),
-                mui.CardBody(fh.Pre(e.json(indent=2)))
+                mui.CardBody(fh.Pre(e.json(indent=2))),
             )
 
     return TestClient(app)
+
 
 @pytest.fixture(scope="module")
 def list_client():
@@ -212,9 +242,7 @@ def list_client():
 
     form_renderer = PydanticFormRenderer("test_list", ListTestModel)
     app, rt = fh.fast_app(
-        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()],
-        pico=False,
-        live=False
+        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()], pico=False, live=False
     )
     form_renderer.register_routes(app)  # Register the list routes
 
@@ -227,11 +255,13 @@ def list_client():
                     mui.CardBody(
                         mui.Form(
                             form_renderer.render_inputs(),
-                            mui.Button("Submit", type="submit", cls=mui.ButtonT.primary),
+                            mui.Button(
+                                "Submit", type="submit", cls=mui.ButtonT.primary
+                            ),
                             hx_post="/submit_form",
                             hx_target="#result",
                             hx_swap="innerHTML",
-                            id="test-list-form"
+                            id="test-list-form",
                         )
                     ),
                 ),
@@ -245,15 +275,16 @@ def list_client():
             validated = await form_renderer.model_validate_request(req)
             return mui.Card(
                 mui.CardHeader(fh.H3("Validation Successful")),
-                mui.CardBody(fh.Pre(validated.model_dump_json(indent=2)))
+                mui.CardBody(fh.Pre(validated.model_dump_json(indent=2))),
             )
         except ValidationError as e:
             return mui.Card(
                 mui.CardHeader(fh.H3("Validation Error", cls="text-red-500")),
-                mui.CardBody(fh.Pre(e.json(indent=2)))
+                mui.CardBody(fh.Pre(e.json(indent=2))),
             )
 
     return TestClient(app)
+
 
 @pytest.fixture(scope="module")
 def complex_client(complex_renderer):
@@ -265,9 +296,7 @@ def complex_client(complex_renderer):
     # complex_renderer is already configured with ComplexTestSchema, form_name="test_complex"
     form_renderer = complex_renderer
     app, rt = fh.fast_app(
-        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()],
-        pico=False,
-        live=False
+        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()], pico=False, live=False
     )
     form_renderer.register_routes(app)  # Register list and form action routes
 
@@ -289,7 +318,7 @@ def complex_client(complex_renderer):
                             hx_post="/submit_form",
                             hx_target="#result",
                             hx_swap="innerHTML",
-                            id="test-complex-form"
+                            id="test-complex-form",
                         )
                     ),
                 ),
@@ -303,49 +332,53 @@ def complex_client(complex_renderer):
             validated = await form_renderer.model_validate_request(req)
             return mui.Card(
                 mui.CardHeader(fh.H3("Validation Successful")),
-                mui.CardBody(fh.Pre(validated.model_dump_json(indent=2)))
+                mui.CardBody(fh.Pre(validated.model_dump_json(indent=2))),
             )
         except ValidationError as e:
             return mui.Card(
                 mui.CardHeader(fh.H3("Validation Error", cls="text-red-500")),
-                mui.CardBody(fh.Pre(e.json(indent=2)))
+                mui.CardBody(fh.Pre(e.json(indent=2))),
             )
 
     return TestClient(app)
 
+
 @pytest.fixture
 def simple_test_model():
     """A simple model for testing basic fields."""
+
     class SimpleTestModel(BaseModel):
         name: str = "Test Model"
         age: int = 25
         score: float = 92.5
-        
+
     return SimpleTestModel
 
 
 @pytest.fixture
 def nested_test_model():
     """A model with nested fields for testing form parsing."""
+
     class NestedModel(BaseModel):
         sub_field: str = "Default Sub"
         is_active: bool = False
-        
+
     class TestModel(BaseModel):
         name: str = "Parent Model"
         count: Optional[int] = None
         nested: NestedModel = Field(default_factory=NestedModel)
-        
+
     return TestModel
 
 
 @pytest.fixture
 def list_test_model():
     """A model with list fields for testing list handling."""
+
     class ListTestModel(BaseModel):
         name: str = "List Model"
         tags: List[str] = Field(default_factory=lambda: ["tag1", "tag2"])
-        
+
     return ListTestModel
 
 
@@ -393,7 +426,9 @@ def complex_renderer(complex_test_model, address_model, custom_detail_model):
         status="PENDING",
         optional_status=None,
         tags=["test1", "test2"],
-        main_address=address_model(street="123 Test St", city="Testville", is_billing=True),
+        main_address=address_model(
+            street="123 Test St", city="Testville", is_billing=True
+        ),
         custom_detail=custom_detail_model(value="Test Detail", confidence="HIGH"),
         other_addresses=[
             address_model(street="456 Other St", city="Otherville", is_billing=False),
@@ -405,8 +440,9 @@ def complex_renderer(complex_test_model, address_model, custom_detail_model):
     return PydanticFormRenderer(
         form_name="test_complex",
         model_class=complex_test_model,
-        initial_values=initial_values
+        initial_values=initial_values,
     )
+
 
 @pytest.fixture(scope="module")
 def complex_initial_values(complex_test_model, address_model, custom_detail_model):
@@ -422,7 +458,9 @@ def complex_initial_values(complex_test_model, address_model, custom_detail_mode
         status="PENDING",
         optional_status=None,
         tags=["test1", "test2"],
-        main_address=address_model(street="123 Test St", city="Testville", is_billing=True),
+        main_address=address_model(
+            street="123 Test St", city="Testville", is_billing=True
+        ),
         custom_detail=custom_detail_model(value="Test Detail", confidence="HIGH"),
         other_addresses=[
             address_model(street="456 Other St", city="Otherville", is_billing=False),
@@ -443,13 +481,11 @@ def globally_disabled_complex_client(complex_test_model, complex_initial_values)
         form_name="test_complex_globally_disabled",
         model_class=complex_test_model,
         initial_values=complex_initial_values,
-        disabled=True
+        disabled=True,
     )
-    
+
     app, rt = fh.fast_app(
-        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()],
-        pico=False,
-        live=False
+        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()], pico=False, live=False
     )
     form_renderer.register_routes(app)
 
@@ -462,7 +498,7 @@ def globally_disabled_complex_client(complex_test_model, complex_initial_values)
                     mui.CardBody(
                         mui.Form(
                             form_renderer.render_inputs(),
-                            id="test-complex-globally-disabled-form"
+                            id="test-complex-globally-disabled-form",
                         )
                     ),
                 ),
@@ -470,6 +506,7 @@ def globally_disabled_complex_client(complex_test_model, complex_initial_values)
         )
 
     return TestClient(app)
+
 
 @pytest.fixture(scope="module")
 def partially_disabled_complex_client(complex_test_model, complex_initial_values):
@@ -481,13 +518,11 @@ def partially_disabled_complex_client(complex_test_model, complex_initial_values
         form_name="test_complex_partially_disabled",
         model_class=complex_test_model,
         initial_values=complex_initial_values,
-        disabled_fields=["name", "main_address", "tags"]
+        disabled_fields=["name", "main_address", "tags"],
     )
-    
+
     app, rt = fh.fast_app(
-        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()],
-        pico=False,
-        live=False
+        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()], pico=False, live=False
     )
     form_renderer.register_routes(app)
 
@@ -500,7 +535,7 @@ def partially_disabled_complex_client(complex_test_model, complex_initial_values
                     mui.CardBody(
                         mui.Form(
                             form_renderer.render_inputs(),
-                            id="test-complex-partially-disabled-form"
+                            id="test-complex-partially-disabled-form",
                         )
                     ),
                 ),
@@ -509,6 +544,7 @@ def partially_disabled_complex_client(complex_test_model, complex_initial_values
 
     return TestClient(app)
 
+
 @pytest.fixture
 def htmx_headers():
     """Standard HTMX request headers for testing."""
@@ -516,11 +552,13 @@ def htmx_headers():
         "HX-Request": "true",
         "HX-Current-URL": "http://testserver/",
         "HX-Target": "result",
-        "Content-Type": "application/x-www-form-urlencoded"
+        "Content-Type": "application/x-www-form-urlencoded",
     }
+
 
 @pytest.fixture
 def sample_field_info():
     """Create a sample FieldInfo for testing."""
     from pydantic.fields import FieldInfo
+
     return FieldInfo(annotation=str)

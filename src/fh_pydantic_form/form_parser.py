@@ -297,19 +297,23 @@ def _parse_nested_model_field(
         return nested_data
 
     # No data found for this nested model
-    logger.debug(f"No form data found for nested model field: {field_name} with prefix: {current_prefix}")
+    logger.debug(
+        f"No form data found for nested model field: {field_name} with prefix: {current_prefix}"
+    )
 
     is_field_optional = _is_optional_type(field_info.annotation)
 
     # If the field is optional, return None
     if is_field_optional:
-        logger.debug(f"Nested field {field_name} is optional and no data found, returning None.")
+        logger.debug(
+            f"Nested field {field_name} is optional and no data found, returning None."
+        )
         return None
 
     # If not optional, try to use default or default_factory
     default_value = None
     default_applied = False
-    
+
     if hasattr(field_info, "default") and field_info.default is not None:
         default_value = field_info.default
         default_applied = True
@@ -323,23 +327,29 @@ def _parse_nested_model_field(
             default_applied = True
             logger.debug(f"Nested field {field_name} using default_factory.")
         except Exception as e:
-            logger.warning(f"Error creating default for {field_name} using default_factory: {e}")
+            logger.warning(
+                f"Error creating default for {field_name} using default_factory: {e}"
+            )
 
     if default_applied:
-        if hasattr(default_value, "model_dump"):
+        if default_value is not None and hasattr(default_value, "model_dump"):
             return default_value.model_dump()
         elif isinstance(default_value, dict):
             return default_value
         else:
             # Handle cases where default might not be a model/dict (unlikely for nested model)
-            logger.warning(f"Default value for nested field {field_name} is not a model or dict: {type(default_value)}")
+            logger.warning(
+                f"Default value for nested field {field_name} is not a model or dict: {type(default_value)}"
+            )
             # Don't return PydanticUndefined or other non-dict values directly
             # Fall through to empty dict return instead
 
     # If not optional, no data found, and no default applicable, always return an empty dict
     # This ensures the test_parse_nested_model_field passes and allows Pydantic to validate
     # if the nested model can be created from empty data
-    logger.debug(f"Nested field {field_name} is required, no data/default found, returning empty dict {{}}.")
+    logger.debug(
+        f"Nested field {field_name} is required, no data/default found, returning empty dict {{}}."
+    )
     return {}
     return {}
 

@@ -118,26 +118,15 @@ class BaseFieldRenderer:
         Returns:
             A FastHTML component (mui.Accordion) containing the complete field
         """
-        # 1. Get the label content (the inner Span with text/tooltip)
+        # 1. Get the full label component (fh.Label)
         label_component = self.render_label()
-        if isinstance(label_component, fh.FT) and label_component.children:
-            label_content = label_component.children[0]
-            # Extract label style if present
-            label_style = label_component.attrs.get("style", "")
-            # Apply label style directly to the span if needed
-            if label_style:
-                # Check if label_content is already a Span, otherwise wrap it
-                if isinstance(label_content, fh.Span):
-                    label_content.attrs["style"] = label_style
-                else:
-                    # This case is less likely if render_label returns Label(Span(...))
-                    label_content = fh.Span(label_content, style=label_style)
-        else:
-            # Fallback if structure is different (should not happen ideally)
-            label_content = self.original_field_name.replace("_", " ").title()
-            label_style = f"color: {self.label_color};" if self.label_color else ""
-            if label_style:
-                label_content = fh.Span(label_content, style=label_style)
+
+        # Apply color styling directly to the Label component if needed
+        if self.label_color and isinstance(label_component, fh.FT):
+            if "style" in label_component.attrs:
+                label_component.attrs["style"] += f" color: {self.label_color};"
+            else:
+                label_component.attrs["style"] = f"color: {self.label_color};"
 
         # 2. Render the input field that will be the accordion content
         input_component = self.render_input()
@@ -146,9 +135,9 @@ class BaseFieldRenderer:
         item_id = f"{self.field_name}_item"
         accordion_id = f"{self.field_name}_accordion"
 
-        # 4. Create the AccordionItem
+        # 4. Create the AccordionItem with the full label component as title
         accordion_item = mui.AccordionItem(
-            label_content,  # Title component (already potentially styled Span)
+            label_component,  # Use the entire label component including the "for" attribute
             input_component,  # Content component (the input field)
             open=True,  # Open by default
             li_kwargs={"id": item_id},  # Pass the specific ID for the <li>
@@ -709,7 +698,6 @@ class ListFieldRenderer(BaseFieldRenderer):
             form_name = self.prefix.rstrip("_") if self.prefix else None
 
             # Check if it's a simple type or BaseModel
-            is_model = hasattr(item_type, "model_fields")
             add_url = (
                 f"/form/{form_name}/list/add/{self.original_field_name}"
                 if form_name
@@ -727,7 +715,7 @@ class ListFieldRenderer(BaseFieldRenderer):
 
             # Only add disabled attribute if field should be disabled
             if self.disabled:
-                add_button_attrs["disabled"] = True
+                add_button_attrs["disabled"] = "true"
 
             empty_state = mui.Alert(
                 fh.Div(
@@ -977,24 +965,25 @@ class ListFieldRenderer(BaseFieldRenderer):
                 "type": "button",  # Prevent form submission
             }
 
-            # Only add disabled attribute if the field should actually be disabled
-            if self.disabled:
-                delete_button_attrs["disabled"] = True
-                add_below_button_attrs["disabled"] = True
-                move_up_button_attrs["disabled"] = True
-                move_down_button_attrs["disabled"] = True
-
-            # Create buttons using attribute dictionaries
-            delete_button = mui.Button(mui.UkIcon("trash"), **delete_button_attrs)
-
-            add_below_button = mui.Button(
-                mui.UkIcon("plus-circle"), **add_below_button_attrs
+            # Create buttons using attribute dictionaries, passing disabled state directly
+            delete_button = mui.Button(
+                mui.UkIcon("trash"), disabled=self.disabled, **delete_button_attrs
             )
 
-            move_up_button = mui.Button(mui.UkIcon("arrow-up"), **move_up_button_attrs)
+            add_below_button = mui.Button(
+                mui.UkIcon("plus-circle"),
+                disabled=self.disabled,
+                **add_below_button_attrs,
+            )
+
+            move_up_button = mui.Button(
+                mui.UkIcon("arrow-up"), disabled=self.disabled, **move_up_button_attrs
+            )
 
             move_down_button = mui.Button(
-                mui.UkIcon("arrow-down"), **move_down_button_attrs
+                mui.UkIcon("arrow-down"),
+                disabled=self.disabled,
+                **move_down_button_attrs,
             )
 
             # Assemble actions div

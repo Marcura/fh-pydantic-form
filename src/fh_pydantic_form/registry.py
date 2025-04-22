@@ -28,6 +28,7 @@ class FieldRendererRegistry:
 
     It uses a singleton pattern to ensure consistent registration across the app.
     """
+
     _instance = None  # Add class attribute to hold the single instance
 
     # Use ClassVar for all registry storage
@@ -35,7 +36,7 @@ class FieldRendererRegistry:
     _type_name_renderers: ClassVar[Dict[str, Any]] = {}
     _predicate_renderers: ClassVar[List[Tuple[Any, Any]]] = []
     _list_item_renderers: ClassVar[Dict[Type, Any]] = {}
-    
+
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             logger.debug("Creating new FieldRendererRegistry singleton instance.")

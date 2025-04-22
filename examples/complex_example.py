@@ -172,15 +172,15 @@ form_renderer.register_routes(app)
 def get():
     return fh.Div(
         mui.Container(
-            mui.H1("More Complex Pydantic Form Demo"),
-            fh.P(
-                "This demo shows automatic fasthtml form generation from Pydantic models. "
-                "The form supports various field types including strings, numbers, "
-                "booleans, dates, literals, optionals, nested basemodels, lists, lists of basemodels, and custom basemodels.",
+            mui.H1("FastHTML/MonsterUI Pydantic Form Demo"),
+            mui.Details(
+                mui.Summary("input json"),
+                fh.Pre(initial_values.model_dump_json(indent=2)),
             ),
             mui.Card(
                 mui.CardBody(
                     mui.Form(
+                        mui.H2("Form"),
                         form_renderer.render_inputs(),
                         fh.Div(
                             mui.Button(

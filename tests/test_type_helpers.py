@@ -1,5 +1,4 @@
-import pytest
-from typing import Dict, List, Literal, Optional, Union, get_args, get_origin
+from typing import List, Literal, Optional, Union, get_args, get_origin
 
 from fh_pydantic_form.type_helpers import (
     _is_optional_type,

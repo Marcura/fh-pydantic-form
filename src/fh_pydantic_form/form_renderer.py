@@ -222,7 +222,9 @@ class PydanticFormRenderer(Generic[ModelType]):
         self.values_dict = initial_values.model_dump() if initial_values else {}
         self.base_prefix = f"{form_name}_"
         self.disabled = disabled
-        self.disabled_fields = disabled_fields or []  # Store as list for easier checking
+        self.disabled_fields = (
+            disabled_fields or []
+        )  # Store as list for easier checking
         self.label_colors = label_colors or {}  # Store label colors mapping
 
         # Register custom renderers with the global registry if provided
@@ -290,7 +292,9 @@ class PydanticFormRenderer(Generic[ModelType]):
 
             # Determine if this specific field should be disabled
             is_field_disabled = self.disabled or (field_name in self.disabled_fields)
-            logger.debug(f"Field '{field_name}' disabled state: {is_field_disabled} (Global: {self.disabled}, Specific: {field_name in self.disabled_fields})")
+            logger.debug(
+                f"Field '{field_name}' disabled state: {is_field_disabled} (Global: {self.disabled}, Specific: {field_name in self.disabled_fields})"
+            )
 
             # Get label color for this field if specified
             label_color = self.label_colors.get(field_name)
@@ -405,7 +409,9 @@ class PydanticFormRenderer(Generic[ModelType]):
         Returns:
             HTML response with reset form inputs
         """
-        logger.info(f"Resetting form '{self.name}' to initial values. Initial model: {self.initial_data_model}")
+        logger.info(
+            f"Resetting form '{self.name}' to initial values. Initial model: {self.initial_data_model}"
+        )
 
         # Create a temporary renderer with the original initial data
         temp_renderer = PydanticFormRenderer(
@@ -421,7 +427,9 @@ class PydanticFormRenderer(Generic[ModelType]):
             logger.error(f"Reset for form '{self.name}' failed to render inputs.")
             return mui.Alert("Error resetting form.", cls=mui.AlertT.error)
 
-        logger.info(f"Reset form '{self.name}' successful. Component: {reset_inputs_component}")
+        logger.info(
+            f"Reset form '{self.name}' successful. Component: {reset_inputs_component}"
+        )
         return reset_inputs_component
 
     def parse(self, form_dict: Dict[str, Any]) -> Dict[str, Any]:
