@@ -114,12 +114,57 @@ class BaseFieldRenderer:
 
     def render(self) -> FT:
         """
-        Render the complete field (label + input) with spacing
+        Render the complete field (label + input) with spacing in a collapsible accordion
 
         Returns:
-            A FastHTML component containing the complete field
+            A FastHTML component (mui.Accordion) containing the complete field
         """
-        return fh.Div(self.render_label(), self.render_input(), cls="mb-4")
+        # 1. Get the label content (the inner Span with text/tooltip)
+        label_component = self.render_label()
+        if isinstance(label_component, fh.FT) and label_component.children:
+            label_content = label_component.children[0]
+            # Extract label style if present
+            label_style = label_component.attrs.get("style", "")
+            # Apply label style directly to the span if needed
+            if label_style:
+                # Check if label_content is already a Span, otherwise wrap it
+                if isinstance(label_content, fh.Span):
+                    label_content.attrs['style'] = label_style
+                else:
+                    # This case is less likely if render_label returns Label(Span(...))
+                    label_content = fh.Span(label_content, style=label_style)
+        else:
+            # Fallback if structure is different (should not happen ideally)
+            label_content = self.original_field_name.replace("_", " ").title()
+            label_style = f"color: {self.label_color};" if self.label_color else ""
+            if label_style:
+                label_content = fh.Span(label_content, style=label_style)
+
+        # 2. Render the input field that will be the accordion content
+        input_component = self.render_input()
+
+        # 3. Define unique IDs for potential targeting
+        item_id = f"{self.field_name}_item"
+        accordion_id = f"{self.field_name}_accordion"
+
+        # 4. Create the AccordionItem
+        accordion_item = mui.AccordionItem(
+            label_content,       # Title component (already potentially styled Span)
+            input_component,     # Content component (the input field)
+            open=True,           # Open by default
+            li_kwargs={"id": item_id},  # Pass the specific ID for the <li>
+            cls="mb-2"           # Add spacing between accordion items
+        )
+
+        # 5. Wrap the single AccordionItem in an Accordion container
+        accordion_container = mui.Accordion(
+            accordion_item,        # The single item to include
+            id=accordion_id,       # ID for the accordion container (ul)
+            multiple=True,         # Allow multiple open (though only one exists)
+            collapsible=True       # Allow toggling
+        )
+
+        return accordion_container
 
 
 # ---- Specific Field Renderers ----
