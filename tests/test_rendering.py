@@ -132,3 +132,137 @@ def test_form_contains_reset_button(complex_client):
     # Look for reset button pattern
     reset_btn_pattern = r'hx-post="/form/test_complex/reset"'
     assert re.search(reset_btn_pattern, response.text) is not None
+
+
+def test_render_globally_disabled_simple_form(globally_disabled_simple_client):
+    """Test rendering a simple form with all fields disabled."""
+    response = globally_disabled_simple_client.get("/")
+    
+    assert response.status_code == 200
+    assert 'content-type' in response.headers
+    assert response.headers['content-type'].startswith('text/html')
+    
+    # Check that all fields are disabled
+    assert 'name="test_simple_globally_disabled_name"' in response.text
+    assert 'name="test_simple_globally_disabled_age"' in response.text
+    assert 'name="test_simple_globally_disabled_score"' in response.text
+    
+    # Check for disabled attribute in all input fields
+    assert 'disabled' in response.text
+    # More specific checks for each field
+    assert re.search(r'name="test_simple_globally_disabled_name"[^>]*disabled', response.text) is not None
+    assert re.search(r'name="test_simple_globally_disabled_age"[^>]*disabled', response.text) is not None
+    assert re.search(r'name="test_simple_globally_disabled_score"[^>]*disabled', response.text) is not None
+
+
+def test_render_partially_disabled_simple_form(partially_disabled_simple_client):
+    """Test rendering a simple form with only specific fields disabled."""
+    response = partially_disabled_simple_client.get("/")
+    
+    assert response.status_code == 200
+    
+    # Check for all fields present
+    assert 'name="test_simple_partially_disabled_name"' in response.text
+    assert 'name="test_simple_partially_disabled_age"' in response.text
+    assert 'name="test_simple_partially_disabled_score"' in response.text
+    
+    # Check that only the age field has the disabled attribute
+    assert re.search(r'name="test_simple_partially_disabled_age"[^>]*disabled', response.text) is not None
+    
+    # Check that the name and score fields do NOT have the disabled attribute
+    # Get the full input tags for these fields
+    name_input_match = re.search(r'<input[^>]*name="test_simple_partially_disabled_name"[^>]*>', response.text)
+    score_input_match = re.search(r'<input[^>]*name="test_simple_partially_disabled_score"[^>]*>', response.text)
+    
+    assert name_input_match is not None
+    assert score_input_match is not None
+    
+    # Verify disabled attribute is not in these tags
+    assert ' disabled' not in name_input_match.group(0)
+    assert ' disabled' not in score_input_match.group(0)
+
+
+def test_render_globally_disabled_complex_form(globally_disabled_complex_client):
+    """Test rendering a complex form with all fields disabled."""
+    response = globally_disabled_complex_client.get("/")
+    
+    assert response.status_code == 200
+    
+    # Check that the response contains a sampling of input fields
+    assert 'name="test_complex_globally_disabled_name"' in response.text
+    assert 'name="test_complex_globally_disabled_age"' in response.text
+    assert 'name="test_complex_globally_disabled_is_active"' in response.text
+    assert 'name="test_complex_globally_disabled_creation_date"' in response.text
+    assert 'name="test_complex_globally_disabled_start_time"' in response.text
+    assert 'name="test_complex_globally_disabled_status"' in response.text
+    
+    # Check for disabled attribute in sample fields across different types
+    assert re.search(r'name="test_complex_globally_disabled_name"[^>]*disabled', response.text) is not None
+    assert re.search(r'name="test_complex_globally_disabled_age"[^>]*disabled', response.text) is not None
+    assert re.search(r'name="test_complex_globally_disabled_is_active"[^>]*disabled', response.text) is not None
+    assert re.search(r'name="test_complex_globally_disabled_creation_date"[^>]*disabled', response.text) is not None
+    assert re.search(r'name="test_complex_globally_disabled_start_time"[^>]*disabled', response.text) is not None
+    assert re.search(r'name="test_complex_globally_disabled_status"[^>]*disabled', response.text) is not None
+    
+    # Check for disabled attribute in nested model fields
+    assert re.search(r'name="test_complex_globally_disabled_main_address_street"[^>]*disabled', response.text) is not None
+    
+    # Check for disabled attribute in list buttons
+    if 'test_complex_globally_disabled_tags_0' in response.text:
+        # If list item exists, check that it's disabled
+        assert re.search(r'name="test_complex_globally_disabled_tags_0"[^>]*disabled', response.text) is not None
+    
+    # Check that action buttons in lists are disabled
+    # (These could be delete, add, move up/down buttons)
+    assert re.search(r'<button[^>]*?(?=.*\buk-button-danger\b)(?=.*disabled)[^>]*>', response.text) is not None  # Delete button
+    assert re.search(r'<button[^>]*?(?=.*\buk-button-secondary\b)(?=.*disabled)[^>]*>', response.text) is not None  # Add button
+    assert re.search(r'<button[^>]*?(?=.*\bmove-up-btn\b)(?=.*disabled)[^>]*>', response.text) is not None  # Move up button
+    assert re.search(r'<button[^>]*?(?=.*\bmove-down-btn\b)(?=.*disabled)[^>]*>', response.text) is not None  # Move down button
+
+
+def test_render_partially_disabled_complex_form(partially_disabled_complex_client):
+    """Test rendering a complex form with only specific fields disabled."""
+    response = partially_disabled_complex_client.get("/")
+    
+    assert response.status_code == 200
+    
+    # Check for all expected fields
+    assert 'name="test_complex_partially_disabled_name"' in response.text
+    assert 'name="test_complex_partially_disabled_age"' in response.text
+    assert 'name="test_complex_partially_disabled_is_active"' in response.text
+    assert 'name="test_complex_partially_disabled_main_address_street"' in response.text
+    
+    # Check that specified disabled fields have the disabled attribute
+    # 1. The name field should be disabled
+    assert re.search(r'name="test_complex_partially_disabled_name"[^>]*disabled', response.text) is not None
+    
+    # 2. All main_address fields should be disabled
+    assert re.search(r'name="test_complex_partially_disabled_main_address_street"[^>]*disabled', response.text) is not None
+    assert re.search(r'name="test_complex_partially_disabled_main_address_city"[^>]*disabled', response.text) is not None
+    assert re.search(r'name="test_complex_partially_disabled_main_address_is_billing"[^>]*disabled', response.text) is not None
+    
+    # 3. All tags fields should be disabled
+    if 'test_complex_partially_disabled_tags_0' in response.text:
+        assert re.search(r'name="test_complex_partially_disabled_tags_0"[^>]*disabled', response.text) is not None
+    
+    # 4. Check that the non-disabled fields do NOT have the disabled attribute
+    # Get the full input tags for age and is_active
+    age_input_match = re.search(r'<input[^>]*name="test_complex_partially_disabled_age"[^>]*>', response.text)
+    is_active_input_match = re.search(r'<input[^>]*name="test_complex_partially_disabled_is_active"[^>]*>', response.text)
+    
+    assert age_input_match is not None
+    assert is_active_input_match is not None
+    
+    # Verify disabled attribute is not in these tags
+    assert ' disabled' not in age_input_match.group(0)
+    assert ' disabled' not in is_active_input_match.group(0)
+    
+    # 5. Check that other_addresses fields are NOT disabled
+    other_address_match = re.search(r'<input[^>]*name="test_complex_partially_disabled_other_addresses_0_street"[^>]*>', response.text)
+    if other_address_match:
+        assert ' disabled' not in other_address_match.group(0)
+    
+    # 6. Check that custom_detail fields are NOT disabled
+    custom_detail_match = re.search(r'<input[^>]*name="test_complex_partially_disabled_custom_detail_value"[^>]*>', response.text)
+    if custom_detail_match:
+        assert ' disabled' not in custom_detail_match.group(0)

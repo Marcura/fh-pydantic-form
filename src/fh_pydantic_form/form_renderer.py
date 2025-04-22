@@ -200,6 +200,8 @@ class PydanticFormRenderer(Generic[ModelType]):
         model_class: Type[ModelType],
         initial_values: Optional[ModelType] = None,
         custom_renderers: Optional[List[Tuple[Type, Type[BaseFieldRenderer]]]] = None,
+        disabled: bool = False,
+        disabled_fields: Optional[List[str]] = None,
     ):
         """
         Initialize the form renderer
@@ -209,12 +211,16 @@ class PydanticFormRenderer(Generic[ModelType]):
             model_class: The Pydantic model class to render
             initial_values: Optional initial Pydantic model instance
             custom_renderers: Optional list of tuples (field_type, renderer_cls) to register
+            disabled: Whether all form inputs should be disabled
+            disabled_fields: Optional list of top-level field names to disable specifically
         """
         self.name = form_name
         self.model_class = model_class
         self.initial_data_model = initial_values  # Store original model for fallback
         self.values_dict = initial_values.model_dump() if initial_values else {}
         self.base_prefix = f"{form_name}_"
+        self.disabled = disabled
+        self.disabled_fields = disabled_fields or []  # Store as list for easier checking
 
         # Register custom renderers with the global registry if provided
         if custom_renderers:
@@ -279,12 +285,17 @@ class PydanticFormRenderer(Generic[ModelType]):
                     f"  - No renderer found for '{field_name}', falling back to StringFieldRenderer"
                 )
 
+            # Determine if this specific field should be disabled
+            is_field_disabled = self.disabled or (field_name in self.disabled_fields)
+            logger.debug(f"Field '{field_name}' disabled state: {is_field_disabled} (Global: {self.disabled}, Specific: {field_name in self.disabled_fields})")
+
             # Create and render the field
             renderer = renderer_cls(
                 field_name=field_name,
                 field_info=field_info,
                 value=initial_value,
                 prefix=self.base_prefix,
+                disabled=is_field_disabled,  # Pass the calculated disabled state
             )
 
             rendered_field = renderer.render()

@@ -39,6 +39,7 @@ class BaseFieldRenderer:
         field_info: FieldInfo,
         value: Any = None,
         prefix: str = "",
+        disabled: bool = False,
     ):
         """
         Initialize the field renderer
@@ -48,6 +49,7 @@ class BaseFieldRenderer:
             field_info: The FieldInfo for the field
             value: The current value of the field (optional)
             prefix: Optional prefix for the field name (used for nested fields)
+            disabled: Whether the field should be rendered as disabled
         """
         self.field_name = f"{prefix}{field_name}" if prefix else field_name
         self.original_field_name = field_name
@@ -55,6 +57,7 @@ class BaseFieldRenderer:
         self.value = value
         self.prefix = prefix
         self.is_optional = _is_optional_type(field_info.annotation)
+        self.disabled = disabled
 
     def render_label(self) -> FT:
         """
@@ -133,15 +136,21 @@ class StringFieldRenderer(BaseFieldRenderer):
         if self.is_optional:
             placeholder_text += " (Optional)"
 
-        return mui.Input(
-            value=self.value or "",
-            id=self.field_name,
-            name=self.field_name,
-            type="text",
-            placeholder=placeholder_text,
-            required=is_field_required,
-            cls="w-full",
-        )
+        input_attrs = {
+            "value": self.value or "",
+            "id": self.field_name,
+            "name": self.field_name,
+            "type": "text",
+            "placeholder": placeholder_text,
+            "required": is_field_required,
+            "cls": "w-full",
+        }
+        
+        # Only add the disabled attribute if the field should actually be disabled
+        if self.disabled:
+            input_attrs["disabled"] = True
+            
+        return mui.Input(**input_attrs)
 
 
 class NumberFieldRenderer(BaseFieldRenderer):
@@ -164,19 +173,25 @@ class NumberFieldRenderer(BaseFieldRenderer):
         if self.is_optional:
             placeholder_text += " (Optional)"
 
-        return mui.Input(
-            value=str(self.value) if self.value is not None else "",
-            id=self.field_name,
-            name=self.field_name,
-            type="number",
-            placeholder=placeholder_text,
-            required=is_field_required,
-            cls="w-full",
-            step="any"
+        input_attrs = {
+            "value": str(self.value) if self.value is not None else "",
+            "id": self.field_name,
+            "name": self.field_name,
+            "type": "number",
+            "placeholder": placeholder_text,
+            "required": is_field_required,
+            "cls": "w-full",
+            "step": "any"
             if self.field_info.annotation is float
             or get_origin(self.field_info.annotation) is float
             else "1",
-        )
+        }
+        
+        # Only add the disabled attribute if the field should actually be disabled
+        if self.disabled:
+            input_attrs["disabled"] = True
+            
+        return mui.Input(**input_attrs)
 
 
 class BooleanFieldRenderer(BaseFieldRenderer):
@@ -189,11 +204,17 @@ class BooleanFieldRenderer(BaseFieldRenderer):
         Returns:
             A CheckboxX component appropriate for boolean values
         """
-        return mui.CheckboxX(
-            id=self.field_name,
-            name=self.field_name,
-            checked=bool(self.value),
-        )
+        checkbox_attrs = {
+            "id": self.field_name,
+            "name": self.field_name,
+            "checked": bool(self.value),
+        }
+        
+        # Only add the disabled attribute if the field should actually be disabled
+        if self.disabled:
+            checkbox_attrs["disabled"] = True
+            
+        return mui.CheckboxX(**checkbox_attrs)
 
 
 class DateFieldRenderer(BaseFieldRenderer):
@@ -225,15 +246,21 @@ class DateFieldRenderer(BaseFieldRenderer):
         if self.is_optional:
             placeholder_text += " (Optional)"
 
-        return mui.Input(
-            value=formatted_value,
-            id=self.field_name,
-            name=self.field_name,
-            type="date",
-            placeholder=placeholder_text,
-            required=is_field_required,
-            cls="w-full",
-        )
+        input_attrs = {
+            "value": formatted_value,
+            "id": self.field_name,
+            "name": self.field_name,
+            "type": "date",
+            "placeholder": placeholder_text,
+            "required": is_field_required,
+            "cls": "w-full",
+        }
+        
+        # Only add the disabled attribute if the field should actually be disabled
+        if self.disabled:
+            input_attrs["disabled"] = True
+            
+        return mui.Input(**input_attrs)
 
 
 class TimeFieldRenderer(BaseFieldRenderer):
@@ -265,15 +292,21 @@ class TimeFieldRenderer(BaseFieldRenderer):
         if self.is_optional:
             placeholder_text += " (Optional)"
 
-        return mui.Input(
-            value=formatted_value,
-            id=self.field_name,
-            name=self.field_name,
-            type="time",
-            placeholder=placeholder_text,
-            required=is_field_required,
-            cls="w-full",
-        )
+        input_attrs = {
+            "value": formatted_value,
+            "id": self.field_name,
+            "name": self.field_name,
+            "type": "time",
+            "placeholder": placeholder_text,
+            "required": is_field_required,
+            "cls": "w-full",
+        }
+        
+        # Only add the disabled attribute if the field should actually be disabled
+        if self.disabled:
+            input_attrs["disabled"] = True
+            
+        return mui.Input(**input_attrs)
 
 
 class LiteralFieldRenderer(BaseFieldRenderer):
@@ -328,15 +361,21 @@ class LiteralFieldRenderer(BaseFieldRenderer):
         if self.is_optional:
             placeholder_text += " (Optional)"
 
-        # Render the select element
-        return mui.Select(
-            *options,
-            id=self.field_name,
-            name=self.field_name,
-            required=is_field_required,
-            placeholder=placeholder_text,
-            cls="w-full",
-        )
+        # Prepare attributes dictionary
+        select_attrs = {
+            "id": self.field_name,
+            "name": self.field_name,
+            "required": is_field_required,
+            "placeholder": placeholder_text,
+            "cls": "w-full",
+        }
+        
+        # Only add the disabled attribute if the field should actually be disabled
+        if self.disabled:
+            select_attrs["disabled"] = True
+
+        # Render the select element with options and attributes
+        return mui.Select(*options, **select_attrs)
 
 
 class BaseModelFieldRenderer(BaseFieldRenderer):
@@ -411,6 +450,7 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
                 field_info=nested_field_info,
                 value=nested_field_value,
                 prefix=nested_prefix,
+                disabled=self.disabled,  # Propagate disabled state to nested fields
             )
 
             nested_inputs.append(renderer.render())
@@ -578,17 +618,26 @@ class ListFieldRenderer(BaseFieldRenderer):
                 else f"/list/add/{self.field_name}"
             )
 
+            # Prepare button attributes
+            add_button_attrs = {
+                "cls": "uk-button-primary uk-button-small mt-2",
+                "hx_post": add_url,
+                "hx_target": f"#{container_id}",
+                "hx_swap": "beforeend",
+                "type": "button",
+            }
+            
+            # Only add disabled attribute if field should be disabled
+            if self.disabled:
+                add_button_attrs["disabled"] = True
+                
             empty_state = mui.Alert(
                 fh.Div(
                     mui.UkIcon("info", cls="mr-2"),
                     "No items in this list. Click 'Add Item' to create one.",
                     mui.Button(
                         "Add Item",
-                        cls="uk-button-primary uk-button-small mt-2",
-                        hx_post=add_url,
-                        hx_target=f"#{container_id}",
-                        hx_swap="beforeend",
-                        type="button",
+                        **add_button_attrs
                     ),
                     cls="flex flex-col items-start",
                 ),
@@ -727,6 +776,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                         field_info=item_field_info,
                         value=item,
                         prefix=self.prefix,
+                        disabled=self.disabled,  # Propagate disabled state
                     )
                     # Add the rendered input to content elements
                     item_content_elements.append(item_renderer.render_input())
@@ -764,6 +814,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                             field_info=nested_field_info,
                             value=nested_field_value,
                             prefix=name_prefix,
+                            disabled=self.disabled,  # Propagate disabled state
                         )
 
                         # Add rendered field to content elements
@@ -782,6 +833,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                     field_info=field_info,
                     value=item,
                     prefix=self.prefix,  # Correct: Provide the form prefix
+                    disabled=self.disabled,  # Propagate disabled state
                 )
                 input_element = simple_renderer.render_input()
                 item_content_elements.append(fh.Div(input_element, cls="p-3"))
@@ -805,42 +857,67 @@ class ListFieldRenderer(BaseFieldRenderer):
                 f"{self.prefix}{item_card_id}" if self.prefix else item_card_id
             )
 
+            # Create attribute dictionaries for buttons
+            delete_button_attrs = {
+                "cls": "uk-button-danger uk-button-small",
+                "hx_delete": delete_url,
+                "hx_target": f"#{full_card_id}",
+                "hx_swap": "outerHTML",
+                "uk_tooltip": "Delete this item",
+                "hx_params": f"idx={idx}",
+                "hx_confirm": "Are you sure you want to delete this item?",
+                "type": "button",  # Prevent form submission
+            }
+            
+            add_below_button_attrs = {
+                "cls": "uk-button-secondary uk-button-small ml-2",
+                "hx_post": add_url,
+                "hx_target": f"#{full_card_id}",
+                "hx_swap": "afterend",
+                "uk_tooltip": "Insert new item below",
+                "type": "button",  # Prevent form submission
+            }
+            
+            move_up_button_attrs = {
+                "cls": "uk-button-link move-up-btn",
+                "onclick": "moveItemUp(this); return false;",
+                "uk_tooltip": "Move up",
+                "type": "button",  # Prevent form submission
+            }
+            
+            move_down_button_attrs = {
+                "cls": "uk-button-link move-down-btn ml-2",
+                "onclick": "moveItemDown(this); return false;",
+                "uk_tooltip": "Move down",
+                "type": "button",  # Prevent form submission
+            }
+            
+            # Only add disabled attribute if the field should actually be disabled
+            if self.disabled:
+                delete_button_attrs["disabled"] = True
+                add_below_button_attrs["disabled"] = True
+                move_up_button_attrs["disabled"] = True
+                move_down_button_attrs["disabled"] = True
+
+            # Create buttons using attribute dictionaries
             delete_button = mui.Button(
                 mui.UkIcon("trash"),
-                cls="uk-button-danger uk-button-small",
-                hx_delete=delete_url,
-                hx_target=f"#{full_card_id}",
-                hx_swap="outerHTML",
-                uk_tooltip="Delete this item",
-                hx_params=f"idx={idx}",
-                hx_confirm="Are you sure you want to delete this item?",
-                type="button",  # Prevent form submission
+                **delete_button_attrs
             )
 
             add_below_button = mui.Button(
                 mui.UkIcon("plus-circle"),
-                cls="uk-button-secondary uk-button-small ml-2",
-                hx_post=add_url,
-                hx_target=f"#{full_card_id}",
-                hx_swap="afterend",
-                uk_tooltip="Insert new item below",
-                type="button",  # Prevent form submission
+                **add_below_button_attrs
             )
 
             move_up_button = mui.Button(
                 mui.UkIcon("arrow-up"),
-                cls="uk-button-link move-up-btn",
-                onclick="moveItemUp(this); return false;",
-                uk_tooltip="Move up",
-                type="button",  # Prevent form submission
+                **move_up_button_attrs
             )
 
             move_down_button = mui.Button(
                 mui.UkIcon("arrow-down"),
-                cls="uk-button-link move-down-btn ml-2",
-                onclick="moveItemDown(this); return false;",
-                uk_tooltip="Move down",
-                type="button",  # Prevent form submission
+                **move_down_button_attrs
             )
 
             # Assemble actions div

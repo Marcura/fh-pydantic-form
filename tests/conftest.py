@@ -113,6 +113,50 @@ def simple_client():
     return TestClient(app)
 
 @pytest.fixture(scope="module")
+def globally_disabled_simple_client():
+    """TestClient for a simple form with all fields disabled."""
+    import fasthtml.common as fh
+    import monsterui.all as mui
+
+    form_renderer = PydanticFormRenderer("test_simple_globally_disabled", SimpleTestModel, disabled=True)
+    app, rt = fh.fast_app(hdrs=[mui.Theme.blue.headers()], pico=False, live=False)
+
+    @rt("/")
+    def get():
+        return fh.Div(
+            mui.Container(
+                mui.CardHeader("Simple Test Form (Globally Disabled)"),
+                mui.Card(
+                    mui.CardBody(mui.Form(form_renderer.render_inputs(), id="test-simple-globally-disabled-form")),
+                ),
+            ),
+        )
+
+    return TestClient(app)
+
+@pytest.fixture(scope="module")
+def partially_disabled_simple_client():
+    """TestClient for a simple form with only the age field disabled."""
+    import fasthtml.common as fh
+    import monsterui.all as mui
+
+    form_renderer = PydanticFormRenderer("test_simple_partially_disabled", SimpleTestModel, disabled_fields=["age"])
+    app, rt = fh.fast_app(hdrs=[mui.Theme.blue.headers()], pico=False, live=False)
+
+    @rt("/")
+    def get():
+        return fh.Div(
+            mui.Container(
+                mui.CardHeader("Simple Test Form (Partially Disabled)"),
+                mui.Card(
+                    mui.CardBody(mui.Form(form_renderer.render_inputs(), id="test-simple-partially-disabled-form")),
+                ),
+            ),
+        )
+
+    return TestClient(app)
+
+@pytest.fixture(scope="module")
 def validation_client():
     """TestClient for a validation form defined locally."""
     import fasthtml.common as fh
@@ -364,6 +408,106 @@ def complex_renderer(complex_test_model, address_model, custom_detail_model):
         initial_values=initial_values
     )
 
+@pytest.fixture(scope="module")
+def complex_initial_values(complex_test_model, address_model, custom_detail_model):
+    """Return initial values for complex form tests (reusable fixture)."""
+    return complex_test_model(
+        name="Test User",
+        age=30,
+        score=95.0,
+        is_active=True,
+        description="Test description",
+        creation_date=datetime.date(2023, 1, 1),
+        start_time=datetime.time(12, 0, 0),
+        status="PENDING",
+        optional_status=None,
+        tags=["test1", "test2"],
+        main_address=address_model(street="123 Test St", city="Testville", is_billing=True),
+        custom_detail=custom_detail_model(value="Test Detail", confidence="HIGH"),
+        other_addresses=[
+            address_model(street="456 Other St", city="Otherville", is_billing=False),
+        ],
+        more_custom_details=[
+            custom_detail_model(value="Test Detail 1", confidence="MEDIUM"),
+        ],
+    )
+
+
+@pytest.fixture(scope="module")
+def globally_disabled_complex_client(complex_test_model, complex_initial_values):
+    """TestClient for a complex form with all fields disabled."""
+    import fasthtml.common as fh
+    import monsterui.all as mui
+
+    form_renderer = PydanticFormRenderer(
+        form_name="test_complex_globally_disabled",
+        model_class=complex_test_model,
+        initial_values=complex_initial_values,
+        disabled=True
+    )
+    
+    app, rt = fh.fast_app(
+        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()],
+        pico=False,
+        live=False
+    )
+    form_renderer.register_routes(app)
+
+    @rt("/")
+    def get():
+        return fh.Div(
+            mui.Container(
+                mui.H1("Complex Test Form (Globally Disabled)"),
+                mui.Card(
+                    mui.CardBody(
+                        mui.Form(
+                            form_renderer.render_inputs(),
+                            id="test-complex-globally-disabled-form"
+                        )
+                    ),
+                ),
+            ),
+        )
+
+    return TestClient(app)
+
+@pytest.fixture(scope="module")
+def partially_disabled_complex_client(complex_test_model, complex_initial_values):
+    """TestClient for a complex form with specific fields disabled."""
+    import fasthtml.common as fh
+    import monsterui.all as mui
+
+    form_renderer = PydanticFormRenderer(
+        form_name="test_complex_partially_disabled",
+        model_class=complex_test_model,
+        initial_values=complex_initial_values,
+        disabled_fields=["name", "main_address", "tags"]
+    )
+    
+    app, rt = fh.fast_app(
+        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()],
+        pico=False,
+        live=False
+    )
+    form_renderer.register_routes(app)
+
+    @rt("/")
+    def get():
+        return fh.Div(
+            mui.Container(
+                mui.H1("Complex Test Form (Partially Disabled)"),
+                mui.Card(
+                    mui.CardBody(
+                        mui.Form(
+                            form_renderer.render_inputs(),
+                            id="test-complex-partially-disabled-form"
+                        )
+                    ),
+                ),
+            ),
+        )
+
+    return TestClient(app)
 
 @pytest.fixture
 def htmx_headers():
