@@ -126,4 +126,7 @@ dmypy.json
 .DS_Store
 
 
+.ruff_cache/
+
+
 .sesskey
