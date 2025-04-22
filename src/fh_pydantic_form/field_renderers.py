@@ -137,6 +137,7 @@ class StringFieldRenderer(BaseFieldRenderer):
             value=self.value or "",
             id=self.field_name,
             name=self.field_name,
+            type="text",
             placeholder=placeholder_text,
             required=is_field_required,
             cls="w-full",

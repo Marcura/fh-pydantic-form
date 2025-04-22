@@ -28,27 +28,25 @@ class FieldRendererRegistry:
 
     It uses a singleton pattern to ensure consistent registration across the app.
     """
+    _instance = None  # Add class attribute to hold the single instance
 
-    _instance: ClassVar[Optional["FieldRendererRegistry"]] = None
-    _type_renderers: Dict[Type, Any] = {}
-    _type_name_renderers: Dict[str, Any] = {}
-    _predicate_renderers: List[Tuple[Any, Any]] = []
-    _list_item_renderers: Dict[Type, Any] = {}
-
-    def __new__(cls):
+    # Use ClassVar for all registry storage
+    _type_renderers: ClassVar[Dict[Type, Any]] = {}
+    _type_name_renderers: ClassVar[Dict[str, Any]] = {}
+    _predicate_renderers: ClassVar[List[Tuple[Any, Any]]] = []
+    _list_item_renderers: ClassVar[Dict[Type, Any]] = {}
+    
+    def __new__(cls, *args, **kwargs):
         if cls._instance is None:
+            logger.debug("Creating new FieldRendererRegistry singleton instance.")
             cls._instance = super().__new__(cls)
-            cls._instance._type_renderers = {}
-            cls._instance._type_name_renderers = {}
-            cls._instance._predicate_renderers = []
-            cls._instance._list_item_renderers = {}
+        else:
+            logger.debug("Returning existing FieldRendererRegistry singleton instance.")
         return cls._instance
 
     @classmethod
     def register_type_renderer(cls, field_type: Type, renderer_cls: Any) -> None:
         """Register a renderer for a field type"""
-        if cls._instance is None:
-            cls._instance = cls()
         cls._type_renderers[field_type] = renderer_cls
 
     @classmethod
@@ -56,8 +54,6 @@ class FieldRendererRegistry:
         cls, field_type_name: str, renderer_cls: Any
     ) -> None:
         """Register a renderer for a specific field type name"""
-        if cls._instance is None:
-            cls._instance = cls()
         cls._type_name_renderers[field_type_name] = renderer_cls
 
     @classmethod
@@ -68,15 +64,11 @@ class FieldRendererRegistry:
         The predicate function should accept a field_info parameter and return
         True if the renderer should be used for that field.
         """
-        if cls._instance is None:
-            cls._instance = cls()
         cls._predicate_renderers.append((predicate_func, renderer_cls))
 
     @classmethod
     def register_list_item_renderer(cls, item_type: Type, renderer_cls: Any) -> None:
         """Register a renderer for list items of a specific type"""
-        if cls._instance is None:
-            cls._instance = cls()
         cls._list_item_renderers[item_type] = renderer_cls
 
     @classmethod
@@ -97,9 +89,6 @@ class FieldRendererRegistry:
         Returns:
             A renderer class appropriate for the field
         """
-        if cls._instance is None:
-            cls._instance = cls()
-
         # Get the field type (unwrap Optional if present)
         original_annotation = field_info.annotation
         field_type = _get_underlying_type_if_optional(original_annotation)
@@ -138,9 +127,6 @@ class FieldRendererRegistry:
         Returns:
             A renderer class for list items, or None if none is registered
         """
-        if cls._instance is None:
-            cls._instance = cls()
-
         # Check for exact type match
         if item_type in cls._list_item_renderers:
             return cls._list_item_renderers[item_type]

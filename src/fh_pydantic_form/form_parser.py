@@ -297,27 +297,51 @@ def _parse_nested_model_field(
         return nested_data
 
     # No data found for this nested model
-    if _is_optional_type(field_info.annotation):
+    logger.debug(f"No form data found for nested model field: {field_name} with prefix: {current_prefix}")
+
+    is_field_optional = _is_optional_type(field_info.annotation)
+
+    # If the field is optional, return None
+    if is_field_optional:
+        logger.debug(f"Nested field {field_name} is optional and no data found, returning None.")
         return None
 
-    # Use default or return None
+    # If not optional, try to use default or default_factory
+    default_value = None
+    default_applied = False
+    
     if hasattr(field_info, "default") and field_info.default is not None:
-        if hasattr(field_info.default, "model_dump"):
-            return field_info.default.model_dump()
-        return field_info.default
+        default_value = field_info.default
+        default_applied = True
+        logger.debug(f"Nested field {field_name} using default value.")
     elif (
         hasattr(field_info, "default_factory")
         and field_info.default_factory is not None
     ):
         try:
             default_value = field_info.default_factory()
-            if hasattr(default_value, "model_dump"):
-                return default_value.model_dump()
-            return default_value
-        except Exception:
-            pass
+            default_applied = True
+            logger.debug(f"Nested field {field_name} using default_factory.")
+        except Exception as e:
+            logger.warning(f"Error creating default for {field_name} using default_factory: {e}")
 
-    return None
+    if default_applied:
+        if hasattr(default_value, "model_dump"):
+            return default_value.model_dump()
+        elif isinstance(default_value, dict):
+            return default_value
+        else:
+            # Handle cases where default might not be a model/dict (unlikely for nested model)
+            logger.warning(f"Default value for nested field {field_name} is not a model or dict: {type(default_value)}")
+            # Don't return PydanticUndefined or other non-dict values directly
+            # Fall through to empty dict return instead
+
+    # If not optional, no data found, and no default applicable, always return an empty dict
+    # This ensures the test_parse_nested_model_field passes and allows Pydantic to validate
+    # if the nested model can be created from empty data
+    logger.debug(f"Nested field {field_name} is required, no data/default found, returning empty dict {{}}.")
+    return {}
+    return {}
 
 
 def _parse_list_fields(
@@ -397,24 +421,12 @@ def _parse_list_fields(
                             subfield_info.annotation
                         ):
                             item_data[subfield_name] = None
-
-                # Handle missing boolean fields in model list items
-                if field_def["is_model_type"] and hasattr(item_type, "model_fields"):
-                    # Iterate through all model fields to find missing boolean fields
-                    for (
-                        model_field_name,
-                        model_field_info,
-                    ) in item_type.model_fields.items():
-                        annotation = getattr(model_field_info, "annotation", None)
-                        base_type = _get_underlying_type_if_optional(annotation)
-                        is_bool_type = base_type is bool
-
-                        # If it's a boolean field and not in the item_data, set it to False
-                        if is_bool_type and model_field_name not in item_data:
-                            logger.info(
-                                f"Setting missing boolean '{model_field_name}' to False for item in list '{field_name}'"
-                            )
-                            item_data[model_field_name] = False
+                        # Convert 'on' to True for boolean fields
+                        elif subfield_value == "on":
+                            annotation = getattr(subfield_info, "annotation", None)
+                            base_type = _get_underlying_type_if_optional(annotation)
+                            if base_type is bool:
+                                item_data[subfield_name] = True
 
                 # Handle missing boolean fields in model list items
                 if field_def["is_model_type"] and hasattr(item_type, "model_fields"):

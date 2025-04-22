@@ -387,6 +387,7 @@ class PydanticFormRenderer(Generic[ModelType]):
         Returns:
             HTML response with reset form inputs
         """
+        logger.info(f"Resetting form '{self.name}' to initial values. Initial model: {self.initial_data_model}")
 
         # Create a temporary renderer with the original initial data
         temp_renderer = PydanticFormRenderer(
@@ -397,8 +398,12 @@ class PydanticFormRenderer(Generic[ModelType]):
 
         # Render inputs with the initial data
         reset_inputs_component = temp_renderer.render_inputs()
-        logger.info(f"Reset form '{self.name}' to initial values")
 
+        if reset_inputs_component is None:
+            logger.error(f"Reset for form '{self.name}' failed to render inputs.")
+            return mui.Alert("Error resetting form.", cls=mui.AlertT.error)
+
+        logger.info(f"Reset form '{self.name}' successful. Component: {reset_inputs_component}")
         return reset_inputs_component
 
     def parse(self, form_dict: Dict[str, Any]) -> Dict[str, Any]:
