@@ -37,22 +37,22 @@ ModelType = TypeVar("ModelType", bound=BaseModel)
 def list_manipulation_js():
     return fh.Script("""  
 function moveItem(buttonElement, direction) {
-    // Find the card container (may need to adjust selector)
-    const card = buttonElement.closest('.uk-card');
-    if (!card) return;
+    // Find the accordion item (list item)
+    const item = buttonElement.closest('li');
+    if (!item) return;
 
-    const container = card.parentElement;
+    const container = item.parentElement;
     if (!container) return;
 
     // Find the sibling in the direction we want to move
-    const sibling = direction === 'up' ? card.previousElementSibling : card.nextElementSibling;
+    const sibling = direction === 'up' ? item.previousElementSibling : item.nextElementSibling;
     
     if (sibling) {
         if (direction === 'up') {
-            container.insertBefore(card, sibling);
+            container.insertBefore(item, sibling);
         } else {
-            // Insert card after the next sibling
-            container.insertBefore(card, sibling.nextElementSibling);
+            // Insert item after the next sibling
+            container.insertBefore(item, sibling.nextElementSibling);
         }
         // Update button states after move
         updateMoveButtons(container);
@@ -69,13 +69,13 @@ function moveItemDown(buttonElement) {
 
 // Function to update button states (disable if at top/bottom)
 function updateMoveButtons(container) {
-    const cards = container.querySelectorAll('.uk-card');
-    cards.forEach((card, index) => {
-        const upButton = card.querySelector('button[onclick^="moveItemUp"]');
-        const downButton = card.querySelector('button[onclick^="moveItemDown"]');
+    const items = container.querySelectorAll(':scope > li');
+    items.forEach((item, index) => {
+        const upButton = item.querySelector('button[onclick^="moveItemUp"]');
+        const downButton = item.querySelector('button[onclick^="moveItemDown"]');
         
         if (upButton) upButton.disabled = (index === 0);
-        if (downButton) downButton.disabled = (index === cards.length - 1);
+        if (downButton) downButton.disabled = (index === items.length - 1);
     });
 }
 

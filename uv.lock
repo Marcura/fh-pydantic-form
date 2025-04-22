@@ -150,7 +150,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "monsterui", specifier = ">=1.0.18" },
+    { name = "monsterui", specifier = ">=1.0.19" },
     { name = "pydantic", specifier = ">=2.11.3" },
     { name = "python-fasthtml", specifier = ">=0.12.12" },
 ]
@@ -297,7 +297,7 @@ wheels = [
 
 [[package]]
 name = "monsterui"
-version = "1.0.18"
+version = "1.0.19"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastcore" },
@@ -305,9 +305,9 @@ dependencies = [
     { name = "mistletoe" },
     { name = "python-fasthtml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2c/5e/bc38197536c022f37d8a4668e1cfe01cbd1176019c63d5904156b937e90f/monsterui-1.0.18.tar.gz", hash = "sha256:3f3e18ac5d234aae857ff34c2f4b76b9e60b19159f58ef78e21856d5dfd37b98", size = 32634 }
+sdist = { url = "https://files.pythonhosted.org/packages/5b/11/f1570707ccd9457acbdb2442c21b1c4a466380dd890e69489557ca589e52/monsterui-1.0.19.tar.gz", hash = "sha256:9a464868cd85cd0567009c1ae469caef04f27ed3985dcb9d6211513a193bb9c6", size = 33783 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d8/b7/c2d0d89093822adf19b55f3f8bafb8edf62338aa6f1a31e179277dd2045a/monsterui-1.0.18-py3-none-any.whl", hash = "sha256:6a026e5cfc950155f167dcd2214292dfb3a2c9227d63c99b00073736b15730a6", size = 32482 },
+    { url = "https://files.pythonhosted.org/packages/40/2e/15eab540daa4259e8d186a92582c6a51e6a3a339c9e3cb997b97db505a6b/monsterui-1.0.19-py3-none-any.whl", hash = "sha256:0512ca301b991f8757cf371486ab7c4f1763e5a91bba0b0b5c86144153637c02", size = 33497 },
 ]
 
 [[package]]

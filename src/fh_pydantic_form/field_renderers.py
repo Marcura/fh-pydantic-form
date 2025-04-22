@@ -10,6 +10,7 @@ from typing import (
 import fasthtml.common as fh
 import monsterui.all as mui
 from fastcore.xml import FT
+from monsterui.foundations import stringify
 from pydantic import ValidationError
 from pydantic.fields import FieldInfo
 
@@ -389,6 +390,67 @@ class LiteralFieldRenderer(BaseFieldRenderer):
 class BaseModelFieldRenderer(BaseFieldRenderer):
     """Renderer for nested Pydantic BaseModel fields"""
 
+    def render(self) -> FT:
+        """
+        Render the nested BaseModel field as a single-item accordion using mui.Accordion.
+
+        Returns:
+            A FastHTML component (mui.Accordion) containing the accordion structure.
+        """
+        # 1. Get the label content (the inner Span with text/tooltip)
+        label_component = self.render_label()
+        if isinstance(label_component, fh.FT) and label_component.children:
+            label_content = label_component.children[0]
+            # Extract label style if present
+            label_style = label_component.attrs.get("style", "")
+            # Apply label style directly to the span if needed
+            if label_style:
+                # Check if label_content is already a Span, otherwise wrap it
+                if isinstance(label_content, fh.Span):
+                    label_content.attrs['style'] = label_style
+                else:
+                    # This case is less likely if render_label returns Label(Span(...))
+                    label_content = fh.Span(label_content, style=label_style)
+        else:
+            # Fallback if structure is different (should not happen ideally)
+            label_content = self.original_field_name.replace("_", " ").title()
+            label_style = f"color: {self.label_color};" if self.label_color else ""
+            if label_style:
+                label_content = fh.Span(label_content, style=label_style)
+
+        # 2. Render the nested input fields that will be the accordion content
+        input_component = self.render_input()
+
+        # 3. Define unique IDs for potential targeting
+        item_id = f"{self.field_name}_item"
+        accordion_id = f"{self.field_name}_accordion"
+
+        # 4. Create the AccordionItem using the MonsterUI component
+        #    - Pass label_content as the title.
+        #    - Pass input_component as the content.
+        #    - Set 'open=True' to be expanded by default.
+        #    - Pass item_id via li_kwargs.
+        #    - Add 'mb-4' class for bottom margin spacing.
+        accordion_item = mui.AccordionItem(
+            label_content,       # Title component (already potentially styled Span)
+            input_component,     # Content component (the Card with nested fields)
+            open=True,           # Open by default
+            li_kwargs={"id": item_id},  # Pass the specific ID for the <li>
+            cls="mb-4"           # Add bottom margin to the <li> element
+        )
+
+        # 5. Wrap the single AccordionItem in an Accordion container
+        #    - Set multiple=True (harmless for single item)
+        #    - Set collapsible=True
+        accordion_container = mui.Accordion(
+            accordion_item,        # The single item to include
+            id=accordion_id,       # ID for the accordion container (ul)
+            multiple=True,         # Allow multiple open (though only one exists)
+            collapsible=True       # Allow toggling
+        )
+
+        return accordion_container
+
     def render_input(self) -> FT:
         """
         Render input elements for nested model fields
@@ -574,42 +636,26 @@ class ListFieldRenderer(BaseFieldRenderer):
                     error_message += f" (Dict keys: {list(item.keys())})"
 
                 item_elements.append(
-                    fh.Li(
+                    mui.AccordionItem(
                         mui.Alert(
                             error_message,
                             cls=mui.AlertT.error,
                         ),
-                        cls="mb-2",
-                    )
-                )
-                item_card = self._render_item_card(item, idx, item_type)
-                item_elements.append(item_card)
-            except Exception as e:
-                logger.error(f"Error rendering item {idx}: {str(e)}", exc_info=True)
-                error_message = f"Error rendering item {idx}: {str(e)}"
-
-                # Add more context to the error for debugging
-                if isinstance(item, dict):
-                    error_message += f" (Dict keys: {list(item.keys())})"
-
-                item_elements.append(
-                    fh.Li(
-                        mui.Alert(
-                            error_message,
-                            cls=mui.AlertT.error,
-                        ),
-                        cls="mb-2",
+                        # title=f"Error in item {idx}",
+                        li_kwargs={"cls": "mb-2"},
                     )
                 )
 
         # Container for list items with form-specific prefix in ID
         container_id = f"{self.prefix}{self.original_field_name}_items_container"
 
-        items_container = fh.Ul(
+        # Use mui.Accordion component
+        accordion = mui.Accordion(
             *item_elements,
             id=container_id,
-            cls="space-y-2 list-none p-0",
-            uk_accordion="collapsible: true; multiple: true",  # Enable accordion behavior
+            multiple=True,  # Allow multiple items to be open at once
+            collapsible=True,  # Make it collapsible
+            cls="space-y-2",  # Add space between items
         )
 
         # Empty state message if no items
@@ -651,7 +697,7 @@ class ListFieldRenderer(BaseFieldRenderer):
 
         # Return the complete component
         return fh.Div(
-            items_container,
+            accordion,
             empty_state,
             cls="mb-4 border rounded-md p-4",
         )
@@ -674,8 +720,6 @@ class ListFieldRenderer(BaseFieldRenderer):
             item_id = f"{self.field_name}_{idx}"
             item_card_id = f"{item_id}_card"
 
-            item_card_id = f"{item_id}_card"
-
             # Extract form name from prefix if available
             form_name = self.prefix.rstrip("_") if self.prefix else None
 
@@ -692,7 +736,6 @@ class ListFieldRenderer(BaseFieldRenderer):
 
                     elif isinstance(item, dict):
                         # Item is a dict, try to create a model instance for display
-
                         model_for_display = item_type.model_validate(item)
 
                     else:
@@ -707,7 +750,6 @@ class ListFieldRenderer(BaseFieldRenderer):
                         item_summary_text = (
                             f"{item_type.__name__}: {str(model_for_display)}"
                         )
-
                     else:
                         # Fallback for None or unexpected types
                         item_summary_text = f"{item_type.__name__}: (Unknown format: {type(item).__name__})"
@@ -726,12 +768,6 @@ class ListFieldRenderer(BaseFieldRenderer):
                         logger.warning(f"Dict values sample: {str(item)[:100]}")
                     item_summary_text = f"{item_type.__name__}: (Invalid data)"
                 except Exception as e:
-                    # Catch any other unexpected errors
-                    logger.error(
-                        f"Error creating display string for {item_type.__name__}: {e}",
-                        exc_info=True,
-                    )
-                    item_summary_text = f"{item_type.__name__}: (Error displaying item)"
                     # Catch any other unexpected errors
                     logger.error(
                         f"Error creating display string for {item_type.__name__}: {e}",
@@ -928,37 +964,30 @@ class ListFieldRenderer(BaseFieldRenderer):
                 cls="flex justify-between w-full mt-3 pt-3 border-t border-gray-200",
             )
 
-            # --- Assemble and return the complete item card ---
-            # Add uk-open class if item should be open by default
-            card_classes = "uk-card uk-card-default uk-margin-small-bottom"
-            if is_open:
-                card_classes += " uk-open"
-                logger.info(f"Creating item card {idx} in open state")
+            # Return the accordion item
+            title_component = fh.Span(item_summary_text, cls="text-gray-600 font-bold")
+            li_attrs = {"id": full_card_id}
 
-            return fh.Li(
-                fh.A(  # Accordion title
-                    fh.Div(
-                        fh.Span(item_summary_text, cls="ml-2 text-gray-600 font-bold"),
-                        cls="flex items-center",
-                    ),
-                    href="#",  # Necessary for UIkit accordion
-                    cls="uk-accordion-title",
-                ),
-                fh.Div(  # Accordion content
-                    *item_content_elements,
-                    actions,
-                    cls="uk-accordion-content p-4",
-                ),
-                id=full_card_id,  # ID for targeting with the full prefix
-                cls=card_classes,  # Styling with conditional uk-open
+            return mui.AccordionItem(
+                title_component,  # Title as first positional argument
+                *item_content_elements,  # Content elements
+                actions,  # More content elements
+                cls="uk-card uk-card-default uk-margin-small-bottom",  # Use cls keyword arg directly
+                open=is_open,
+                li_kwargs=li_attrs,  # Pass remaining li attributes without cls
             )
 
         except Exception as e:
             # Return error representation
-            return fh.Li(
-                mui.Alert(
-                    f"Error rendering item {idx}: {str(e)}", cls=mui.AlertT.error
-                ),
-                cls="mb-2",
-                id=f"{self.field_name}_{idx}_error_card",
+            title_component = f"Error in item {idx}"
+            content_component = mui.Alert(
+                f"Error rendering item {idx}: {str(e)}", cls=mui.AlertT.error
+            )
+            li_attrs = {"id": f"{self.field_name}_{idx}_error_card"}
+
+            return mui.AccordionItem(
+                title_component,  # Title as first positional argument
+                content_component,  # Content element
+                cls="mb-2",  # Use cls keyword arg directly
+                li_kwargs=li_attrs,  # Pass remaining li attributes without cls
             )

@@ -139,9 +139,9 @@ if __name__ == "__main__":
 -   **Descriptions as Tooltips:** Uses `Field(description=...)` from Pydantic to create tooltips (`uk-tooltip` via UIkit).
 -   **Required Fields:** Automatically adds the `required` attribute based on field definitions (considering `Optional` and defaults).
 -   **Disabled Fields:** Disable the whole form with `disabled=True` or disable specific fields with `disabled_fields`
--   **Nested Model Rendering:** Renders nested Pydantic models within styled cards.
+-   **Collapsible Nested Models:** Renders nested Pydantic models in collapsible details/summary elements for better form organization and space management.
 -   **List Manipulation:**
-    -   Renders lists of simple types or models in accordion-style cards.
+    -   Renders lists of simple types or models in accordion-style cards with an enhanced UI.
     -   Provides HTMX endpoints (registered via `register_list_manipulation_routes`) for adding and deleting list items.
     -   Includes JavaScript (`list_manipulation_js()`) for client-side reordering (moving items up/down).
 -   **Form Refresh & Reset:**
@@ -289,7 +289,6 @@ form_renderer = PydanticFormRenderer(
 ## Contributing
 
 Contributions are welcome! Please feel free to open an issue or submit a pull request.
-
 
 
 
