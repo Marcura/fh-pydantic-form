@@ -81,7 +81,7 @@ class BaseFieldRenderer:
         span_attrs = {}
         if description:
             span_attrs["uk_tooltip"] = description
-            span_attrs["cls"] = "cursor-help"  # Visual indicator for tooltip
+            # Removed cursor-help class while preserving tooltip functionality
 
         # Create the span with the label text and tooltip
         label_text_span = fh.Span(label_text, **span_attrs)
