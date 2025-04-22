@@ -10,7 +10,6 @@ from typing import (
 import fasthtml.common as fh
 import monsterui.all as mui
 from fastcore.xml import FT
-from monsterui.foundations import stringify
 from pydantic import ValidationError
 from pydantic.fields import FieldInfo
 
@@ -129,7 +128,7 @@ class BaseFieldRenderer:
             if label_style:
                 # Check if label_content is already a Span, otherwise wrap it
                 if isinstance(label_content, fh.Span):
-                    label_content.attrs['style'] = label_style
+                    label_content.attrs["style"] = label_style
                 else:
                     # This case is less likely if render_label returns Label(Span(...))
                     label_content = fh.Span(label_content, style=label_style)
@@ -149,19 +148,19 @@ class BaseFieldRenderer:
 
         # 4. Create the AccordionItem
         accordion_item = mui.AccordionItem(
-            label_content,       # Title component (already potentially styled Span)
-            input_component,     # Content component (the input field)
-            open=True,           # Open by default
+            label_content,  # Title component (already potentially styled Span)
+            input_component,  # Content component (the input field)
+            open=True,  # Open by default
             li_kwargs={"id": item_id},  # Pass the specific ID for the <li>
-            cls="mb-2"           # Add spacing between accordion items
+            cls="mb-2",  # Add spacing between accordion items
         )
 
         # 5. Wrap the single AccordionItem in an Accordion container
         accordion_container = mui.Accordion(
-            accordion_item,        # The single item to include
-            id=accordion_id,       # ID for the accordion container (ul)
-            multiple=True,         # Allow multiple open (though only one exists)
-            collapsible=True       # Allow toggling
+            accordion_item,  # The single item to include
+            id=accordion_id,  # ID for the accordion container (ul)
+            multiple=True,  # Allow multiple open (though only one exists)
+            collapsible=True,  # Allow toggling
         )
 
         return accordion_container
@@ -452,7 +451,7 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
             if label_style:
                 # Check if label_content is already a Span, otherwise wrap it
                 if isinstance(label_content, fh.Span):
-                    label_content.attrs['style'] = label_style
+                    label_content.attrs["style"] = label_style
                 else:
                     # This case is less likely if render_label returns Label(Span(...))
                     label_content = fh.Span(label_content, style=label_style)
@@ -477,21 +476,21 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
         #    - Pass item_id via li_kwargs.
         #    - Add 'mb-4' class for bottom margin spacing.
         accordion_item = mui.AccordionItem(
-            label_content,       # Title component (already potentially styled Span)
-            input_component,     # Content component (the Card with nested fields)
-            open=True,           # Open by default
+            label_content,  # Title component (already potentially styled Span)
+            input_component,  # Content component (the Card with nested fields)
+            open=True,  # Open by default
             li_kwargs={"id": item_id},  # Pass the specific ID for the <li>
-            cls="mb-4"           # Add bottom margin to the <li> element
+            cls="mb-4",  # Add bottom margin to the <li> element
         )
 
         # 5. Wrap the single AccordionItem in an Accordion container
         #    - Set multiple=True (harmless for single item)
         #    - Set collapsible=True
         accordion_container = mui.Accordion(
-            accordion_item,        # The single item to include
-            id=accordion_id,       # ID for the accordion container (ul)
-            multiple=True,         # Allow multiple open (though only one exists)
-            collapsible=True       # Allow toggling
+            accordion_item,  # The single item to include
+            id=accordion_id,  # ID for the accordion container (ul)
+            multiple=True,  # Allow multiple open (though only one exists)
+            collapsible=True,  # Allow toggling
         )
 
         return accordion_container
@@ -922,7 +921,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                     disabled=self.disabled,  # Propagate disabled state
                 )
                 input_element = simple_renderer.render_input()
-                item_content_elements.append(fh.Div(input_element, cls="p-3"))
+                item_content_elements.append(fh.Div(input_element))
 
             # --- Create action buttons with form-specific URLs ---
             # Generate HTMX endpoints with form name if available
@@ -1009,13 +1008,18 @@ class ListFieldRenderer(BaseFieldRenderer):
                 cls="flex justify-between w-full mt-3 pt-3 border-t border-gray-200",
             )
 
+            # Create a wrapper Div for the main content elements with proper padding
+            content_wrapper = fh.Div(*item_content_elements, cls="px-4 py-3 space-y-3")
+
             # Return the accordion item
-            title_component = fh.Span(item_summary_text, cls="text-gray-700 font-medium pl-4")
+            title_component = fh.Span(
+                item_summary_text, cls="text-gray-700 font-medium pl-3"
+            )
             li_attrs = {"id": full_card_id}
 
             return mui.AccordionItem(
                 title_component,  # Title as first positional argument
-                *item_content_elements,  # Content elements
+                content_wrapper,  # Use the new padded wrapper for content
                 actions,  # More content elements
                 cls="uk-card uk-card-default uk-margin-small-bottom",  # Use cls keyword arg directly
                 open=is_open,
@@ -1030,9 +1034,12 @@ class ListFieldRenderer(BaseFieldRenderer):
             )
             li_attrs = {"id": f"{self.field_name}_{idx}_error_card"}
 
+            # Wrap error component in a div with consistent padding
+            content_wrapper = fh.Div(content_component, cls="px-4 py-3")
+
             return mui.AccordionItem(
                 title_component,  # Title as first positional argument
-                content_component,  # Content element
+                content_wrapper,  # Wrapped content element
                 cls="mb-2",  # Use cls keyword arg directly
                 li_kwargs=li_attrs,  # Pass remaining li attributes without cls
             )
