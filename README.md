@@ -73,7 +73,7 @@ class SimpleModel(BaseModel):
 form_renderer = PydanticFormRenderer("my_form", SimpleModel)
 
 # (Optional) Register list manipulation routes if your model has List fields
-# form_renderer.register_list_manipulation_routes(app)
+# form_renderer.register_routes(app)
 
 # 4. Define routes
 @rt("/")
