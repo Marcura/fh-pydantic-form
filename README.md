@@ -264,6 +264,7 @@ async def post_submit_form(req):
 -   **Labels & Placeholders:** Generates labels from field names (converting snake_case to Title Case) and basic placeholders.
 -   **Descriptions as Tooltips:** Uses `Field(description=...)` from Pydantic to create tooltips (`uk-tooltip` via UIkit).
 -   **Required Fields:** Automatically adds the `required` attribute based on field definitions (considering `Optional` and defaults).
+-   **Disabled Fields:** Disable the whole form with `disabled=True` or disable specific fields with `disabled_fields`
 -   **Nested Model Rendering:** Renders nested Pydantic models within styled cards.
 -   **List Manipulation:**
     -   Renders lists of simple types or models in accordion-style cards.
@@ -276,8 +277,11 @@ async def post_submit_form(req):
 -   **Custom Renderers:** Register your own `BaseFieldRenderer` subclasses for specific Pydantic types or complex field logic using `FieldRendererRegistry` or by passing `custom_renderers` during `PydanticFormRenderer` initialization.
 -   **Form Data Parsing:** Includes logic (`form_renderer.parse` and `form_renderer.model_validate_request`) to correctly parse submitted form data (handling prefixes, list indices, nested structures, boolean checkboxes, etc.) back into a dictionary suitable for Pydantic validation.
 
+## disabled fields
 
+You can disable the full form with `PydanticFormRenderer("my_form", FormModel, disabled=True)` or disable specific fields with `PydanticFormRenderer("my_form", FormModel, disabled_fields=["field1", "field3"])`.
 
+ 
 ## Manipulating lists fields 
 
 When you have `BaseModels` with fields that are e.g. `List[str]` or even `List[BaseModel]` you want to be able to easily edit the list by adding, deleting and moving items. For this we need a little bit of javascript and register some additional routes:
