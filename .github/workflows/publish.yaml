@@ -35,7 +35,7 @@ jobs:
         run: uv run pytest tests
 
       - name: Upload distributions
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: python-package-distributions
           path: dist/
