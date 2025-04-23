@@ -1,0 +1,52 @@
+name: Publish Package Distribution
+
+# Trigger only on tags like v1.2.3
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    # Only minimal permissions needed here
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5       # Install uv into PATH [oai_citation_attribution:13‡GitHub](https://github.com/astral-sh/setup-uv?utm_source=chatgpt.com)
+
+      - name: Set up Python
+        run: uv python install             # Respect any Python constraints in pyproject.toml [oai_citation_attribution:12‡Astral Docs](https://docs.astral.sh/uv/guides/integration/github/?utm_source=chatgpt.com)
+
+      - name: Build distributions
+        run: uv build --no-sources         # Creates sdist and wheel in dist/ [oai_citation_attribution:11‡Astral Docs](https://docs.astral.sh/uv/guides/package/?utm_source=chatgpt.com)
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v3
+        with:
+          name: python-package-distributions
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      id-token: write                     # Enable OIDC token issuance [oai_citation_attribution:10‡GitHub Docs](https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments/configuring-openid-connect-in-pypi?utm_source=chatgpt.com)
+      contents: read
+      packages: write
+
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v3
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # No username/password or API token needed: OIDC flows automatically [oai_citation_attribution:9‡GitHub](https://github.com/pypa/gh-action-pypi-publish?utm_source=chatgpt.com)
