@@ -24,27 +24,25 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Framework :: FastHTML",
     "Topic :: Internet :: WWW/HTTP :: Dynamic Content :: Content Management System",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Operating System :: OS Independent",
 ]
-urls = {
-    Homepage = "https://github.com/Marcura/fh-pydantic-form",
-    Repository = "https://github.com/Marcura/fh-pydantic-form",
-    Documentation = "https://github.com/Marcura/fh-pydantic-form",
-
-}
 dependencies = [
     "monsterui>=1.0.19",
     "pydantic>=2.0",
     "python-fasthtml>=0.12.12",
 ]
 
+[project.urls]
+Homepage = "https://github.com/Marcura/fh-pydantic-form"
+Repository = "https://github.com/Marcura/fh-pydantic-form"
+Documentation = "https://github.com/Marcura/fh-pydantic-form"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
-python_functions = "test_*
+python_functions = "test_*"
 
 [build-system]
 requires = ["hatchling"]
