@@ -47,7 +47,7 @@ import monsterui.all as mui
 from pydantic import BaseModel, ValidationError
 
 # 1. Import the form renderer
-from fh_pydantic_form import PydanticFormRenderer
+from fh_pydantic_form import PydanticForm
 
 app, rt = fh.fast_app(
     hdrs=[
@@ -70,7 +70,7 @@ class SimpleModel(BaseModel):
 # 3. Create a form renderer instance
 #    - 'my_form': Unique name for the form (used for prefixes and routes)
 #    - SimpleModel: The Pydantic model class
-form_renderer = PydanticFormRenderer("my_form", SimpleModel)
+form_renderer = PydanticForm("my_form", SimpleModel)
 
 # (Optional) Register list manipulation routes if your model has List fields
 # form_renderer.register_routes(app)
@@ -154,12 +154,12 @@ if __name__ == "__main__":
     -   Provides HTMX-powered "Refresh" and "Reset" buttons (`form_renderer.refresh_button()`, `form_renderer.reset_button()`).
     -   Refresh updates list item summaries or other dynamic parts without full page reload.
     -   Reset reverts the form to its initial values.
--   **Custom Renderers:** Register your own `BaseFieldRenderer` subclasses for specific Pydantic types or complex field logic using `FieldRendererRegistry` or by passing `custom_renderers` during `PydanticFormRenderer` initialization.
+-   **Custom Renderers:** Register your own `BaseFieldRenderer` subclasses for specific Pydantic types or complex field logic using `FieldRendererRegistry` or by passing `custom_renderers` during `PydanticForm` initialization.
 -   **Form Data Parsing:** Includes logic (`form_renderer.parse` and `form_renderer.model_validate_request`) to correctly parse submitted form data (handling prefixes, list indices, nested structures, boolean checkboxes, etc.) back into a dictionary suitable for Pydantic validation.
 
 ## disabled fields
 
-You can disable the full form with `PydanticFormRenderer("my_form", FormModel, disabled=True)` or disable specific fields with `PydanticFormRenderer("my_form", FormModel, disabled_fields=["field1", "field3"])`.
+You can disable the full form with `PydanticForm("my_form", FormModel, disabled=True)` or disable specific fields with `PydanticForm("my_form", FormModel, disabled_fields=["field1", "field3"])`.
 
  
 ## Manipulating lists fields 
@@ -167,7 +167,7 @@ You can disable the full form with `PydanticFormRenderer("my_form", FormModel, d
 When you have `BaseModels` with fields that are e.g. `List[str]` or even `List[BaseModel]` you want to be able to easily edit the list by adding, deleting and moving items. For this we need a little bit of javascript and register some additional routes:
 
 ```python
-from fh_pydantic_form import PydanticFormRenderer, list_manipulation_js
+from fh_pydantic_form import PydanticForm, list_manipulation_js
 
 app, rt = fh.fast_app(
     hdrs=[
@@ -184,7 +184,7 @@ class ListModel(BaseModel):
     tags: List[str] = Field(["tag1", "tag2"])
 
 
-form_renderer = PydanticFormRenderer("list_model", ListModel)
+form_renderer = PydanticForm("list_model", ListModel)
 form_renderer.register_routes(app)
 ```
 
@@ -193,7 +193,7 @@ form_renderer.register_routes(app)
 You can set the initial values of the form by passing an instantiated BaseModel:
 
 ```python
-form_renderer = PydanticFormRenderer("my_form", ListModel, initial_values=ListModel(name="John", tags=["happy", "joy"]))
+form_renderer = PydanticForm("my_form", ListModel, initial_values=ListModel(name="John", tags=["happy", "joy"]))
 ```
 
 You can reset the form back to these initial values by adding a `form_render.reset_button()` to your UI:
@@ -278,11 +278,11 @@ FieldRendererRegistry.register_type_name_renderer("CustomDetail", CustomDetailFi
 FieldRendererRegistry.register_type_renderer_with_predicate(lambda: x: isinstance(x, CustomDetail), CustomDetailFieldRender)
 ```
 
-You can also pass these directly to the `PydanticFormRenderer` with the custom_renderers argument:
+You can also pass these directly to the `PydanticForm` with the custom_renderers argument:
 
 ```python
 
-form_renderer = PydanticFormRenderer(
+form_renderer = PydanticForm(
     form_name="main_form",
     model_class=ComplexSchema,
     initial_values=initial_values,

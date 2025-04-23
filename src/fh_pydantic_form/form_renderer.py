@@ -179,7 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
 """)
 
 
-class PydanticFormRenderer(Generic[ModelType]):
+class PydanticForm(Generic[ModelType]):
     """
     Renders a form from a Pydantic model class
 
@@ -368,7 +368,7 @@ class PydanticFormRenderer(Generic[ModelType]):
             )
 
         # Create Temporary Renderer instance
-        temp_renderer = PydanticFormRenderer(
+        temp_renderer = PydanticForm(
             form_name=self.name,
             model_class=self.model_class,
             # No initial_data needed here, we set values_dict below
@@ -414,7 +414,7 @@ class PydanticFormRenderer(Generic[ModelType]):
         )
 
         # Create a temporary renderer with the original initial data
-        temp_renderer = PydanticFormRenderer(
+        temp_renderer = PydanticForm(
             form_name=self.name,
             model_class=self.model_class,
             initial_values=self.initial_data_model,  # Use the originally stored model

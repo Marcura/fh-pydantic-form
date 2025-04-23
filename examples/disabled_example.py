@@ -2,7 +2,7 @@ import fasthtml.common as fh
 import monsterui.all as mui
 from pydantic import BaseModel, Field
 
-from fh_pydantic_form import PydanticFormRenderer
+from fh_pydantic_form import PydanticForm
 
 app, rt = fh.fast_app(
     hdrs=[
@@ -23,15 +23,15 @@ class DisabledExampleModel(BaseModel):
 
 
 # Create the three renderers
-renderer_enabled = PydanticFormRenderer(
+renderer_enabled = PydanticForm(
     form_name="enabled_form", model_class=DisabledExampleModel
 )
 
-renderer_globally_disabled = PydanticFormRenderer(
+renderer_globally_disabled = PydanticForm(
     form_name="global_disabled_form", model_class=DisabledExampleModel, disabled=True
 )
 
-renderer_partially_disabled = PydanticFormRenderer(
+renderer_partially_disabled = PydanticForm(
     form_name="partial_disabled_form",
     model_class=DisabledExampleModel,
     disabled_fields=["count", "is_required"],  # Disable count and is_required

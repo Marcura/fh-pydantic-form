@@ -6,7 +6,7 @@ import fasthtml.common as fh
 import monsterui.all as mui
 from pydantic import BaseModel, Field, ValidationError
 
-from fh_pydantic_form import PydanticFormRenderer, list_manipulation_js
+from fh_pydantic_form import PydanticForm, list_manipulation_js
 from fh_pydantic_form.field_renderers import BaseFieldRenderer
 
 logging.basicConfig(level=logging.DEBUG)
@@ -156,7 +156,7 @@ initial_values = ComplexSchema(
     ],
 )
 
-form_renderer = PydanticFormRenderer(
+form_renderer = PydanticForm(
     form_name="main_form",
     model_class=ComplexSchema,
     initial_values=initial_values,

@@ -2,7 +2,7 @@ import fasthtml.common as fh
 import monsterui.all as mui
 from pydantic import BaseModel, ValidationError
 
-from fh_pydantic_form.form_renderer import PydanticFormRenderer
+from fh_pydantic_form.form_renderer import PydanticForm
 
 app, rt = fh.fast_app(
     hdrs=[
@@ -19,7 +19,7 @@ class SimpleModel(BaseModel):
     score: float = 88.5
 
 
-form_renderer = PydanticFormRenderer("simple_model", SimpleModel)
+form_renderer = PydanticForm("simple_model", SimpleModel)
 
 
 @rt("/")

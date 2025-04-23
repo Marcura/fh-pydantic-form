@@ -1,15 +1,16 @@
 from typing import List, Literal, Optional
+
 from pydantic import BaseModel, Field
 
 from fh_pydantic_form.form_parser import (
     _identify_list_fields,
     _parse_boolean_field,
-    _parse_literal_field,
-    _parse_simple_field,
-    _parse_nested_model_field,
-    _parse_list_item_key,
     _parse_list_fields,
+    _parse_list_item_key,
+    _parse_literal_field,
+    _parse_nested_model_field,
     _parse_non_list_fields,
+    _parse_simple_field,
 )
 
 
@@ -299,7 +300,7 @@ def test_parse_lists_with_missing_booleans():
 
 
 def test_form_renderer_parse(complex_renderer):
-    """Test the main parse method of PydanticFormRenderer with complex form data."""
+    """Test the main parse method of PydanticForm with complex form data."""
     # Use model_class from complex_renderer fixture instead of importing from examples
 
     # Sample form data for a complex form
