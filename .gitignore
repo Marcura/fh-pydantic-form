@@ -127,6 +127,7 @@ dmypy.json
 
 
 .ruff_cache/
+uv.lock
 
 
 .sesskey
