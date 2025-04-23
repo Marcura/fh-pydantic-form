@@ -148,7 +148,7 @@ if __name__ == "__main__":
 -   **Collapsible Nested Models:** Renders nested Pydantic models in collapsible details/summary elements for better form organization and space management.
 -   **List Manipulation:**
     -   Renders lists of simple types or models in accordion-style cards with an enhanced UI.
-    -   Provides HTMX endpoints (registered via `register_list_manipulation_routes`) for adding and deleting list items.
+    -   Provides HTMX endpoints (registered via `register_routes`) for adding and deleting list items.
     -   Includes JavaScript (`list_manipulation_js()`) for client-side reordering (moving items up/down).
 -   **Form Refresh & Reset:**
     -   Provides HTMX-powered "Refresh" and "Reset" buttons (`form_renderer.refresh_button()`, `form_renderer.reset_button()`).
