@@ -1,23 +1,50 @@
 [project]
 name = "fh-pydantic-form"
 version = "0.1.0"
-description = "Add your description here"
+description = "a library to turn any pydantic BaseModel object into a fasthtml/monsterui input form"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
+authors = [
+    {name = "Oege Dijk", email = "o.dijk@marcura.com"},
+]
+maintainers = [
+    {name = "Oege Dijk", email = "o.dijk@marcura.com"},
+]
+keywords = [
+    "fasthtml",
+    "monsterui",
+    "pydantic",
+    "forms",
+    "web",
+    "ui",
+]
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Framework :: FastHTML",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content :: Content Management System",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Operating System :: OS Independent",
+]
+urls = {
+    Homepage = "https://github.com/Marcura/fh-pydantic-form",
+    Repository = "https://github.com/Marcura/fh-pydantic-form",
+    Documentation = "https://github.com/Marcura/fh-pydantic-form",
+
+}
 dependencies = [
     "monsterui>=1.0.19",
-    "pydantic>=2.11.3",
+    "pydantic>=2.0",
     "python-fasthtml>=0.12.12",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
-python_functions = "test_*"
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.0.0"
-httpx = "^0.27.0"
+python_functions = "test_*
 
 [build-system]
 requires = ["hatchling"]
@@ -29,6 +56,7 @@ dev-dependencies = [
     "pre-commit>=4.2.0",
     "pytest>=8.3.5",
     "ruff>=0.11.6",
+    "httpx>=0.27.0"
 ]
 
 [tool.mypy]
