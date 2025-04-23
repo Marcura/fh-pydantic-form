@@ -774,7 +774,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                         # Handle cases where item is None or unexpected type
                         model_for_display = None
                         logger.warning(
-                            f"Item is neither a model instance nor a dict: {type(item).__name__}"
+                            f"Item {item} is neither a model instance nor a dict: {type(item).__name__}"
                         )
 
                     if model_for_display is not None:
@@ -797,7 +797,6 @@ class ListFieldRenderer(BaseFieldRenderer):
                         logger.warning(
                             f"Validation failed for dict keys: {list(item.keys())}"
                         )
-                        logger.warning(f"Dict values sample: {str(item)[:100]}")
                     item_summary_text = f"{item_type.__name__}: (Invalid data)"
                 except Exception as e:
                     # Catch any other unexpected errors

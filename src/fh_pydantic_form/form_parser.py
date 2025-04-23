@@ -5,11 +5,8 @@ from typing import (
     List,
     Optional,
     Tuple,
-    Type,
     Union,
 )
-
-from pydantic import BaseModel
 
 from fh_pydantic_form.type_helpers import (
     _get_underlying_type_if_optional,
@@ -18,42 +15,6 @@ from fh_pydantic_form.type_helpers import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def parse_form_data(
-    form_dict: Dict[str, Any], model_class: Type[BaseModel], base_prefix: str = ""
-) -> Dict[str, Any]:
-    """
-    Parse form data into a structure that matches the model.
-
-    DEPRECATED: Use FormRenderer.parse instance method instead.
-    This function is kept for backward compatibility.
-
-    Args:
-        form_dict: Dictionary containing form field data (name -> value)
-        model_class: The Pydantic model class defining the structure
-        base_prefix: Optional prefix to use when looking up field names in form_data
-
-    Returns:
-        Dictionary with parsed data in a structure matching the model
-    """
-    result = {}
-
-    # Identify list field definitions
-    list_field_defs = _identify_list_fields(model_class)
-
-    # Parse non-list fields first
-    result = _parse_non_list_fields(
-        form_dict, model_class, list_field_defs, base_prefix
-    )
-
-    # Parse list fields based on keys present in form_dict
-    list_results = _parse_list_fields(form_dict, list_field_defs, base_prefix)
-
-    # Merge list results into the main result
-    result.update(list_results)
-
-    return result
 
 
 def _identify_list_fields(model_class) -> Dict[str, Dict[str, Any]]:
@@ -350,7 +311,6 @@ def _parse_nested_model_field(
     logger.debug(
         f"Nested field {field_name} is required, no data/default found, returning empty dict {{}}."
     )
-    return {}
     return {}
 
 

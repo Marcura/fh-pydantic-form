@@ -269,11 +269,11 @@ class PydanticForm(Generic[ModelType]):
             if initial_value is None:
                 if field_info.default is not None:
                     initial_value = field_info.default
-                    logger.info(f"  - Using default value for '{field_name}'")
+                    logger.debug(f"  - Using default value for '{field_name}'")
                 elif getattr(field_info, "default_factory", None) is not None:
                     try:
                         initial_value = field_info.default_factory()
-                        logger.info(f"  - Using default_factory for '{field_name}'")
+                        logger.debug(f"  - Using default_factory for '{field_name}'")
                     except Exception as e:
                         initial_value = None
                         logger.warning(
@@ -346,12 +346,6 @@ class PydanticForm(Generic[ModelType]):
 
             parsed_data = self.parse(form_dict)
 
-            # Log some specific field types for debugging
-            for key, value in parsed_data.items():
-                if isinstance(value, list):
-                    logger.info(f"List field '{key}' has {len(value)} items")
-                elif isinstance(value, dict):
-                    logger.info(f"Dict field '{key}' has {len(value.keys())} keys")
         except Exception as e:
             logger.error(
                 f"Error parsing form data for refresh on form '{self.name}': {e}",
@@ -361,7 +355,6 @@ class PydanticForm(Generic[ModelType]):
             parsed_data = (
                 self.initial_data_model.model_dump() if self.initial_data_model else {}
             )
-            logger.warning(f"Using fallback data with {len(parsed_data.keys())} keys")
             alert_ft = mui.Alert(
                 f"Warning: Could not fully process current form values for refresh. Display might not be fully updated. Error: {str(e)}",
                 cls=mui.AlertT.warning + " mb-4",  # Add margin bottom
@@ -375,13 +368,6 @@ class PydanticForm(Generic[ModelType]):
         )
         # Set the values based on the parsed (or fallback) data
         temp_renderer.values_dict = parsed_data
-
-        # Verify field values in temp_renderer
-        for field_name in self.model_class.model_fields:
-            if field_name in temp_renderer.values_dict:
-                value = temp_renderer.values_dict[field_name]
-            else:
-                logger.warning(f"Temp renderer missing field '{field_name}'")
 
         refreshed_inputs_component = temp_renderer.render_inputs()
 
@@ -446,14 +432,6 @@ class PydanticForm(Generic[ModelType]):
             Dictionary with parsed data in a structure matching the model
         """
 
-        # Count how many keys actually have the prefix
-
-        # Log a sample of keys for debugging
-        key_sample = list(form_dict.keys())[:5]  # First 5 keys
-        for key in key_sample:
-            logger.info(f"Sample key: '{key}' = {form_dict[key]}")
-
-        # Identify list field definitions
         list_field_defs = _identify_list_fields(self.model_class)
 
         # Parse non-list fields first - pass the base_prefix
