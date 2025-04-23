@@ -522,6 +522,7 @@ class PydanticForm(Generic[ModelType]):
                     )
 
             # Create a default item
+            default_item = None  # Initialize default_item
             try:
                 # Ensure item_type is not None before checking attributes or type
                 if item_type:
@@ -530,6 +531,10 @@ class PydanticForm(Generic[ModelType]):
                         try:
                             default_item = item_type.model_construct()
                         except Exception as e:
+                            logger.error(
+                                f"Error constructing model for {field_name}: {e}",
+                                exc_info=True,
+                            )
                             return fh.Li(
                                 mui.Alert(
                                     f"Error creating model instance: {str(e)}",
@@ -547,7 +552,7 @@ class PydanticForm(Generic[ModelType]):
                     elif item_type is bool:
                         default_item = False
                     else:
-                        default_item = None
+                        default_item = None  # Other simple types or complex non-models
                 else:
                     # Case where item_type itself was None (should ideally be caught earlier)
                     default_item = None
@@ -555,6 +560,9 @@ class PydanticForm(Generic[ModelType]):
                         f"item_type was None when trying to create default for {field_name}"
                     )
             except Exception as e:
+                logger.error(
+                    f"Error creating default item for {field_name}: {e}", exc_info=True
+                )
                 return fh.Li(
                     mui.Alert(
                         f"Error creating default item: {str(e)}", cls=mui.AlertT.error
@@ -565,7 +573,7 @@ class PydanticForm(Generic[ModelType]):
             # Generate a unique placeholder index
             placeholder_idx = f"new_{int(pytime.time() * 1000)}"
 
-            # Create a list renderer and render the new item
+            # Create a list renderer
             list_renderer = ListFieldRenderer(
                 field_name=field_name,
                 field_info=field_info,
@@ -573,9 +581,26 @@ class PydanticForm(Generic[ModelType]):
                 prefix=self.base_prefix,  # Use the form's base prefix
             )
 
+            # Ensure the item data passed to the renderer is a dict if it's a model instance
+            item_data_for_renderer = None
+            if isinstance(default_item, BaseModel):
+                item_data_for_renderer = default_item.model_dump()
+                logger.debug(
+                    f"Add item: Converted model instance to dict for renderer: {item_data_for_renderer}"
+                )
+            elif default_item is not None:  # Handle simple types directly
+                item_data_for_renderer = default_item
+                logger.debug(
+                    f"Add item: Passing simple type directly to renderer: {item_data_for_renderer}"
+                )
+            # else: item_data_for_renderer remains None if default_item was None
+
             # Render the new item card, set is_open=True to make it expanded by default
             new_item_card = list_renderer._render_item_card(
-                default_item, placeholder_idx, item_type, is_open=True
+                item_data_for_renderer,  # Pass the dictionary or simple value
+                placeholder_idx,
+                item_type,
+                is_open=True,
             )
 
             return new_item_card

@@ -43,9 +43,12 @@ class CustomDetailFieldRenderer(BaseFieldRenderer):
     """display value input and dropdown side by side for Detail"""
 
     def render_input(self):
+        current_value_val = self.value.get("value", "")
+        current_confidence = self.value.get("confidence", "MEDIUM")
+
         value_input = fh.Div(
             mui.Input(
-                value=self.value.get("value", ""),
+                value=current_value_val,
                 id=f"{self.field_name}_value",
                 name=f"{self.field_name}_value",
                 placeholder=f"Enter {self.original_field_name.replace('_', ' ')} value",
@@ -56,7 +59,9 @@ class CustomDetailFieldRenderer(BaseFieldRenderer):
 
         confidence_options_ft = [
             fh.Option(
-                opt, value=opt, selected=(opt == self.value.get("confidence", "MEDIUM"))
+                opt,
+                value=opt,
+                selected=(opt == current_confidence),
             )
             for opt in ["HIGH", "MEDIUM", "LOW"]
         ]
