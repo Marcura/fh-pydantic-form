@@ -17,13 +17,23 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5       # Install uv into PATH [oai_citation_attribution:13‡GitHub](https://github.com/astral-sh/setup-uv?utm_source=chatgpt.com)
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
-      - name: Set up Python
-        run: uv python install             # Respect any Python constraints in pyproject.toml [oai_citation_attribution:12‡Astral Docs](https://docs.astral.sh/uv/guides/integration/github/?utm_source=chatgpt.com)
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          
+      - name: Install the project
+        run: uv sync --all-extras --dev
 
-      - name: Build distributions
-        run: uv build --no-sources         # Creates sdist and wheel in dist/ [oai_citation_attribution:11‡Astral Docs](https://docs.astral.sh/uv/guides/package/?utm_source=chatgpt.com)
+      - name: Run pre-commit hooks
+        run: uv run pre-commit run -a
+
+      - name: Run tests
+        run: uv run pytest tests
 
       - name: Upload distributions
         uses: actions/upload-artifact@v3
