@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from fh_pydantic_form import PydanticForm, SpacingTheme, list_manipulation_js
 from fh_pydantic_form.field_renderers import BaseFieldRenderer
+from fh_pydantic_form.ui_style import COMPACT_EXTRA_CSS
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -16,6 +17,7 @@ app, rt = fh.fast_app(
     hdrs=[
         mui.Theme.blue.headers(),
         list_manipulation_js(),
+        COMPACT_EXTRA_CSS,  # Add compact styling
     ],
     pico=False,
     live=True,
@@ -195,8 +197,29 @@ initial_values = ComplexSchema(
     ),
 )
 
-form_renderer = PydanticForm(
-    form_name="main_form",
+# Create two form renderers with different spacing themes for comparison
+form_renderer_normal = PydanticForm(
+    form_name="main_form_normal",
+    model_class=ComplexSchema,
+    initial_values=initial_values,
+    custom_renderers=[
+        (CustomDetail, CustomDetailFieldRenderer)
+    ],  # Register Detail renderer
+    exclude_fields=[
+        "skip_field",
+        # Exclude the new fields with defaults - these will be auto-injected
+        "internal_id",
+        "audit_trail",
+        "system_metadata",
+        "processing_flags",
+        "backup_address",
+    ],
+    label_colors={"name": "blue", "score": "#FF0000"},
+    spacing_theme=SpacingTheme.NORMAL,
+)
+
+form_renderer_compact = PydanticForm(
+    form_name="main_form_compact",
     model_class=ComplexSchema,
     initial_values=initial_values,
     custom_renderers=[
@@ -215,7 +238,9 @@ form_renderer = PydanticForm(
     spacing_theme=SpacingTheme.COMPACT,
 )
 
-form_renderer.register_routes(app)
+# Register routes for both forms
+form_renderer_normal.register_routes(app)
+form_renderer_compact.register_routes(app)
 
 
 @rt("/")
@@ -347,7 +372,7 @@ def get():
                             ),
                             fh.P(
                                 fh.Strong("Excluded fields in this demo: "),
-                                fh.Code(", ".join(form_renderer.exclude_fields)),
+                                fh.Code(", ".join(form_renderer_normal.exclude_fields)),
                                 cls="text-sm text-gray-600 mt-2",
                             ),
                             cls="mt-2",
@@ -403,6 +428,10 @@ def get():
                                 fh.Li(
                                     fh.Strong("Custom label colors: "),
                                     "Field-specific styling (name=blue, score=red)",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Spacing themes: "),
+                                    "Normal and Compact spacing options for different use cases",
                                 ),
                                 fh.Li(
                                     fh.Strong("Responsive design: "),
@@ -509,71 +538,126 @@ def get():
                 ),
                 cls="mb-4",
             ),
+            # Side-by-side form comparison
             mui.Card(
+                mui.CardHeader(
+                    fh.H2("🎨 Spacing Theme Comparison", cls="text-purple-600")
+                ),
                 mui.CardBody(
-                    mui.Form(
-                        mui.H2("Interactive Demo Form"),
-                        fh.P(
-                            "Try out all the features above in this live form:",
-                            cls="text-gray-600 mb-4",
-                        ),
-                        form_renderer.render_inputs(),
+                    fh.P(
+                        "Compare Normal vs Compact spacing themes side by side:",
+                        cls="text-gray-600 mb-4",
+                    ),
+                    # Two-column layout for forms
+                    fh.Div(
+                        # Normal spacing form (left column)
                         fh.Div(
-                            mui.Button(
-                                "🔍 Validate and Show Results",
-                                cls=mui.ButtonT.primary,
+                            mui.Card(
+                                mui.CardHeader(
+                                    fh.H3("📏 Normal Spacing", cls="text-blue-600"),
+                                    fh.P(
+                                        "Standard spacing with comfortable margins",
+                                        cls="text-sm text-gray-600",
+                                    ),
+                                ),
+                                mui.CardBody(
+                                    mui.Form(
+                                        form_renderer_normal.render_inputs(),
+                                        fh.Div(
+                                            mui.Button(
+                                                "🔍 Validate Normal",
+                                                cls=mui.ButtonT.primary,
+                                            ),
+                                            form_renderer_normal.refresh_button("🔄"),
+                                            form_renderer_normal.reset_button("↩️"),
+                                            cls="mt-4 flex items-center gap-2 flex-wrap",
+                                        ),
+                                        hx_post="/submit_form_normal",
+                                        hx_target="#result-normal",
+                                        hx_swap="innerHTML",
+                                    )
+                                ),
                             ),
-                            form_renderer.refresh_button("🔄 Refresh Display"),
-                            form_renderer.reset_button("↩️ Reset to Initial"),
-                            cls="mt-6 flex items-center gap-3 flex-wrap",
+                            fh.Div(id="result-normal", cls="mt-4"),
+                            cls="w-full",
                         ),
-                        hx_post="/submit_form",
-                        hx_target="#result",
-                        hx_swap="innerHTML",
-                    )
+                        # Compact spacing form (right column)
+                        fh.Div(
+                            mui.Card(
+                                mui.CardHeader(
+                                    fh.H3("📐 Compact Spacing", cls="text-green-600"),
+                                    fh.P(
+                                        "Minimal spacing for dense layouts",
+                                        cls="text-sm text-gray-600",
+                                    ),
+                                ),
+                                mui.CardBody(
+                                    mui.Form(
+                                        form_renderer_compact.render_inputs(),
+                                        fh.Div(
+                                            mui.Button(
+                                                "🔍 Validate Compact",
+                                                cls=mui.ButtonT.primary,
+                                            ),
+                                            form_renderer_compact.refresh_button("🔄"),
+                                            form_renderer_compact.reset_button("↩️"),
+                                            cls="mt-4 flex items-center gap-2 flex-wrap",
+                                        ),
+                                        hx_post="/submit_form_compact",
+                                        hx_target="#result-compact",
+                                        hx_swap="innerHTML",
+                                    ),
+                                    cls="compact-form",  # Add compact styling class
+                                ),
+                            ),
+                            fh.Div(id="result-compact", cls="mt-4"),
+                            cls="w-full",
+                        ),
+                        cls="grid grid-cols-1 lg:grid-cols-2 gap-6",
+                    ),
                 ),
             ),
-            fh.Div(id="result", cls="mt-6"),
         ),
         cls="min-h-screen bg-gray-50 py-8",
     )
 
 
-@rt("/submit_form")
-async def post_main_form(req):
+@rt("/submit_form_normal")
+async def post_main_form_normal(req):
     try:
-        validated = await form_renderer.model_validate_request(req)
+        validated = await form_renderer_normal.model_validate_request(req)
 
         # Get the raw parsed data to show what was injected
         form_data = await req.form()
         form_dict = dict(form_data)
-        parsed_data = form_renderer.parse(form_dict)
+        parsed_data = form_renderer_normal.parse(form_dict)
 
         # Identify which fields were excluded and auto-injected
         excluded_fields_data = {
             field_name: parsed_data.get(field_name, "NOT_FOUND")
-            for field_name in form_renderer.exclude_fields
+            for field_name in form_renderer_normal.exclude_fields
         }
 
         return fh.Div(
             mui.Card(
-                mui.CardHeader(fh.H3("✅ Validation Successful", cls="text-green-600")),
+                mui.CardHeader(
+                    fh.H4(
+                        "✅ Normal Form - Validation Successful", cls="text-green-600"
+                    )
+                ),
                 mui.CardBody(
-                    mui.H4("Complete Validated Model:"),
+                    mui.H5("Complete Validated Model:"),
                     fh.Pre(
                         validated.model_dump_json(indent=2),
-                        cls="bg-gray-100 p-3 rounded text-sm overflow-auto max-h-96",
+                        cls="bg-gray-100 p-3 rounded text-xs overflow-auto max-h-64",
                     ),
                 ),
             ),
             mui.Card(
                 mui.CardHeader(
-                    fh.H3("🔧 Excluded Fields (Auto-Injected)", cls="text-blue-600")
+                    fh.H5("🔧 Excluded Fields (Auto-Injected)", cls="text-blue-600")
                 ),
                 mui.CardBody(
-                    fh.P(
-                        "These fields were excluded from the form but automatically injected with their default/initial values:"
-                    ),
                     fh.Pre(
                         fh.Code(
                             "\n".join(
@@ -583,24 +667,86 @@ async def post_main_form(req):
                                 ]
                             )
                         ),
-                        cls="bg-blue-50 p-3 rounded text-sm",
-                    ),
-                    fh.P(
-                        "💡 ",
-                        fh.Strong("Note: "),
-                        "Values from initial_values override model defaults. ",
-                        "Fields without defaults would cause validation errors if required.",
-                        cls="text-sm text-gray-600 mt-2",
+                        cls="bg-blue-50 p-2 rounded text-xs",
                     ),
                 ),
             ),
-            cls="space-y-4",
+            cls="space-y-2",
         )
     except ValidationError as e:
         return mui.Card(
-            mui.CardHeader(fh.H3("❌ Validation Error", cls="text-red-500")),
-            mui.CardBody(fh.Pre(e.json(indent=2), cls="bg-red-50 p-3 rounded text-sm")),
+            mui.CardHeader(
+                fh.H4("❌ Normal Form - Validation Error", cls="text-red-500")
+            ),
+            mui.CardBody(fh.Pre(e.json(indent=2), cls="bg-red-50 p-2 rounded text-xs")),
         )
+
+
+@rt("/submit_form_compact")
+async def post_main_form_compact(req):
+    try:
+        validated = await form_renderer_compact.model_validate_request(req)
+
+        # Get the raw parsed data to show what was injected
+        form_data = await req.form()
+        form_dict = dict(form_data)
+        parsed_data = form_renderer_compact.parse(form_dict)
+
+        # Identify which fields were excluded and auto-injected
+        excluded_fields_data = {
+            field_name: parsed_data.get(field_name, "NOT_FOUND")
+            for field_name in form_renderer_compact.exclude_fields
+        }
+
+        return fh.Div(
+            mui.Card(
+                mui.CardHeader(
+                    fh.H4(
+                        "✅ Compact Form - Validation Successful", cls="text-green-600"
+                    )
+                ),
+                mui.CardBody(
+                    mui.H5("Complete Validated Model:"),
+                    fh.Pre(
+                        validated.model_dump_json(indent=2),
+                        cls="bg-gray-100 p-2 rounded text-xs overflow-auto max-h-64",
+                    ),
+                ),
+            ),
+            mui.Card(
+                mui.CardHeader(
+                    fh.H5("🔧 Excluded Fields (Auto-Injected)", cls="text-blue-600")
+                ),
+                mui.CardBody(
+                    fh.Pre(
+                        fh.Code(
+                            "\n".join(
+                                [
+                                    f"{field_name}: {repr(value)}"
+                                    for field_name, value in excluded_fields_data.items()
+                                ]
+                            )
+                        ),
+                        cls="bg-blue-50 p-1 rounded text-xs",
+                    ),
+                ),
+            ),
+            cls="space-y-1",
+        )
+    except ValidationError as e:
+        return mui.Card(
+            mui.CardHeader(
+                fh.H4("❌ Compact Form - Validation Error", cls="text-red-500")
+            ),
+            mui.CardBody(fh.Pre(e.json(indent=2), cls="bg-red-50 p-1 rounded text-xs")),
+        )
+
+
+# Keep the original route for backward compatibility
+@rt("/submit_form")
+async def post_main_form(req):
+    # Redirect to normal form handler
+    return await post_main_form_normal(req)
 
 
 if __name__ == "__main__":

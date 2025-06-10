@@ -29,7 +29,7 @@ from fh_pydantic_form.form_parser import (
 )
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import _UNSET, get_default
-from fh_pydantic_form.ui_style import SpacingTheme
+from fh_pydantic_form.ui_style import SpacingTheme, spacing
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +200,18 @@ class PydanticForm(Generic[ModelType]):
     - providing refresh and reset buttons
     - validating request data against the model
     """
+
+    def _compact_wrapper(self, inner: FT) -> FT:
+        """
+        Wrap inner markup with a '.compact-form' div and inject one <style>
+        block when compact theme is used.
+        """
+        if self.spacing_theme == SpacingTheme.COMPACT:
+            from fh_pydantic_form.ui_style import COMPACT_EXTRA_CSS
+
+            return fh.Div(COMPACT_EXTRA_CSS, inner, cls="compact-form")
+        else:
+            return inner
 
     def __init__(
         self,
@@ -381,30 +393,21 @@ class PydanticForm(Generic[ModelType]):
             form_inputs.append(rendered_field)
 
         # Create container for inputs, ensuring items stretch to full width
-        inputs_container = mui.DivVStacked(*form_inputs, cls="space-y-3 items-stretch")
+        inputs_container = mui.DivVStacked(
+            *form_inputs,
+            cls=f"{spacing('stack_gap', self.spacing_theme)} items-stretch",
+        )
 
         # Define the ID for the wrapper div - this is what the HTMX request targets
         form_content_wrapper_id = f"{self.name}-inputs-wrapper"
         logger.debug(f"Creating form inputs wrapper with ID: {form_content_wrapper_id}")
 
-        # Build wrapper classes and include CSS for compact mode
-        wrapper_cls = ""
-        extra_content = []
-
-        if self.spacing_theme == SpacingTheme.COMPACT:
-            wrapper_cls = "compact-form"
-            # Import the CSS override from ui_style
-            from fh_pydantic_form.ui_style import COMPACT_EXTRA_CSS
-
-            extra_content.append(COMPACT_EXTRA_CSS)
-
-        # Return the container with optional CSS override and compact class
-        return fh.Div(
-            *extra_content,
-            inputs_container,
-            id=form_content_wrapper_id,
-            cls=wrapper_cls,
+        # Create the wrapper div and apply compact styling if needed
+        wrapped = self._compact_wrapper(
+            fh.Div(inputs_container, id=form_content_wrapper_id)
         )
+
+        return wrapped
 
     # ---- Form Renderer Methods (continued) ----
 

@@ -23,6 +23,11 @@ from fh_pydantic_form.ui_style import SpacingTheme, spacing
 logger = logging.getLogger(__name__)
 
 
+def _merge_cls(base: str, extra: str) -> str:
+    """Return base plus extra class(es) separated by a single space (handles blanks)."""
+    return f"{base} {extra}".strip() if extra else base
+
+
 class BaseFieldRenderer:
     """
     Base class for field renderers
@@ -92,14 +97,18 @@ class BaseFieldRenderer:
         # Prepare label attributes
         label_attrs = {"For": self.field_name}
 
-        cls_attr = "block text-sm font-medium text-gray-700 mb-1"
+        # Build label classes with tokenized gap
+        label_gap_class = spacing("label_gap", self.spacing_theme)
+        base_classes = f"block text-sm font-medium text-gray-700 {label_gap_class}"
+
+        cls_attr = base_classes
 
         # Apply color styling if specified
         if self.label_color:
             # Check if it's a CSS class (contains letters/hyphens) or a color value
             if self.label_color.replace("-", "").replace("#", "").isalnum():
                 # Looks like a CSS class, add it to the class list
-                cls_attr = f"block text-sm font-medium {self.label_color} mb-1".strip()
+                cls_attr = f"block text-sm font-medium {self.label_color} {label_gap_class}".strip()
             else:
                 # Treat as color value
                 label_attrs["style"] = f"color: {self.label_color};"
@@ -164,7 +173,7 @@ class BaseFieldRenderer:
             id=accordion_id,  # ID for the accordion container (ul)
             multiple=True,  # Allow multiple open (though only one exists)
             collapsible=True,  # Allow toggling
-            cls=spacing("accordion_divider", self.spacing_theme),
+            cls=f"{spacing('accordion_divider', self.spacing_theme)} {spacing('accordion_content', self.spacing_theme)}".strip(),
         )
 
         return accordion_container
@@ -200,7 +209,10 @@ class StringFieldRenderer(BaseFieldRenderer):
             "type": "text",
             "placeholder": placeholder_text,
             "required": is_field_required,
-            "cls": "w-full",
+            "cls": _merge_cls(
+                "w-full",
+                f"{spacing('input_size', self.spacing_theme)} {spacing('input_padding', self.spacing_theme)}".strip(),
+            ),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -237,7 +249,10 @@ class NumberFieldRenderer(BaseFieldRenderer):
             "type": "number",
             "placeholder": placeholder_text,
             "required": is_field_required,
-            "cls": "w-full",
+            "cls": _merge_cls(
+                "w-full",
+                f"{spacing('input_size', self.spacing_theme)} {spacing('input_padding', self.spacing_theme)}".strip(),
+            ),
             "step": "any"
             if self.field_info.annotation is float
             or get_origin(self.field_info.annotation) is float
@@ -310,7 +325,10 @@ class DateFieldRenderer(BaseFieldRenderer):
             "type": "date",
             "placeholder": placeholder_text,
             "required": is_field_required,
-            "cls": "w-full",
+            "cls": _merge_cls(
+                "w-full",
+                f"{spacing('input_size', self.spacing_theme)} {spacing('input_padding', self.spacing_theme)}".strip(),
+            ),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -356,7 +374,10 @@ class TimeFieldRenderer(BaseFieldRenderer):
             "type": "time",
             "placeholder": placeholder_text,
             "required": is_field_required,
-            "cls": "w-full",
+            "cls": _merge_cls(
+                "w-full",
+                f"{spacing('input_size', self.spacing_theme)} {spacing('input_padding', self.spacing_theme)}".strip(),
+            ),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -424,7 +445,10 @@ class LiteralFieldRenderer(BaseFieldRenderer):
             "name": self.field_name,
             "required": is_field_required,
             "placeholder": placeholder_text,
-            "cls": "w-full",
+            "cls": _merge_cls(
+                "w-full",
+                f"{spacing('input_size', self.spacing_theme)} {spacing('input_padding', self.spacing_theme)}".strip(),
+            ),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -497,7 +521,7 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
             id=accordion_id,  # ID for the accordion container (ul)
             multiple=True,  # Allow multiple open (though only one exists)
             collapsible=True,  # Allow toggling
-            cls=spacing("accordion_divider", self.spacing_theme),
+            cls=f"{spacing('accordion_divider', self.spacing_theme)} {spacing('accordion_content', self.spacing_theme)}".strip(),
         )
 
         return accordion_container
@@ -736,9 +760,7 @@ class ListFieldRenderer(BaseFieldRenderer):
             id=container_id,
             multiple=True,  # Allow multiple items to be open at once
             collapsible=True,  # Make it collapsible
-            cls=spacing(
-                "inner_gap_small", self.spacing_theme
-            ),  # Add space between items
+            cls=f"{spacing('inner_gap_small', self.spacing_theme)} {spacing('accordion_content', self.spacing_theme)}".strip(),  # Add space between items and accordion content styling
         )
 
         # Empty state message if no items
@@ -1080,7 +1102,7 @@ class ListFieldRenderer(BaseFieldRenderer):
             t = self.spacing_theme
             content_wrapper = fh.Div(
                 *item_content_elements,
-                cls=f"{spacing('padding_card', t)} {spacing('inner_gap', t)}",
+                cls=f"{spacing('card_body_pad', t)} {spacing('inner_gap', t)}",
             )
 
             # Return the accordion item
@@ -1113,7 +1135,7 @@ class ListFieldRenderer(BaseFieldRenderer):
 
             # Wrap error component in a div with consistent padding
             t = self.spacing_theme
-            content_wrapper = fh.Div(content_component, cls=spacing("padding_card", t))
+            content_wrapper = fh.Div(content_component, cls=spacing("card_body_pad", t))
 
             # Build card classes conditionally based on spacing theme
             card_cls = "uk-card uk-margin-small-bottom"
