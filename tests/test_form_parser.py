@@ -74,8 +74,8 @@ def test_parse_literal_field():
         == "COMPLETED"
     )
 
-    # Optional literal field with value
-    opt_field_info = FieldInfo()
+    # Optional literal field with value - use actual field info from model
+    opt_field_info = ParserTestModel.model_fields["optional_status"]
     assert (
         _parse_literal_field(
             "prefix_opt_status", {"prefix_opt_status": "PENDING"}, opt_field_info
@@ -102,15 +102,14 @@ def test_parse_literal_field():
 
 def test_parse_simple_field():
     """Test parsing simple fields from form data."""
-    from pydantic.fields import FieldInfo
 
     # Basic field
     assert (
         _parse_simple_field("prefix_name", {"prefix_name": "Test Name"}) == "Test Name"
     )
 
-    # Optional field with value
-    opt_field_info = FieldInfo()
+    # Optional field with value - use actual field info from model
+    opt_field_info = ParserTestModel.model_fields["description"]
     assert (
         _parse_simple_field(
             "prefix_desc", {"prefix_desc": "Test Description"}, opt_field_info

@@ -28,6 +28,7 @@ from fh_pydantic_form.form_parser import (
     _parse_non_list_fields,
 )
 from fh_pydantic_form.registry import FieldRendererRegistry
+from fh_pydantic_form.type_helpers import _UNSET, get_default
 
 logger = logging.getLogger(__name__)
 
@@ -240,7 +241,14 @@ class PydanticForm(Generic[ModelType]):
         else:
             # Fallback - attempt dict conversion
             try:
-                self.initial_values_dict = dict(initial_values)
+                temp_dict = dict(initial_values)
+                model_field_names = set(self.model_class.model_fields.keys())
+                # Only accept if all keys are in the model's field names
+                if not isinstance(temp_dict, dict) or not set(
+                    temp_dict.keys()
+                ).issubset(model_field_names):
+                    raise ValueError("Converted to dict with keys not in model fields")
+                self.initial_values_dict = temp_dict
             except (TypeError, ValueError):
                 logger.warning(
                     "Could not convert initial_values to dict, using empty dict"
@@ -317,8 +325,17 @@ class PydanticForm(Generic[ModelType]):
                     logger.debug(f"  - Using default value for '{field_name}'")
                 elif getattr(field_info, "default_factory", None) is not None:
                     try:
-                        initial_value = field_info.default_factory()
-                        logger.debug(f"  - Using default_factory for '{field_name}'")
+                        default_factory = field_info.default_factory
+                        if callable(default_factory):
+                            initial_value = default_factory()
+                            logger.debug(
+                                f"  - Using default_factory for '{field_name}'"
+                            )
+                        else:
+                            initial_value = None
+                            logger.warning(
+                                f"  - default_factory for '{field_name}' is not callable"
+                            )
                     except Exception as e:
                         initial_value = None
                         logger.warning(
@@ -480,19 +497,92 @@ class PydanticForm(Generic[ModelType]):
 
         list_field_defs = _identify_list_fields(self.model_class)
 
-        # Parse non-list fields first - pass the base_prefix
+        # Filter out excluded fields from list field definitions
+        filtered_list_field_defs = {
+            field_name: field_def
+            for field_name, field_def in list_field_defs.items()
+            if field_name not in self.exclude_fields
+        }
 
+        # Parse non-list fields first - pass the base_prefix and exclude_fields
         result = _parse_non_list_fields(
-            form_dict, self.model_class, list_field_defs, self.base_prefix
+            form_dict,
+            self.model_class,
+            list_field_defs,
+            self.base_prefix,
+            self.exclude_fields,
         )
 
         # Parse list fields based on keys present in form_dict - pass the base_prefix
-        list_results = _parse_list_fields(form_dict, list_field_defs, self.base_prefix)
+        # Use filtered list field definitions to skip excluded list fields
+        list_results = _parse_list_fields(
+            form_dict, filtered_list_field_defs, self.base_prefix
+        )
 
         # Merge list results into the main result
         result.update(list_results)
 
+        # Inject defaults for excluded fields before returning
+        self._inject_default_values_for_excluded(result)
+
         return result
+
+    def _inject_default_values_for_excluded(
+        self, data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Ensures that every field listed in self.exclude_fields is present in data
+        if the model defines a default or default_factory, or if initial_values were provided.
+
+        Priority order:
+        1. initial_values (if provided during form creation)
+        2. model defaults/default_factory
+
+        Operates top-level only (exclude_fields spec is top-level names).
+
+        Args:
+            data: Dictionary to modify in-place
+
+        Returns:
+            The same dictionary instance for method chaining
+        """
+        for field_name in self.exclude_fields:
+            # Skip if already present (e.g., user provided initial_values)
+            if field_name in data:
+                continue
+
+            # First priority: check if initial_values_dict has this field
+            if field_name in self.initial_values_dict:
+                initial_val = self.initial_values_dict[field_name]
+                # If the initial value is a BaseModel, convert to dict for consistency
+                if hasattr(initial_val, "model_dump"):
+                    initial_val = initial_val.model_dump()
+                data[field_name] = initial_val
+                logger.debug(
+                    f"Injected initial value for excluded field '{field_name}'"
+                )
+                continue
+
+            # Second priority: use model defaults
+            field_info = self.model_class.model_fields.get(field_name)
+            if field_info is None:
+                logger.warning(f"exclude_fields contains unknown field '{field_name}'")
+                continue
+
+            default_val = get_default(field_info)
+            if default_val is not _UNSET:
+                # If the default is a BaseModel, convert to dict for consistency
+                if hasattr(default_val, "model_dump"):
+                    default_val = default_val.model_dump()
+                data[field_name] = default_val
+                logger.debug(
+                    f"Injected model default value for excluded field '{field_name}'"
+                )
+            else:
+                # No default → leave missing; validation will surface error
+                logger.debug(f"No default found for excluded field '{field_name}'")
+
+        return data
 
     def register_routes(self, app):
         """
@@ -620,12 +710,19 @@ class PydanticForm(Generic[ModelType]):
             placeholder_idx = f"new_{int(pytime.time() * 1000)}"
 
             # Create a list renderer
-            list_renderer = ListFieldRenderer(
-                field_name=field_name,
-                field_info=field_info,
-                value=[],  # Empty list, we only need to render one item
-                prefix=self.base_prefix,  # Use the form's base prefix
-            )
+            if field_info is not None:
+                list_renderer = ListFieldRenderer(
+                    field_name=field_name,
+                    field_info=field_info,
+                    value=[],  # Empty list, we only need to render one item
+                    prefix=self.base_prefix,  # Use the form's base prefix
+                )
+            else:
+                logger.error(f"field_info is None for field {field_name}")
+                return mui.Alert(
+                    f"Field info not found for {field_name}",
+                    cls=mui.AlertT.error,
+                )
 
             # Ensure the item data passed to the renderer is a dict if it's a model instance
             item_data_for_renderer = None

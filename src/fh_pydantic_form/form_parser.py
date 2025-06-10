@@ -49,6 +49,7 @@ def _parse_non_list_fields(
     model_class,
     list_field_defs: Dict[str, Dict[str, Any]],
     base_prefix: str = "",
+    exclude_fields: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     Parses non-list fields from form data based on the model definition.
@@ -58,15 +59,21 @@ def _parse_non_list_fields(
         model_class: The Pydantic model class defining the structure
         list_field_defs: Dictionary of list field definitions (to skip)
         base_prefix: Prefix to use when looking up field names in form_data
+        exclude_fields: Optional list of field names to exclude from parsing
 
     Returns:
         Dictionary with parsed non-list fields
     """
     result: Dict[str, Any] = {}
+    exclude_fields = exclude_fields or []
 
     for field_name, field_info in model_class.model_fields.items():
         if field_name in list_field_defs:
             continue  # Skip list fields, handled separately
+
+        # Skip excluded fields - they will be handled by default injection later
+        if field_name in exclude_fields:
+            continue
 
         # Create full key with prefix
         full_key = f"{base_prefix}{field_name}"

@@ -161,6 +161,27 @@ if __name__ == "__main__":
 
 You can disable the full form with `PydanticForm("my_form", FormModel, disabled=True)` or disable specific fields with `PydanticForm("my_form", FormModel, disabled_fields=["field1", "field3"])`.
 
+## Excluded fields
+
+You can exclude specific fields from being rendered in the form by using the `exclude_fields` parameter:
+
+```python
+form_renderer = PydanticForm(
+    "my_form", 
+    FormModel, 
+    exclude_fields=["internal_field", "computed_field"]
+)
+```
+
+When fields are excluded from the UI, `fh-pydantic-form` will automatically inject their default values (if defined in the Pydantic model) during form parsing and validation. This ensures that:
+
+- **Hidden fields with defaults** are still included in the final validated data
+- **Required fields without defaults** will still cause validation errors if not provided elsewhere
+- **Default factories** are executed to provide computed default values
+- **Nested BaseModel defaults** are converted to dictionaries for consistency
+
+This automatic default injection means you can safely exclude fields that should not be user-editable while maintaining data integrity during validation.
+
  
 ## Manipulating lists fields 
 

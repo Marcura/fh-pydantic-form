@@ -1,3 +1,6 @@
+from datetime import date, time
+from typing import List, Literal, Optional
+
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
@@ -102,8 +105,8 @@ def test_register_type_renderer_with_predicate():
             for p in registry._predicate_renderers
         )
 
-        # Test the predicate function
-        field_info = FieldInfo()
+        # Test the predicate function with proper annotation
+        field_info = FieldInfo(annotation=SampleModelForRegistry)
         assert is_sample_model(field_info) is True
     finally:
         # Restore original renderers
@@ -137,13 +140,13 @@ def test_get_renderer_for_basic_types():
     """Test getting renderers for basic field types."""
     registry = FieldRendererRegistry()
 
-    # Test getting renderers for basic types
-    str_field = FieldInfo()
-    int_field = FieldInfo()
-    float_field = FieldInfo()
-    bool_field = FieldInfo()
-    date_field = FieldInfo()
-    time_field = FieldInfo()
+    # Test getting renderers for basic types with proper annotations
+    str_field = FieldInfo(annotation=str)
+    int_field = FieldInfo(annotation=int)
+    float_field = FieldInfo(annotation=float)
+    bool_field = FieldInfo(annotation=bool)
+    date_field = FieldInfo(annotation=date)
+    time_field = FieldInfo(annotation=time)
 
     # Since this is a singleton, we can only assert that these all return a renderer
     # The exact renderer may change if other tests registered custom ones
@@ -157,12 +160,13 @@ def test_get_renderer_for_basic_types():
 
 def test_get_renderer_for_optional_types():
     """Test getting renderers for optional field types."""
+
     registry = FieldRendererRegistry()
 
-    # Test getting renderers for optional types
-    opt_str_field = FieldInfo()
-    opt_int_field = FieldInfo()
-    opt_bool_field = FieldInfo()
+    # Test getting renderers for optional types with proper annotations
+    opt_str_field = FieldInfo(annotation=Optional[str])
+    opt_int_field = FieldInfo(annotation=Optional[int])
+    opt_bool_field = FieldInfo(annotation=Optional[bool])
 
     assert registry.get_renderer("name", opt_str_field) is StringFieldRenderer
     assert registry.get_renderer("age", opt_int_field) is NumberFieldRenderer
@@ -171,11 +175,12 @@ def test_get_renderer_for_optional_types():
 
 def test_get_renderer_for_literal_type():
     """Test getting renderers for literal field types."""
+
     registry = FieldRendererRegistry()
 
-    # Test with literal field
-    literal_field = FieldInfo()
-    opt_literal_field = FieldInfo()
+    # Test with literal field with proper annotations
+    literal_field = FieldInfo(annotation=Literal["PENDING", "COMPLETED"])
+    opt_literal_field = FieldInfo(annotation=Optional[Literal["PENDING", "COMPLETED"]])
 
     assert registry.get_renderer("status", literal_field) is LiteralFieldRenderer
     assert (
@@ -185,11 +190,12 @@ def test_get_renderer_for_literal_type():
 
 def test_get_renderer_for_list_type():
     """Test getting renderers for list field types."""
+
     registry = FieldRendererRegistry()
 
-    # Test with list field
-    list_str_field = FieldInfo()
-    list_model_field = FieldInfo()
+    # Test with list field with proper annotations
+    list_str_field = FieldInfo(annotation=List[str])
+    list_model_field = FieldInfo(annotation=List[SampleModelForRegistry])
 
     assert registry.get_renderer("tags", list_str_field) is ListFieldRenderer
     assert registry.get_renderer("items", list_model_field) is ListFieldRenderer
@@ -197,6 +203,7 @@ def test_get_renderer_for_list_type():
 
 def test_get_renderer_for_basemodel_type():
     """Test getting renderers for BaseModel field types."""
+
     registry = FieldRendererRegistry()
 
     # Store original renderers to restore later
@@ -204,9 +211,9 @@ def test_get_renderer_for_basemodel_type():
     original_predicates = registry._predicate_renderers.copy()
 
     try:
-        # Test with BaseModel field
-        model_field = FieldInfo()
-        opt_model_field = FieldInfo()
+        # Test with BaseModel field with proper annotations
+        model_field = FieldInfo(annotation=SampleModelForRegistry)
+        opt_model_field = FieldInfo(annotation=Optional[SampleModelForRegistry])
 
         # The result might be BaseModelFieldRenderer or a custom renderer if it was registered earlier
         # Just check that we get a renderer back
@@ -227,8 +234,8 @@ def test_get_renderer_with_custom_registration():
     try:
         registry.register_type_renderer(SampleModelForRegistry, CustomFieldRenderer)
 
-        # Test with the custom registered type
-        model_field = FieldInfo()
+        # Test with the custom registered type with proper annotation
+        model_field = FieldInfo(annotation=SampleModelForRegistry)
         assert registry.get_renderer("model", model_field) is CustomFieldRenderer
     finally:
         # Restore original renderers
