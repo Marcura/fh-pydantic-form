@@ -164,6 +164,7 @@ class BaseFieldRenderer:
             id=accordion_id,  # ID for the accordion container (ul)
             multiple=True,  # Allow multiple open (though only one exists)
             collapsible=True,  # Allow toggling
+            cls=spacing("accordion_divider", self.spacing_theme),
         )
 
         return accordion_container
@@ -496,6 +497,7 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
             id=accordion_id,  # ID for the accordion container (ul)
             multiple=True,  # Allow multiple open (though only one exists)
             collapsible=True,  # Allow toggling
+            cls=spacing("accordion_divider", self.spacing_theme),
         )
 
         return accordion_container
@@ -605,9 +607,10 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
         )
 
         # Wrap in card for visual distinction
+        t = self.spacing_theme
         return mui.Card(
             nested_form_content,
-            cls=f"{spacing('padding_sm', self.spacing_theme)} mt-1 border rounded",
+            cls=f"{spacing('padding_sm', t)} mt-1 {spacing('card_border', t)} rounded".strip(),
         )
 
 
@@ -775,10 +778,11 @@ class ListFieldRenderer(BaseFieldRenderer):
             )
 
         # Return the complete component
+        t = self.spacing_theme
         return fh.Div(
             accordion,
             empty_state,
-            cls=f"{spacing('outer_margin', self.spacing_theme)} border rounded-md {spacing('padding', self.spacing_theme)}",
+            cls=f"{spacing('outer_margin', t)} {spacing('card_border', t)} rounded-md {spacing('padding', t)}".strip(),
         )
 
     def _render_item_card(self, item, idx, item_type, is_open=False) -> FT:
@@ -1061,6 +1065,7 @@ class ListFieldRenderer(BaseFieldRenderer):
             )
 
             # Assemble actions div
+            t = self.spacing_theme
             actions = fh.Div(
                 fh.Div(  # Left side buttons
                     delete_button, add_below_button, cls="flex items-center"
@@ -1068,13 +1073,14 @@ class ListFieldRenderer(BaseFieldRenderer):
                 fh.Div(  # Right side buttons
                     move_up_button, move_down_button, cls="flex items-center space-x-1"
                 ),
-                cls="flex justify-between w-full mt-3 pt-3 border-t border-gray-200",
+                cls=f"flex justify-between w-full mt-3 pt-3 {spacing('section_divider', t)}".strip(),
             )
 
             # Create a wrapper Div for the main content elements with proper padding
+            t = self.spacing_theme
             content_wrapper = fh.Div(
                 *item_content_elements,
-                cls=f"{spacing('padding_card', self.spacing_theme)} {spacing('inner_gap', self.spacing_theme)}",
+                cls=f"{spacing('padding_card', t)} {spacing('inner_gap', t)}",
             )
 
             # Return the accordion item
@@ -1083,11 +1089,16 @@ class ListFieldRenderer(BaseFieldRenderer):
             )
             li_attrs = {"id": full_card_id}
 
+            # Build card classes conditionally based on spacing theme
+            card_cls = "uk-card uk-margin-small-bottom"
+            if self.spacing_theme == SpacingTheme.NORMAL:
+                card_cls += " uk-card-default"
+
             return mui.AccordionItem(
                 title_component,  # Title as first positional argument
                 content_wrapper,  # Use the new padded wrapper for content
                 actions,  # More content elements
-                cls="uk-card uk-card-default uk-margin-small-bottom",  # Use cls keyword arg directly
+                cls=card_cls,  # Use theme-aware card classes
                 open=is_open,
                 li_kwargs=li_attrs,  # Pass remaining li attributes without cls
             )
@@ -1101,13 +1112,17 @@ class ListFieldRenderer(BaseFieldRenderer):
             li_attrs = {"id": f"{self.field_name}_{idx}_error_card"}
 
             # Wrap error component in a div with consistent padding
-            content_wrapper = fh.Div(
-                content_component, cls=spacing("padding_card", self.spacing_theme)
-            )
+            t = self.spacing_theme
+            content_wrapper = fh.Div(content_component, cls=spacing("padding_card", t))
+
+            # Build card classes conditionally based on spacing theme
+            card_cls = "uk-card uk-margin-small-bottom"
+            if self.spacing_theme == SpacingTheme.NORMAL:
+                card_cls += " uk-card-default"
 
             return mui.AccordionItem(
                 title_component,  # Title as first positional argument
                 content_wrapper,  # Wrapped content element
-                cls="mb-2",  # Use cls keyword arg directly
+                cls=card_cls,  # Use theme-aware card classes
                 li_kwargs=li_attrs,  # Pass remaining li attributes without cls
             )

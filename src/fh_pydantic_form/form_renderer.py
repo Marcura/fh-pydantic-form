@@ -387,9 +387,24 @@ class PydanticForm(Generic[ModelType]):
         form_content_wrapper_id = f"{self.name}-inputs-wrapper"
         logger.debug(f"Creating form inputs wrapper with ID: {form_content_wrapper_id}")
 
-        # Return only the inner container without the wrapper div
-        # The wrapper will be added by the main route handler instead
-        return fh.Div(inputs_container, id=form_content_wrapper_id)
+        # Build wrapper classes and include CSS for compact mode
+        wrapper_cls = ""
+        extra_content = []
+
+        if self.spacing_theme == SpacingTheme.COMPACT:
+            wrapper_cls = "compact-form"
+            # Import the CSS override from ui_style
+            from fh_pydantic_form.ui_style import COMPACT_EXTRA_CSS
+
+            extra_content.append(COMPACT_EXTRA_CSS)
+
+        # Return the container with optional CSS override and compact class
+        return fh.Div(
+            *extra_content,
+            inputs_container,
+            id=form_content_wrapper_id,
+            cls=wrapper_cls,
+        )
 
     # ---- Form Renderer Methods (continued) ----
 
