@@ -203,6 +203,7 @@ class PydanticForm(Generic[ModelType]):
         disabled: bool = False,
         disabled_fields: Optional[List[str]] = None,
         label_colors: Optional[Dict[str, str]] = None,
+        exclude_fields: Optional[List[str]] = None,
     ):
         """
         Initialize the form renderer
@@ -215,6 +216,7 @@ class PydanticForm(Generic[ModelType]):
             disabled: Whether all form inputs should be disabled
             disabled_fields: Optional list of top-level field names to disable specifically
             label_colors: Optional dictionary mapping field names to label colors (CSS color values)
+            exclude_fields: Optional list of top-level field names to exclude from the form
         """
         self.name = form_name
         self.model_class = model_class
@@ -226,6 +228,7 @@ class PydanticForm(Generic[ModelType]):
             disabled_fields or []
         )  # Store as list for easier checking
         self.label_colors = label_colors or {}  # Store label colors mapping
+        self.exclude_fields = exclude_fields or []  # Store excluded fields list
 
         # Register custom renderers with the global registry if provided
         if custom_renderers:
@@ -247,6 +250,11 @@ class PydanticForm(Generic[ModelType]):
         )
 
         for field_name, field_info in self.model_class.model_fields.items():
+            # Skip excluded fields
+            if field_name in self.exclude_fields:
+                logger.debug(f"Skipping excluded field: {field_name}")
+                continue
+
             # Determine initial value
             initial_value = (
                 self.values_dict.get(field_name) if self.values_dict else None

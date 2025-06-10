@@ -88,6 +88,7 @@ class ComplexSchema(BaseModel):
     showcase all the rendering capabilities of the form system.
     """
 
+    skip_field: str = Field(description="This field will be skipped")
     name: str = Field(description="Name of the customer")
     age: int = Field(description="Age of the customer")
     score: float = Field(description="Score of the customer")
@@ -138,6 +139,7 @@ class ComplexSchema(BaseModel):
 
 # Create an initial model with example data
 initial_values = ComplexSchema(
+    skip_field="This field will be skipped",
     name="Demo User",
     age=42,
     score=88.5,
@@ -168,6 +170,8 @@ form_renderer = PydanticForm(
     custom_renderers=[
         (CustomDetail, CustomDetailFieldRenderer)
     ],  # Register Detail renderer
+    exclude_fields=["skip_field"],
+    label_colors={"name": "text-red-500", "score": "text-blue-500"},
 )
 
 form_renderer.register_routes(app)
