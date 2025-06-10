@@ -136,6 +136,30 @@ class ComplexSchema(BaseModel):
         default_factory=list, description="More custom details of the customer"
     )
 
+    # --- EXCLUDED FIELDS WITH DEFAULTS ---
+    # These fields will be excluded from the form but will have their defaults injected
+    internal_id: str = Field(
+        default="AUTO_GENERATED_ID",
+        description="Internal system ID (auto-generated, not shown in form)",
+    )
+    audit_trail: List[str] = Field(
+        default_factory=lambda: ["Created", "Initialized"],
+        description="Audit trail (system managed, not shown in form)",
+    )
+    system_metadata: dict = Field(
+        default_factory=lambda: {"version": "1.0", "source": "web_form"},
+        description="System metadata (auto-populated, not shown in form)",
+    )
+    processing_flags: Optional[dict] = Field(
+        default=None, description="Processing flags (system use only)"
+    )
+    backup_address: Address = Field(
+        default_factory=lambda: Address(
+            street="Backup St", city="Backup City", is_billing=False
+        ),
+        description="Backup address (auto-generated, not shown in form)",
+    )
+
 
 # Create an initial model with example data
 initial_values = ComplexSchema(
@@ -161,6 +185,14 @@ initial_values = ComplexSchema(
         CustomDetail(value="Detail 2", confidence="MEDIUM"),
         CustomDetail(value="Detail 3", confidence="LOW"),
     ],
+    # Custom values for excluded fields (these will override model defaults)
+    internal_id="DEMO_USER_12345",
+    audit_trail=["Created", "Demo initialized", "Form loaded"],
+    system_metadata={"version": "1.2", "source": "demo_form", "demo_mode": True},
+    processing_flags={"priority": "high", "demo": True},
+    backup_address=Address(
+        street="999 Demo Backup St", city="Demo City", is_billing=False
+    ),
 )
 
 form_renderer = PydanticForm(
@@ -170,7 +202,15 @@ form_renderer = PydanticForm(
     custom_renderers=[
         (CustomDetail, CustomDetailFieldRenderer)
     ],  # Register Detail renderer
-    exclude_fields=["skip_field"],
+    exclude_fields=[
+        "skip_field",
+        # Exclude the new fields with defaults - these will be auto-injected
+        "internal_id",
+        "audit_trail",
+        "system_metadata",
+        "processing_flags",
+        "backup_address",
+    ],
     label_colors={"name": "blue", "score": "#FF0000"},
 )
 
@@ -182,23 +222,309 @@ def get():
     return fh.Div(
         mui.Container(
             mui.H1("FastHTML/MonsterUI Pydantic Form Demo"),
+            # Comprehensive feature overview
+            mui.Card(
+                mui.CardHeader(
+                    fh.H2("🚀 Complete Feature Demonstration", cls="text-purple-600")
+                ),
+                mui.CardBody(
+                    fh.P(
+                        "This comprehensive demo showcases all major features of the fh-pydantic-form library:",
+                        cls="text-lg mb-4",
+                    ),
+                    # Field Types Section
+                    mui.Details(
+                        mui.Summary(
+                            fh.H3("📝 Field Types & Renderers", cls="text-blue-600")
+                        ),
+                        fh.Div(
+                            fh.Ul(
+                                fh.Li(
+                                    fh.Strong("String fields: "),
+                                    "Basic text input with validation",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Numeric fields: "),
+                                    "Integer and float inputs with proper parsing",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Boolean fields: "),
+                                    "Checkbox inputs with proper on/off handling",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Date fields: "),
+                                    "Date picker with ISO format parsing",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Time fields: "),
+                                    "Time picker with proper time parsing",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Literal/Enum fields: "),
+                                    "Dropdown selects with predefined options",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Optional fields: "),
+                                    "Nullable fields with proper None handling",
+                                ),
+                                fh.Li(
+                                    fh.Strong("List fields: "),
+                                    "Dynamic lists with add/remove/reorder functionality",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Nested models: "),
+                                    "Complex object fields with accordion UI",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Lists of nested models: "),
+                                    "Dynamic lists of complex objects",
+                                ),
+                                cls="space-y-1 ml-4",
+                            ),
+                            cls="mt-2",
+                        ),
+                    ),
+                    # Custom Renderers Section
+                    mui.Details(
+                        mui.Summary(
+                            fh.H3("🎨 Custom Field Renderers", cls="text-green-600")
+                        ),
+                        fh.Div(
+                            fh.P(
+                                "Demonstrates custom renderer registration and implementation:"
+                            ),
+                            fh.Ul(
+                                fh.Li(
+                                    fh.Strong("CustomDetailFieldRenderer: "),
+                                    "Side-by-side value input and confidence dropdown",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Type-based registration: "),
+                                    "Automatic renderer selection based on field type",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Custom UI components: "),
+                                    "Tailored user experience for specific data types",
+                                ),
+                                cls="space-y-1 ml-4",
+                            ),
+                            cls="mt-2",
+                        ),
+                    ),
+                    # Excluded Fields Section
+                    mui.Details(
+                        mui.Summary(
+                            fh.H3(
+                                "🔧 Excluded Fields with Auto-Injection",
+                                cls="text-orange-600",
+                            )
+                        ),
+                        fh.Div(
+                            fh.P("Advanced functionality for system-managed fields:"),
+                            fh.Ul(
+                                fh.Li(
+                                    fh.Strong("Field exclusion: "),
+                                    "Hide fields from UI while maintaining them in data model",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Default injection: "),
+                                    "Automatically inject model defaults for excluded fields",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Initial value override: "),
+                                    "initial_values take precedence over model defaults",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Complex defaults: "),
+                                    "Support for default_factory functions and nested models",
+                                ),
+                                fh.Li(
+                                    fh.Strong("System fields: "),
+                                    "Perfect for audit trails, IDs, metadata, etc.",
+                                ),
+                                cls="space-y-1 ml-4",
+                            ),
+                            fh.P(
+                                fh.Strong("Excluded fields in this demo: "),
+                                fh.Code(", ".join(form_renderer.exclude_fields)),
+                                cls="text-sm text-gray-600 mt-2",
+                            ),
+                            cls="mt-2",
+                        ),
+                    ),
+                    # Form Features Section
+                    mui.Details(
+                        mui.Summary(
+                            fh.H3("⚡ Dynamic Form Features", cls="text-red-600")
+                        ),
+                        fh.Div(
+                            fh.Ul(
+                                fh.Li(
+                                    fh.Strong("HTMX integration: "),
+                                    "Seamless dynamic updates without page reloads",
+                                ),
+                                fh.Li(
+                                    fh.Strong("List manipulation: "),
+                                    "Add, remove, and reorder list items with JavaScript",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Accordion UI: "),
+                                    "Collapsible sections for complex nested data",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Form refresh: "),
+                                    "Update display based on current form values",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Form reset: "),
+                                    "Restore to initial values with confirmation",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Real-time validation: "),
+                                    "Immediate feedback on form submission",
+                                ),
+                                cls="space-y-1 ml-4",
+                            ),
+                            cls="mt-2",
+                        ),
+                    ),
+                    # Styling & UX Section
+                    mui.Details(
+                        mui.Summary(
+                            fh.H3("🎯 Styling & User Experience", cls="text-indigo-600")
+                        ),
+                        fh.Div(
+                            fh.Ul(
+                                fh.Li(
+                                    fh.Strong("MonsterUI integration: "),
+                                    "Beautiful, modern UI components",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Custom label colors: "),
+                                    "Field-specific styling (name=blue, score=red)",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Responsive design: "),
+                                    "Mobile-friendly layouts and interactions",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Accessibility: "),
+                                    "Proper ARIA labels and keyboard navigation",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Visual feedback: "),
+                                    "Success/error states with color coding",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Tooltips: "),
+                                    "Helpful hints and explanations",
+                                ),
+                                cls="space-y-1 ml-4",
+                            ),
+                            cls="mt-2",
+                        ),
+                    ),
+                    # Data Handling Section
+                    mui.Details(
+                        mui.Summary(
+                            fh.H3("🔄 Robust Data Handling", cls="text-teal-600")
+                        ),
+                        fh.Div(
+                            fh.Ul(
+                                fh.Li(
+                                    fh.Strong("Schema drift resilience: "),
+                                    "Graceful handling of model changes",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Type coercion: "),
+                                    "Automatic conversion of form strings to proper types",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Validation integration: "),
+                                    "Full Pydantic validation with detailed error messages",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Default value handling: "),
+                                    "Smart use of model defaults and factories",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Nested data parsing: "),
+                                    "Complex object reconstruction from flat form data",
+                                ),
+                                fh.Li(
+                                    fh.Strong("List data parsing: "),
+                                    "Dynamic list reconstruction with proper indexing",
+                                ),
+                                cls="space-y-1 ml-4",
+                            ),
+                            cls="mt-2",
+                        ),
+                    ),
+                    # Architecture Section
+                    mui.Details(
+                        mui.Summary(
+                            fh.H3("🏗️ Architecture & Extensibility", cls="text-pink-600")
+                        ),
+                        fh.Div(
+                            fh.Ul(
+                                fh.Li(
+                                    fh.Strong("Registry pattern: "),
+                                    "Pluggable renderer system with type-based dispatch",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Generic typing: "),
+                                    "Full TypeScript-like type safety with Python",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Route registration: "),
+                                    "Automatic HTMX endpoint creation",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Prefix management: "),
+                                    "Namespace isolation for multiple forms",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Event handling: "),
+                                    "Comprehensive JavaScript integration",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Error handling: "),
+                                    "Graceful degradation and user-friendly messages",
+                                ),
+                                cls="space-y-1 ml-4",
+                            ),
+                            cls="mt-2",
+                        ),
+                    ),
+                    cls="space-y-3",
+                ),
+                cls="mb-6",
+            ),
             mui.Details(
-                mui.Summary("input json"),
-                fh.Pre(initial_values.model_dump_json(indent=2)),
+                mui.Summary("📋 Initial Values JSON (includes excluded field values)"),
+                fh.Pre(
+                    initial_values.model_dump_json(indent=2),
+                    cls="bg-gray-100 p-4 rounded text-sm overflow-auto max-h-96",
+                ),
+                cls="mb-4",
             ),
             mui.Card(
                 mui.CardBody(
                     mui.Form(
-                        mui.H2("Form"),
+                        mui.H2("Interactive Demo Form"),
+                        fh.P(
+                            "Try out all the features above in this live form:",
+                            cls="text-gray-600 mb-4",
+                        ),
                         form_renderer.render_inputs(),
                         fh.Div(
                             mui.Button(
-                                "Validate and Show JSON",
+                                "🔍 Validate and Show Results",
                                 cls=mui.ButtonT.primary,
                             ),
-                            form_renderer.refresh_button(),
-                            form_renderer.reset_button(),
-                            cls="mt-4 flex items-center gap-3",
+                            form_renderer.refresh_button("🔄 Refresh Display"),
+                            form_renderer.reset_button("↩️ Reset to Initial"),
+                            cls="mt-6 flex items-center gap-3 flex-wrap",
                         ),
                         hx_post="/submit_form",
                         hx_target="#result",
@@ -206,8 +532,9 @@ def get():
                     )
                 ),
             ),
-            fh.Div(id="result"),
+            fh.Div(id="result", cls="mt-6"),
         ),
+        cls="min-h-screen bg-gray-50 py-8",
     )
 
 
@@ -216,22 +543,62 @@ async def post_main_form(req):
     try:
         validated = await form_renderer.model_validate_request(req)
 
-        return mui.Card(
-            mui.CardHeader(fh.H3("Validation Successful")),
-            mui.CardBody(
-                fh.Pre(
-                    validated.model_dump_json(indent=2),
-                )
+        # Get the raw parsed data to show what was injected
+        form_data = await req.form()
+        form_dict = dict(form_data)
+        parsed_data = form_renderer.parse(form_dict)
+
+        # Identify which fields were excluded and auto-injected
+        excluded_fields_data = {
+            field_name: parsed_data.get(field_name, "NOT_FOUND")
+            for field_name in form_renderer.exclude_fields
+        }
+
+        return fh.Div(
+            mui.Card(
+                mui.CardHeader(fh.H3("✅ Validation Successful", cls="text-green-600")),
+                mui.CardBody(
+                    mui.H4("Complete Validated Model:"),
+                    fh.Pre(
+                        validated.model_dump_json(indent=2),
+                        cls="bg-gray-100 p-3 rounded text-sm overflow-auto max-h-96",
+                    ),
+                ),
             ),
+            mui.Card(
+                mui.CardHeader(
+                    fh.H3("🔧 Excluded Fields (Auto-Injected)", cls="text-blue-600")
+                ),
+                mui.CardBody(
+                    fh.P(
+                        "These fields were excluded from the form but automatically injected with their default/initial values:"
+                    ),
+                    fh.Pre(
+                        fh.Code(
+                            "\n".join(
+                                [
+                                    f"{field_name}: {repr(value)}"
+                                    for field_name, value in excluded_fields_data.items()
+                                ]
+                            )
+                        ),
+                        cls="bg-blue-50 p-3 rounded text-sm",
+                    ),
+                    fh.P(
+                        "💡 ",
+                        fh.Strong("Note: "),
+                        "Values from initial_values override model defaults. ",
+                        "Fields without defaults would cause validation errors if required.",
+                        cls="text-sm text-gray-600 mt-2",
+                    ),
+                ),
+            ),
+            cls="space-y-4",
         )
     except ValidationError as e:
         return mui.Card(
-            mui.CardHeader(fh.H3("Validation Error", cls="text-red-500")),
-            mui.CardBody(
-                fh.Pre(
-                    e.json(indent=2),
-                )
-            ),
+            mui.CardHeader(fh.H3("❌ Validation Error", cls="text-red-500")),
+            mui.CardBody(fh.Pre(e.json(indent=2), cls="bg-red-50 p-3 rounded text-sm")),
         )
 
 
