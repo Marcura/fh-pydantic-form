@@ -1,5 +1,8 @@
 # fh-pydantic-form
 
+[![PyPI](https://img.shields.io/pypi/v/fh-pydantic-form)](https://pypi.org/project/fh-pydantic-form/)
+[![GitHub](https://img.shields.io/github/stars/Marcura/fh-pydantic-form?style=social)](https://github.com/Marcura/fh-pydantic-form)
+
 **Generate HTML forms from Pydantic models for your FastHTML applications.**
 
 `fh-pydantic-form` simplifies creating web forms for [FastHTML](https://github.com/AnswerDotAI/fasthtml) by automatically generating the necessary HTML input elements based on your Pydantic model definitions. It integrates seamlessly with  and leverages [MonsterUI](https://github.com/AnswerDotAI/monsterui) components for styling.
