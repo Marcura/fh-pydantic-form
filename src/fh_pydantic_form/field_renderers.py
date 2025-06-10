@@ -494,7 +494,7 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
 
     def render_input(self) -> FT:
         """
-        Render input elements for nested model fields
+        Render input elements for nested model fields with robust schema drift handling
 
         Returns:
             A Card component containing nested form fields
@@ -512,59 +512,82 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
                 cls=mui.AlertT.error,
             )
 
-        # Prepare values dict
-        values_dict = (
-            self.value.model_dump()
-            if hasattr(self.value, "model_dump")
-            else self.value
-            if isinstance(self.value, dict)
-            else {}
-        )
+        # Robust value preparation
+        if isinstance(self.value, dict):
+            values_dict = self.value.copy()
+        elif hasattr(self.value, "model_dump"):
+            values_dict = self.value.model_dump()
+        else:
+            values_dict = {}
 
-        # Create nested field inputs directly instead of using FormRenderer
+        # Create nested field inputs with error handling
         nested_inputs = []
+        skipped_fields = []
 
+        # Only process fields that exist in current model schema
         for (
             nested_field_name,
             nested_field_info,
         ) in nested_model_class.model_fields.items():
-            # Determine initial value
-            nested_field_value = (
-                values_dict.get(nested_field_name) if values_dict else None
+            try:
+                # Check if field exists in provided values
+                field_was_provided = nested_field_name in values_dict
+                nested_field_value = (
+                    values_dict.get(nested_field_name) if field_was_provided else None
+                )
+
+                # Only use defaults if field wasn't provided
+                if not field_was_provided:
+                    if nested_field_info.default is not None:
+                        nested_field_value = nested_field_info.default
+                    elif (
+                        getattr(nested_field_info, "default_factory", None) is not None
+                    ):
+                        try:
+                            nested_field_value = nested_field_info.default_factory()
+                        except Exception as e:
+                            logger.warning(
+                                f"Default factory failed for {nested_field_name}: {e}"
+                            )
+                            nested_field_value = None
+
+                # Get renderer for this nested field
+                registry = FieldRendererRegistry()  # Get singleton instance
+                renderer_cls = registry.get_renderer(
+                    nested_field_name, nested_field_info
+                )
+
+                if not renderer_cls:
+                    # Fall back to StringFieldRenderer if no renderer found
+                    renderer_cls = StringFieldRenderer
+
+                # The prefix for nested fields is simply the field_name of this BaseModel instance + underscore
+                # field_name already includes the form prefix, so we don't need to add self.prefix again
+                nested_prefix = f"{self.field_name}_"
+
+                # Create and render the nested field
+                renderer = renderer_cls(
+                    field_name=nested_field_name,
+                    field_info=nested_field_info,
+                    value=nested_field_value,
+                    prefix=nested_prefix,
+                    disabled=self.disabled,  # Propagate disabled state to nested fields
+                )
+
+                nested_inputs.append(renderer.render())
+
+            except Exception as e:
+                logger.warning(
+                    f"Skipping field {nested_field_name} in nested model: {e}"
+                )
+                skipped_fields.append(nested_field_name)
+                continue
+
+        # Log summary if fields were skipped
+        if skipped_fields:
+            logger.info(
+                f"Skipped {len(skipped_fields)} fields in {self.field_name}: {skipped_fields}"
             )
-
-            # Apply default if needed
-            if nested_field_value is None:
-                if nested_field_info.default is not None:
-                    nested_field_value = nested_field_info.default
-                elif getattr(nested_field_info, "default_factory", None) is not None:
-                    try:
-                        nested_field_value = nested_field_info.default_factory()
-                    except Exception:
-                        nested_field_value = None
-
-            # Get renderer for this nested field
-            registry = FieldRendererRegistry()  # Get singleton instance
-            renderer_cls = registry.get_renderer(nested_field_name, nested_field_info)
-
-            if not renderer_cls:
-                # Fall back to StringFieldRenderer if no renderer found
-                renderer_cls = StringFieldRenderer
-
-            # The prefix for nested fields is simply the field_name of this BaseModel instance + underscore
-            # field_name already includes the form prefix, so we don't need to add self.prefix again
-            nested_prefix = f"{self.field_name}_"
-
-            # Create and render the nested field
-            renderer = renderer_cls(
-                field_name=nested_field_name,
-                field_info=nested_field_info,
-                value=nested_field_value,
-                prefix=nested_prefix,
-                disabled=self.disabled,  # Propagate disabled state to nested fields
-            )
-
-            nested_inputs.append(renderer.render())
 
         # Create container for nested inputs
         nested_form_content = mui.DivVStacked(
@@ -820,17 +843,17 @@ class ListFieldRenderer(BaseFieldRenderer):
             item_content_elements = []
 
             if is_model:
-                # Handle BaseModel items - include the form prefix in nested items
+                # Handle BaseModel items with robust schema drift handling
                 # Form name prefix + field name + index + _
                 name_prefix = f"{self.prefix}{self.original_field_name}_{idx}_"
 
-                nested_values = (
-                    item.model_dump()
-                    if hasattr(item, "model_dump")
-                    else item
-                    if isinstance(item, dict)
-                    else {}
-                )
+                # Robust value preparation for schema drift handling
+                if isinstance(item, dict):
+                    nested_values = item.copy()
+                elif hasattr(item, "model_dump"):
+                    nested_values = item.model_dump()
+                else:
+                    nested_values = {}
 
                 # Check if there's a specific renderer registered for this item_type
                 registry = FieldRendererRegistry()
@@ -861,44 +884,70 @@ class ListFieldRenderer(BaseFieldRenderer):
                     # Add the rendered input to content elements
                     item_content_elements.append(item_renderer.render_input())
                 else:
-                    # Fall back to original behavior: render each field individually
+                    # Fall back to original behavior: render each field individually with schema drift handling
+                    valid_fields = []
+                    skipped_fields = []
+
+                    # Only process fields that exist in current model
                     for (
                         nested_field_name,
                         nested_field_info,
                     ) in item_type.model_fields.items():
-                        nested_field_value = nested_values.get(nested_field_name)
+                        try:
+                            field_was_provided = nested_field_name in nested_values
+                            nested_field_value = (
+                                nested_values.get(nested_field_name)
+                                if field_was_provided
+                                else None
+                            )
 
-                        # Apply default if needed
-                        if (
-                            nested_field_value is None
-                            and hasattr(nested_field_info, "default")
-                            and nested_field_info.default is not None
-                        ):
-                            nested_field_value = nested_field_info.default
-                        elif (
-                            nested_field_value is None
-                            and hasattr(nested_field_info, "default_factory")
-                            and nested_field_info.default_factory is not None
-                        ):
-                            try:
-                                nested_field_value = nested_field_info.default_factory()
-                            except Exception:
-                                pass
+                            # Use defaults only if field not provided
+                            if not field_was_provided:
+                                if nested_field_info.default is not None:
+                                    nested_field_value = nested_field_info.default
+                                elif (
+                                    getattr(nested_field_info, "default_factory", None)
+                                    is not None
+                                ):
+                                    try:
+                                        nested_field_value = (
+                                            nested_field_info.default_factory()
+                                        )
+                                    except Exception:
+                                        continue  # Skip fields with problematic defaults
 
-                        # Get renderer and render field
-                        renderer_cls = FieldRendererRegistry().get_renderer(
-                            nested_field_name, nested_field_info
+                            # Get renderer and render field with error handling
+                            renderer_cls = FieldRendererRegistry().get_renderer(
+                                nested_field_name, nested_field_info
+                            )
+                            if not renderer_cls:
+                                renderer_cls = StringFieldRenderer
+
+                            renderer = renderer_cls(
+                                field_name=nested_field_name,
+                                field_info=nested_field_info,
+                                value=nested_field_value,
+                                prefix=name_prefix,
+                                disabled=self.disabled,  # Propagate disabled state
+                            )
+
+                            # Add rendered field to valid fields
+                            valid_fields.append(renderer.render())
+
+                        except Exception as e:
+                            logger.warning(
+                                f"Skipping problematic field {nested_field_name} in list item: {e}"
+                            )
+                            skipped_fields.append(nested_field_name)
+                            continue
+
+                    # Log summary if fields were skipped
+                    if skipped_fields:
+                        logger.info(
+                            f"Skipped {len(skipped_fields)} fields in list item {idx}: {skipped_fields}"
                         )
-                        renderer = renderer_cls(
-                            field_name=nested_field_name,
-                            field_info=nested_field_info,
-                            value=nested_field_value,
-                            prefix=name_prefix,
-                            disabled=self.disabled,  # Propagate disabled state
-                        )
 
-                        # Add rendered field to content elements
-                        item_content_elements.append(renderer.render())
+                    item_content_elements = valid_fields
             else:
                 # Handle simple type items
                 field_info = FieldInfo(annotation=item_type)

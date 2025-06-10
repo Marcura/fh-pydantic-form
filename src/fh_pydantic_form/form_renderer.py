@@ -9,6 +9,7 @@ from typing import (
     Tuple,
     Type,
     TypeVar,
+    Union,
 )
 
 import fasthtml.common as fh
@@ -181,7 +182,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 class PydanticForm(Generic[ModelType]):
     """
-    Renders a form from a Pydantic model class
+    Renders a form from a Pydantic model class with robust schema drift handling
+
+    Accepts initial values as either BaseModel instances or dictionaries.
+    Gracefully handles missing fields and schema mismatches by rendering
+    available fields and skipping problematic ones.
 
     This class handles:
     - Finding appropriate renderers for each field
@@ -198,7 +203,7 @@ class PydanticForm(Generic[ModelType]):
         self,
         form_name: str,
         model_class: Type[ModelType],
-        initial_values: Optional[ModelType] = None,
+        initial_values: Optional[Union[ModelType, Dict[str, Any]]] = None,
         custom_renderers: Optional[List[Tuple[Type, Type[BaseFieldRenderer]]]] = None,
         disabled: bool = False,
         disabled_fields: Optional[List[str]] = None,
@@ -211,7 +216,9 @@ class PydanticForm(Generic[ModelType]):
         Args:
             form_name: Unique name for this form
             model_class: The Pydantic model class to render
-            initial_values: Optional initial Pydantic model instance
+            initial_values: Initial values as BaseModel instance or dict.
+                           Missing fields will not be auto-filled with defaults.
+                           Supports robust handling of schema drift.
             custom_renderers: Optional list of tuples (field_type, renderer_cls) to register
             disabled: Whether all form inputs should be disabled
             disabled_fields: Optional list of top-level field names to disable specifically
@@ -220,8 +227,29 @@ class PydanticForm(Generic[ModelType]):
         """
         self.name = form_name
         self.model_class = model_class
-        self.initial_data_model = initial_values  # Store original model for fallback
-        self.values_dict = initial_values.model_dump() if initial_values else {}
+
+        self.initial_values_dict: Dict[str, Any] = {}
+
+        # Store initial values as dict for robustness to schema drift
+        if initial_values is None:
+            self.initial_values_dict = {}
+        elif isinstance(initial_values, dict):
+            self.initial_values_dict = initial_values.copy()
+        elif hasattr(initial_values, "model_dump"):
+            self.initial_values_dict = initial_values.model_dump()
+        else:
+            # Fallback - attempt dict conversion
+            try:
+                self.initial_values_dict = dict(initial_values)
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Could not convert initial_values to dict, using empty dict"
+                )
+                self.initial_values_dict = {}
+
+        # Use copy for rendering to avoid mutations
+        self.values_dict: Dict[str, Any] = self.initial_values_dict.copy()
+
         self.base_prefix = f"{form_name}_"
         self.disabled = disabled
         self.disabled_fields = (
@@ -255,9 +283,15 @@ class PydanticForm(Generic[ModelType]):
                 logger.debug(f"Skipping excluded field: {field_name}")
                 continue
 
-            # Determine initial value
+            # Only use what was explicitly provided in initial values
             initial_value = (
                 self.values_dict.get(field_name) if self.values_dict else None
+            )
+
+            # Only use model defaults if field was not provided at all
+            # (not if it was provided as None/empty)
+            field_was_provided = (
+                field_name in self.values_dict if self.values_dict else False
             )
 
             # Log the initial value type and a summary for debugging
@@ -267,14 +301,17 @@ class PydanticForm(Generic[ModelType]):
                     value_size = f"size={len(initial_value)}"
                 else:
                     value_size = ""
-                logger.debug(f"Field '{field_name}': {value_type} {value_size}")
+                logger.debug(
+                    f"Field '{field_name}': {value_type} {value_size} (provided: {field_was_provided})"
+                )
             else:
                 logger.debug(
-                    f"Field '{field_name}': None (will use default if available)"
+                    f"Field '{field_name}': None (provided: {field_was_provided})"
                 )
 
-            # Use default if no value is provided
-            if initial_value is None:
+            # Only use defaults if field was not provided at all
+            if not field_was_provided:
+                # Field not provided - use model defaults
                 if field_info.default is not None:
                     initial_value = field_info.default
                     logger.debug(f"  - Using default value for '{field_name}'")
@@ -287,6 +324,7 @@ class PydanticForm(Generic[ModelType]):
                         logger.warning(
                             f"  - Error in default_factory for '{field_name}': {e}"
                         )
+            # If field was provided (even as None), respect that value
 
             # Get renderer from global registry
             renderer_cls = registry.get_renderer(field_name, field_info)
@@ -359,9 +397,9 @@ class PydanticForm(Generic[ModelType]):
                 f"Error parsing form data for refresh on form '{self.name}': {e}",
                 exc_info=True,
             )
-            # Fallback: Use original initial data model dump if available, otherwise empty dict
+            # Fallback: Use original initial values dict if available, otherwise empty dict
             parsed_data = (
-                self.initial_data_model.model_dump() if self.initial_data_model else {}
+                self.initial_values_dict.copy() if self.initial_values_dict else {}
             )
             alert_ft = mui.Alert(
                 f"Warning: Could not fully process current form values for refresh. Display might not be fully updated. Error: {str(e)}",
@@ -403,27 +441,27 @@ class PydanticForm(Generic[ModelType]):
         Returns:
             HTML response with reset form inputs
         """
-        logger.info(
-            f"Resetting form '{self.name}' to initial values. Initial model: {self.initial_data_model}"
-        )
+        logger.info(f"Resetting form '{self.name}' to initial values")
 
-        # Create a temporary renderer with the original initial data
+        # Create temporary renderer with original initial dict
         temp_renderer = PydanticForm(
             form_name=self.name,
             model_class=self.model_class,
-            initial_values=self.initial_data_model,  # Use the originally stored model
+            initial_values=self.initial_values_dict,  # Use dict instead of BaseModel
+            custom_renderers=getattr(self, "custom_renderers", None),
+            disabled=self.disabled,
+            disabled_fields=self.disabled_fields,
+            label_colors=self.label_colors,
+            exclude_fields=self.exclude_fields,
         )
 
-        # Render inputs with the initial data
         reset_inputs_component = temp_renderer.render_inputs()
 
         if reset_inputs_component is None:
             logger.error(f"Reset for form '{self.name}' failed to render inputs.")
             return mui.Alert("Error resetting form.", cls=mui.AlertT.error)
 
-        logger.info(
-            f"Reset form '{self.name}' successful. Component: {reset_inputs_component}"
-        )
+        logger.info(f"Reset form '{self.name}' successful")
         return reset_inputs_component
 
     def parse(self, form_dict: Dict[str, Any]) -> Dict[str, Any]:
