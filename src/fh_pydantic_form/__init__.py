@@ -18,6 +18,7 @@ from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import (
     _get_underlying_type_if_optional,
 )
+from fh_pydantic_form.ui_style import SpacingTheme
 
 
 def register_default_renderers() -> None:
@@ -87,4 +88,9 @@ def register_default_renderers() -> None:
 register_default_renderers()
 
 
-__all__ = ["PydanticForm", "FieldRendererRegistry", "list_manipulation_js"]
+__all__ = [
+    "PydanticForm",
+    "FieldRendererRegistry",
+    "list_manipulation_js",
+    "SpacingTheme",
+]

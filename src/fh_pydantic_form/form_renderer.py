@@ -29,6 +29,7 @@ from fh_pydantic_form.form_parser import (
 )
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import _UNSET, get_default
+from fh_pydantic_form.ui_style import SpacingTheme
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +211,7 @@ class PydanticForm(Generic[ModelType]):
         disabled_fields: Optional[List[str]] = None,
         label_colors: Optional[Dict[str, str]] = None,
         exclude_fields: Optional[List[str]] = None,
+        spacing_theme: SpacingTheme = SpacingTheme.NORMAL,
     ):
         """
         Initialize the form renderer
@@ -225,6 +227,7 @@ class PydanticForm(Generic[ModelType]):
             disabled_fields: Optional list of top-level field names to disable specifically
             label_colors: Optional dictionary mapping field names to label colors (CSS color values)
             exclude_fields: Optional list of top-level field names to exclude from the form
+            spacing_theme: Spacing theme to use for form layout (NORMAL or COMPACT)
         """
         self.name = form_name
         self.model_class = model_class
@@ -265,6 +268,7 @@ class PydanticForm(Generic[ModelType]):
         )  # Store as list for easier checking
         self.label_colors = label_colors or {}  # Store label colors mapping
         self.exclude_fields = exclude_fields or []  # Store excluded fields list
+        self.spacing_theme = spacing_theme  # Store spacing theme
 
         # Register custom renderers with the global registry if provided
         if custom_renderers:
@@ -370,6 +374,7 @@ class PydanticForm(Generic[ModelType]):
                 prefix=self.base_prefix,
                 disabled=is_field_disabled,  # Pass the calculated disabled state
                 label_color=label_color,  # Pass the label color if specified
+                spacing_theme=self.spacing_theme,  # Pass the spacing theme
             )
 
             rendered_field = renderer.render()
@@ -428,6 +433,7 @@ class PydanticForm(Generic[ModelType]):
             form_name=self.name,
             model_class=self.model_class,
             # No initial_data needed here, we set values_dict below
+            spacing_theme=self.spacing_theme,
         )
         # Set the values based on the parsed (or fallback) data
         temp_renderer.values_dict = parsed_data
@@ -470,6 +476,7 @@ class PydanticForm(Generic[ModelType]):
             disabled_fields=self.disabled_fields,
             label_colors=self.label_colors,
             exclude_fields=self.exclude_fields,
+            spacing_theme=self.spacing_theme,
         )
 
         reset_inputs_component = temp_renderer.render_inputs()
