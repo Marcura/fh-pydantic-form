@@ -1,6 +1,8 @@
 import datetime
 from typing import List, Literal, Optional
 
+import fasthtml.common as fh  # type: ignore
+import monsterui.all as mui  # type: ignore
 import pytest
 from pydantic import BaseModel, Field
 from starlette.testclient import TestClient
@@ -101,8 +103,6 @@ class ListTestModel(BaseModel):
 @pytest.fixture(scope="module")
 def simple_client():
     """TestClient for a simple form defined locally."""
-    import fasthtml.common as fh
-    import monsterui.all as mui
 
     form_renderer = PydanticForm("test_simple", SimpleTestModel)
     app, rt = fh.fast_app(hdrs=[mui.Theme.blue.headers()], pico=False, live=False)
@@ -126,8 +126,6 @@ def simple_client():
 @pytest.fixture(scope="module")
 def globally_disabled_simple_client():
     """TestClient for a simple form with all fields disabled."""
-    import fasthtml.common as fh
-    import monsterui.all as mui
 
     form_renderer = PydanticForm(
         "test_simple_globally_disabled", SimpleTestModel, disabled=True
@@ -156,8 +154,6 @@ def globally_disabled_simple_client():
 @pytest.fixture(scope="module")
 def partially_disabled_simple_client():
     """TestClient for a simple form with only the age field disabled."""
-    import fasthtml.common as fh
-    import monsterui.all as mui
 
     form_renderer = PydanticForm(
         "test_simple_partially_disabled", SimpleTestModel, disabled_fields=["age"]
@@ -186,8 +182,6 @@ def partially_disabled_simple_client():
 @pytest.fixture(scope="module")
 def validation_client():
     """TestClient for a validation form defined locally."""
-    import fasthtml.common as fh
-    import monsterui.all as mui
     from pydantic import ValidationError
 
     form_renderer = PydanticForm("test_validation", SimpleTestModel)
@@ -236,8 +230,6 @@ def validation_client():
 @pytest.fixture(scope="module")
 def list_client():
     """TestClient for a list form defined locally."""
-    import fasthtml.common as fh
-    import monsterui.all as mui
     from pydantic import ValidationError
 
     form_renderer = PydanticForm("test_list", ListTestModel)
@@ -289,8 +281,6 @@ def list_client():
 @pytest.fixture(scope="module")
 def complex_client(complex_renderer):
     """TestClient for a complex form defined locally."""
-    import fasthtml.common as fh
-    import monsterui.all as mui
     from pydantic import ValidationError
 
     # complex_renderer is already configured with ComplexTestSchema, form_name="test_complex"
@@ -474,8 +464,6 @@ def complex_initial_values(complex_test_model, address_model, custom_detail_mode
 @pytest.fixture(scope="module")
 def globally_disabled_complex_client(complex_test_model, complex_initial_values):
     """TestClient for a complex form with all fields disabled."""
-    import fasthtml.common as fh
-    import monsterui.all as mui
 
     form_renderer = PydanticForm(
         form_name="test_complex_globally_disabled",
@@ -511,8 +499,6 @@ def globally_disabled_complex_client(complex_test_model, complex_initial_values)
 @pytest.fixture(scope="module")
 def partially_disabled_complex_client(complex_test_model, complex_initial_values):
     """TestClient for a complex form with specific fields disabled."""
-    import fasthtml.common as fh
-    import monsterui.all as mui
 
     form_renderer = PydanticForm(
         form_name="test_complex_partially_disabled",

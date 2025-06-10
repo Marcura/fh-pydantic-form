@@ -73,7 +73,10 @@ dev-dependencies = [
     "pre-commit>=4.2.0",
     "pytest>=8.3.5",
     "ruff>=0.11.6",
-    "httpx>=0.27.0"
+    "httpx>=0.27.0",
+    "hypothesis>=6.135.4",
+    "pytest-mock>=3.14.1",
+    "pytest-asyncio>=1.0.0",
 ]
 
 [tool.mypy]

@@ -66,7 +66,7 @@ def test_parse_literal_field():
     from pydantic.fields import FieldInfo
 
     # Basic literal field
-    field_info = FieldInfo(annotation=Literal["PENDING", "COMPLETED"])
+    field_info = FieldInfo()
     assert (
         _parse_literal_field(
             "prefix_status", {"prefix_status": "COMPLETED"}, field_info
@@ -75,7 +75,7 @@ def test_parse_literal_field():
     )
 
     # Optional literal field with value
-    opt_field_info = FieldInfo(annotation=Optional[Literal["PENDING", "COMPLETED"]])
+    opt_field_info = FieldInfo()
     assert (
         _parse_literal_field(
             "prefix_opt_status", {"prefix_opt_status": "PENDING"}, opt_field_info
@@ -110,7 +110,7 @@ def test_parse_simple_field():
     )
 
     # Optional field with value
-    opt_field_info = FieldInfo(annotation=Optional[str])
+    opt_field_info = FieldInfo()
     assert (
         _parse_simple_field(
             "prefix_desc", {"prefix_desc": "Test Description"}, opt_field_info
@@ -134,7 +134,7 @@ def test_parse_nested_model_field():
     """Test parsing nested model fields from form data."""
     from pydantic.fields import FieldInfo
 
-    field_info = FieldInfo(annotation=SimpleNested)
+    field_info = FieldInfo()
     form_data = {
         "prefix_nested_sub_field": "Nested Value",
         "prefix_nested_is_active": "on",
