@@ -171,7 +171,7 @@ form_renderer = PydanticForm(
         (CustomDetail, CustomDetailFieldRenderer)
     ],  # Register Detail renderer
     exclude_fields=["skip_field"],
-    label_colors={"name": "text-red-500", "score": "text-blue-500"},
+    label_colors={"name": "blue", "score": "#FF0000"},
 )
 
 form_renderer.register_routes(app)

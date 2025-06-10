@@ -88,15 +88,23 @@ class BaseFieldRenderer:
         # Prepare label attributes
         label_attrs = {"For": self.field_name}
 
+        cls_attr = "block text-sm font-medium text-gray-700 mb-1"
+
         # Apply color styling if specified
         if self.label_color:
-            label_attrs["style"] = f"color: {self.label_color};"
+            # Check if it's a CSS class (contains letters/hyphens) or a color value
+            if self.label_color.replace("-", "").replace("#", "").isalnum():
+                # Looks like a CSS class, add it to the class list
+                cls_attr = f"block text-sm font-medium {self.label_color} mb-1".strip()
+            else:
+                # Treat as color value
+                label_attrs["style"] = f"color: {self.label_color};"
 
         # Create and return the label - using standard fh.Label with appropriate styling
         return fh.Label(
             label_text_span,
             **label_attrs,
-            cls="block text-sm font-medium text-gray-700 mb-1",
+            cls=cls_attr,
         )
 
     def render_input(self) -> FT:
