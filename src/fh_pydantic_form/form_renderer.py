@@ -17,6 +17,7 @@ import monsterui.all as mui
 from fastcore.xml import FT
 from pydantic import BaseModel
 
+from fh_pydantic_form.defaults import default_dict_for_model, default_for_annotation
 from fh_pydantic_form.field_renderers import (
     BaseFieldRenderer,
     ListFieldRenderer,
@@ -32,8 +33,8 @@ from fh_pydantic_form.type_helpers import _UNSET, get_default
 from fh_pydantic_form.ui_style import (
     SpacingTheme,
     SpacingValue,
-    spacing,
     _normalize_spacing,
+    spacing,
 )
 
 logger = logging.getLogger(__name__)
@@ -687,44 +688,25 @@ class PydanticForm(Generic[ModelType]):
                         cls=mui.AlertT.error,
                     )
 
-            # Create a default item
-            default_item = None  # Initialize default_item
+            # Create a default item using smart defaults
+            default_item_dict: Dict[str, Any] | str | Any | None = None
             try:
-                # Ensure item_type is not None before checking attributes or type
-                if item_type:
-                    # For Pydantic models, try to use model_construct for default values
-                    if hasattr(item_type, "model_construct"):
-                        try:
-                            default_item = item_type.model_construct()
-                        except Exception as e:
-                            logger.error(
-                                f"Error constructing model for {field_name}: {e}",
-                                exc_info=True,
-                            )
-                            return fh.Li(
-                                mui.Alert(
-                                    f"Error creating model instance: {str(e)}",
-                                    cls=mui.AlertT.error,
-                                ),
-                                cls="mb-2",
-                            )
-                    # Handle simple types with appropriate defaults
-                    elif item_type is str:
-                        default_item = ""
-                    elif item_type is int:
-                        default_item = 0
-                    elif item_type is float:
-                        default_item = 0.0
-                    elif item_type is bool:
-                        default_item = False
-                    else:
-                        default_item = None  # Other simple types or complex non-models
-                else:
-                    # Case where item_type itself was None (should ideally be caught earlier)
-                    default_item = None
+                if not item_type:
                     logger.warning(
                         f"item_type was None when trying to create default for {field_name}"
                     )
+                    default_item_dict = ""
+                elif hasattr(item_type, "model_fields"):
+                    # For Pydantic models, use smart default generation
+                    default_item_dict = default_dict_for_model(item_type)
+                else:
+                    # For simple types, use annotation-based defaults
+                    default_item_dict = default_for_annotation(item_type)
+
+                # Final fallback for exotic cases
+                if default_item_dict is None:
+                    default_item_dict = ""
+
             except Exception as e:
                 logger.error(
                     f"Error creating default item for {field_name}: {e}", exc_info=True
@@ -754,19 +736,11 @@ class PydanticForm(Generic[ModelType]):
                     cls=mui.AlertT.error,
                 )
 
-            # Ensure the item data passed to the renderer is a dict if it's a model instance
-            item_data_for_renderer = None
-            if isinstance(default_item, BaseModel):
-                item_data_for_renderer = default_item.model_dump()
-                logger.debug(
-                    f"Add item: Converted model instance to dict for renderer: {item_data_for_renderer}"
-                )
-            elif default_item is not None:  # Handle simple types directly
-                item_data_for_renderer = default_item
-                logger.debug(
-                    f"Add item: Passing simple type directly to renderer: {item_data_for_renderer}"
-                )
-            # else: item_data_for_renderer remains None if default_item was None
+            # The default_item_dict is already in the correct format (dict for models, primitive for simple types)
+            item_data_for_renderer = default_item_dict
+            logger.debug(
+                f"Add item: Using smart default for renderer: {item_data_for_renderer}"
+            )
 
             # Render the new item card, set is_open=True to make it expanded by default
             new_item_card = list_renderer._render_item_card(

@@ -26,7 +26,7 @@ app, rt = fh.fast_app(
 
 class Address(BaseModel):
     street: str = "123 Main St"
-    city: str = "Anytown"
+    city: str  # = "Anytown"
     is_billing: bool = False
 
     def __str__(self) -> str:

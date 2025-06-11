@@ -843,8 +843,8 @@ class ListFieldRenderer(BaseFieldRenderer):
                         model_for_display = item
 
                     elif isinstance(item, dict):
-                        # Item is a dict, try to create a model instance for display
-                        model_for_display = item_type.model_validate(item)
+                        # Item is a dict, use model_construct for better performance (defaults are known-good)
+                        model_for_display = item_type.model_construct(**item)
 
                     else:
                         # Handle cases where item is None or unexpected type

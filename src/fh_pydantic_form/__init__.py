@@ -24,6 +24,10 @@ from fh_pydantic_form.ui_style import (
     spacing,
     COMPACT_EXTRA_CSS,
 )
+from fh_pydantic_form.defaults import (
+    default_dict_for_model,
+    default_for_annotation,
+)
 
 
 def register_default_renderers() -> None:
@@ -101,4 +105,6 @@ __all__ = [
     "SpacingValue",
     "spacing",
     "COMPACT_EXTRA_CSS",
+    "default_dict_for_model",
+    "default_for_annotation",
 ]
