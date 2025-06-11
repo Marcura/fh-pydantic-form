@@ -10,6 +10,7 @@ from typing import (
 
 from fh_pydantic_form.type_helpers import (
     _get_underlying_type_if_optional,
+    _is_enum_type,
     _is_literal_type,
     _is_optional_type,
 )
@@ -91,6 +92,10 @@ def _parse_non_list_fields(
         elif _is_literal_type(annotation):
             result[field_name] = _parse_literal_field(full_key, form_data, field_info)
 
+        # Handle Enum fields (including Optional[Enum])
+        elif _is_enum_type(annotation):
+            result[field_name] = _parse_enum_field(full_key, form_data, field_info)
+
         # Handle nested model fields (including Optional[NestedModel])
         elif (
             isinstance(annotation, type)
@@ -155,6 +160,30 @@ def _parse_literal_field(field_name: str, form_data: Dict[str, Any], field_info)
     value = form_data.get(field_name)
 
     # Check if the field is Optional[Literal[...]]
+    if _is_optional_type(field_info.annotation):
+        # If the submitted value is the empty string OR the display text for None, treat it as None
+        if value == "" or value == "-- None --":
+            return None
+
+    # Return the actual submitted value (string) for Pydantic validation
+    return value
+
+
+def _parse_enum_field(field_name: str, form_data: Dict[str, Any], field_info) -> Any:
+    """
+    Parse an Enum field, converting empty string OR '-- None --' to None for optional fields.
+
+    Args:
+        field_name: Name of the field to parse
+        form_data: Dictionary containing form field data
+        field_info: FieldInfo object to check for optionality
+
+    Returns:
+        The parsed value or None for empty/None values with optional fields
+    """
+    value = form_data.get(field_name)
+
+    # Check if the field is Optional[Enum]
     if _is_optional_type(field_info.annotation):
         # If the submitted value is the empty string OR the display text for None, treat it as None
         if value == "" or value == "-- None --":

@@ -1,4 +1,5 @@
 import logging
+from enum import Enum
 from typing import Any, Literal, Union, get_args, get_origin
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,12 @@ def _is_literal_type(annotation: Any) -> bool:
     """Check if the underlying type of an annotation is Literal."""
     underlying_type = _get_underlying_type_if_optional(annotation)
     return get_origin(underlying_type) is Literal
+
+
+def _is_enum_type(annotation: Any) -> bool:
+    """Check if the underlying type of an annotation is Enum."""
+    underlying_type = _get_underlying_type_if_optional(annotation)
+    return isinstance(underlying_type, type) and issubclass(underlying_type, Enum)
 
 
 def get_default(field_info: Any) -> Any:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as _dt
+from enum import Enum
 from typing import Any, get_args, get_origin, Literal
 
 from pydantic import BaseModel
@@ -49,6 +50,11 @@ def default_for_annotation(annotation: Any) -> Any:
     # Literal[...] → first literal value
     if origin is Literal:
         return _first_literal_choice(annotation)
+
+    # Enum → first member value
+    if isinstance(origin, type) and issubclass(origin, Enum):
+        enum_members = list(origin)
+        return enum_members[0].value if enum_members else None
 
     # Simple primitives & datetime helpers
     if origin in _SIMPLE_DEFAULTS:

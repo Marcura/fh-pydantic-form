@@ -1,4 +1,5 @@
 import datetime
+from enum import Enum
 from typing import Literal, get_origin
 
 from pydantic import BaseModel
@@ -7,6 +8,7 @@ from fh_pydantic_form.field_renderers import (
     BaseModelFieldRenderer,
     BooleanFieldRenderer,
     DateFieldRenderer,
+    EnumFieldRenderer,
     ListFieldRenderer,
     LiteralFieldRenderer,
     NumberFieldRenderer,
@@ -37,7 +39,7 @@ def register_default_renderers() -> None:
     This method sets up:
     - Simple type renderers (str, bool, int, float, date, time)
     - Special field renderers (Detail)
-    - Predicate-based renderers (Literal fields, lists, BaseModels)
+    - Predicate-based renderers (Literal fields, Enum fields, lists, BaseModels)
     """
     # Import renderers by getting them from globals
 
@@ -61,6 +63,19 @@ def register_default_renderers() -> None:
 
     FieldRendererRegistry.register_type_renderer_with_predicate(
         is_literal_field, LiteralFieldRenderer
+    )
+
+    # Register Enum field renderer
+    def is_enum_field(field_info):
+        """Check if field is an Enum type"""
+        annotation = getattr(field_info, "annotation", None)
+        if not annotation:
+            return False
+        underlying_type = _get_underlying_type_if_optional(annotation)
+        return isinstance(underlying_type, type) and issubclass(underlying_type, Enum)
+
+    FieldRendererRegistry.register_type_renderer_with_predicate(
+        is_enum_field, EnumFieldRenderer
     )
 
     # Register list renderer for List[*] types

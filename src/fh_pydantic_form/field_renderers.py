@@ -1,5 +1,6 @@
 import logging
 from datetime import date, time
+from enum import Enum
 from typing import (
     Any,
     Optional,
@@ -436,6 +437,94 @@ class LiteralFieldRenderer(BaseFieldRenderer):
                 fh.Option(
                     value_str,  # Display text
                     value=value_str,  # Value attribute
+                    selected=is_selected,
+                )
+            )
+
+        placeholder_text = f"Select {self.original_field_name.replace('_', ' ')}"
+        if self.is_optional:
+            placeholder_text += " (Optional)"
+
+        # Prepare attributes dictionary
+        select_attrs = {
+            "id": self.field_name,
+            "name": self.field_name,
+            "required": is_field_required,
+            "placeholder": placeholder_text,
+            "cls": _merge_cls(
+                "w-full",
+                f"{spacing('input_size', self.spacing)} {spacing('input_padding', self.spacing)}".strip(),
+            ),
+        }
+
+        # Only add the disabled attribute if the field should actually be disabled
+        if self.disabled:
+            select_attrs["disabled"] = True
+
+        # Render the select element with options and attributes
+        return mui.Select(*options, **select_attrs)
+
+
+class EnumFieldRenderer(BaseFieldRenderer):
+    """Renderer for Enum fields as dropdown selects"""
+
+    def render_input(self) -> FT:
+        """
+        Render input element for the field as a select dropdown
+
+        Returns:
+            A Select component with options based on the Enum values
+        """
+        # Get the Enum class from annotation
+        annotation = _get_underlying_type_if_optional(self.field_info.annotation)
+        enum_class = annotation
+
+        if not (isinstance(enum_class, type) and issubclass(enum_class, Enum)):
+            return mui.Alert(
+                f"No enum class found for {self.field_name}", cls=mui.AlertT.warning
+            )
+
+        # Get all enum members
+        enum_members = list(enum_class)
+
+        if not enum_members:
+            return mui.Alert(
+                f"No enum values found for {self.field_name}", cls=mui.AlertT.warning
+            )
+
+        # Determine if field is required
+        is_field_required = (
+            not self.is_optional
+            and self.field_info.default is None
+            and getattr(self.field_info, "default_factory", None) is None
+        )
+
+        # Create options for each enum value
+        options = []
+        current_value_str = None
+
+        # Convert current value to string for comparison
+        if self.value is not None:
+            if isinstance(self.value, Enum):
+                current_value_str = str(self.value.value)
+            else:
+                current_value_str = str(self.value)
+
+        # Add empty option for optional fields
+        if self.is_optional:
+            options.append(
+                fh.Option("-- None --", value="", selected=(self.value is None))
+            )
+
+        # Add options for each enum member
+        for member in enum_members:
+            member_value_str = str(member.value)
+            display_name = member.name.replace("_", " ").title()
+            is_selected = current_value_str == member_value_str
+            options.append(
+                fh.Option(
+                    display_name,  # Display text
+                    value=member_value_str,  # Value attribute
                     selected=is_selected,
                 )
             )
