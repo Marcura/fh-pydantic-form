@@ -13,13 +13,31 @@
 </video>
 </details>
 
+## Table of Contents
+1. [Purpose](#purpose)
+2. [Installation](#installation)
+3. [Quick Start](#quick-start)
+4. [Key Features](#key-features)
+5. [Spacing & Styling](#spacing--styling)
+6. [Working with Lists](#working-with-lists)
+7. [Nested Models](#nested-models)
+8. [Literal & Enum Fields](#literal--enum-fields)
+9. [Disabling & Excluding Fields](#disabling--excluding-fields)
+10. [Refreshing & Resetting](#refreshing--resetting)
+11. [Label Colors](#label-colors)
+12. [Schema Drift Resilience](#schema-drift-resilience)
+13. [Custom Renderers](#custom-renderers)
+14. [API Reference](#api-reference)
+15. [Contributing](#contributing)
+
 ## Purpose
 
 -   **Reduce Boilerplate:** Automatically render form inputs (text, number, checkbox, select, date, time, etc.) based on Pydantic field types and annotations.
 -   **Data Validation:** Leverage Pydantic's validation rules directly from form submissions.
--   **Nested Structures:** Support for nested Pydantic models and lists of models/simple types.
+-   **Nested Structures:** Support for nested Pydantic models and lists of models/simple types with accordion UI.
 -   **Dynamic Lists:** Built-in HTMX endpoints and JavaScript for adding, deleting, and reordering items in lists within the form.
 -   **Customization:** Easily register custom renderers for specific Pydantic types or fields.
+-   **Robust Schema Handling:** Gracefully handles model changes and missing fields in initial data.
 
 ## Installation
 
@@ -38,12 +56,9 @@ uv add fh-pydantic-form
 
 This will also install necessary dependencies like `pydantic`, `python-fasthtml`, and `monsterui`.
 
-
-# Basic Usage
-
+## Quick Start
 
 ```python
-
 # examples/simple_example.py
 import fasthtml.common as fh
 import monsterui.all as mui
@@ -92,7 +107,12 @@ def get():
                         # Render the inputs using the renderer
                         form_renderer.render_inputs(),
                         # Add standard form buttons
-                        mui.Button("Submit", type="submit", cls=mui.ButtonT.primary),
+                        fh.Div(
+                            mui.Button("Submit", type="submit", cls=mui.ButtonT.primary),
+                            form_renderer.refresh_button("🔄"),
+                            form_renderer.reset_button("↩️"),
+                            cls="mt-4 flex items-center gap-2",
+                        ),
                         # HTMX attributes for form submission
                         hx_post="/submit_form",
                         hx_target="#result", # Target div for response
@@ -138,8 +158,8 @@ async def post_submit_form(req):
 
 if __name__ == "__main__":
     fh.serve()
-
 ```
+
 ## Key Features
 
 -   **Automatic Field Rendering:** Handles `str`, `int`, `float`, `bool`, `date`, `time`, `Optional`, `Literal`, nested `BaseModel`s, and `List`s out-of-the-box.
@@ -148,11 +168,12 @@ if __name__ == "__main__":
 -   **Descriptions as Tooltips:** Uses `Field(description=...)` from Pydantic to create tooltips (`uk-tooltip` via UIkit).
 -   **Required Fields:** Automatically adds the `required` attribute based on field definitions (considering `Optional` and defaults).
 -   **Disabled Fields:** Disable the whole form with `disabled=True` or disable specific fields with `disabled_fields`
--   **Collapsible Nested Models:** Renders nested Pydantic models in collapsible details/summary elements for better form organization and space management.
+-   **Collapsible Nested Models:** Renders nested Pydantic models in accordion-style components for better form organization and space management.
 -   **List Manipulation:**
     -   Renders lists of simple types or models in accordion-style cards with an enhanced UI.
     -   Provides HTMX endpoints (registered via `register_routes`) for adding and deleting list items.
     -   Includes JavaScript (`list_manipulation_js()`) for client-side reordering (moving items up/down).
+    -   Click list field labels to toggle all items open/closed.
 -   **Form Refresh & Reset:**
     -   Provides HTMX-powered "Refresh" and "Reset" buttons (`form_renderer.refresh_button()`, `form_renderer.reset_button()`).
     -   Refresh updates list item summaries or other dynamic parts without full page reload.
@@ -160,95 +181,241 @@ if __name__ == "__main__":
 -   **Custom Renderers:** Register your own `BaseFieldRenderer` subclasses for specific Pydantic types or complex field logic using `FieldRendererRegistry` or by passing `custom_renderers` during `PydanticForm` initialization.
 -   **Form Data Parsing:** Includes logic (`form_renderer.parse` and `form_renderer.model_validate_request`) to correctly parse submitted form data (handling prefixes, list indices, nested structures, boolean checkboxes, etc.) back into a dictionary suitable for Pydantic validation.
 
-## disabled fields
+## Spacing & Styling
 
-You can disable the full form with `PydanticForm("my_form", FormModel, disabled=True)` or disable specific fields with `PydanticForm("my_form", FormModel, disabled_fields=["field1", "field3"])`.
+`fh-pydantic-form` ships with two spacing presets to fit different UI requirements:
 
-## Excluded fields
+| Theme | Purpose | Usage |
+|-------|---------|-------|
+| **normal** (default) | Comfortable margins & borders – great for desktop forms | `PydanticForm(..., spacing="normal")` |
+| **compact** | Ultra-dense UIs, mobile layouts, or forms with many fields | `PydanticForm(..., spacing="compact")` |
 
-You can exclude specific fields from being rendered in the form by using the `exclude_fields` parameter:
+```python
+# Example: side-by-side normal vs compact forms
+form_normal = PydanticForm("normal_form", MyModel, spacing="normal")
+form_compact = PydanticForm("compact_form", MyModel, spacing="compact")
+```
+
+**Compact mode** automatically injects additional CSS (`COMPACT_EXTRA_CSS`) to minimize margins, borders, and padding throughout the form. You can also import and use this CSS independently:
+
+```python
+from fh_pydantic_form import COMPACT_EXTRA_CSS
+
+app, rt = fh.fast_app(
+    hdrs=[
+        mui.Theme.blue.headers(),
+        COMPACT_EXTRA_CSS,  # Apply compact styling globally
+    ],
+    # ...
+)
+```
+
+## Working with Lists
+
+When your Pydantic models contain `List[str]`, `List[int]`, or `List[BaseModel]` fields, `fh-pydantic-form` provides rich list manipulation capabilities:
+
+### Basic Setup
+
+```python
+from fh_pydantic_form import PydanticForm, list_manipulation_js
+from typing import List
+
+app, rt = fh.fast_app(
+    hdrs=[
+        mui.Theme.blue.headers(),
+        list_manipulation_js(),  # Required for list manipulation
+    ],
+    pico=False,
+    live=True,
+)
+
+class ListModel(BaseModel):
+    name: str = ""
+    tags: List[str] = Field(["tag1", "tag2"])
+    addresses: List[Address] = Field(default_factory=list)
+
+form_renderer = PydanticForm("list_model", ListModel)
+form_renderer.register_routes(app)  # Register HTMX endpoints
+```
+
+### List Features
+
+- **Add Items:** Each list has an "Add Item" button that creates new entries
+- **Delete Items:** Each list item has a delete button with confirmation
+- **Reorder Items:** Move items up/down with arrow buttons
+- **Toggle All:** Click the list field label to expand/collapse all items at once
+- **Refresh Display:** Use the 🔄 icon next to list labels to update item summaries
+- **Smart Defaults:** New items are created with sensible default values
+
+The list manipulation uses HTMX for seamless updates without page reloads, and includes JavaScript for client-side reordering.
+
+## Nested Models
+
+Nested Pydantic models are automatically rendered in collapsible accordion components:
+
+```python
+class Address(BaseModel):
+    street: str = "123 Main St"
+    city: str = "Anytown"
+    is_billing: bool = False
+
+class User(BaseModel):
+    name: str
+    address: Address  # Rendered as collapsible accordion
+    backup_addresses: List[Address]  # List of accordions
+```
+
+**Key behaviors:**
+- Nested models inherit `disabled` and `spacing` settings from the parent form
+- Field prefixes are automatically managed (e.g., `user_address_street`)
+- Accordions are open by default for better user experience
+- Schema drift is handled gracefully - missing fields use defaults, unknown fields are ignored
+
+## Literal & Enum Fields
+
+`Literal` and enum-like fields are automatically rendered as dropdown selects:
+
+```python
+from typing import Literal
+
+class OrderModel(BaseModel):
+    status: Literal["NEW", "PROCESSING", "SHIPPED", "DELIVERED"]
+    priority: Optional[Literal["LOW", "MEDIUM", "HIGH"]] = None
+```
+
+- **Required Literal fields** show only the defined choices
+- **Optional Literal fields** include a "-- None --" option
+- Values are automatically converted during form parsing and validation
+
+## Disabling & Excluding Fields
+
+### Disabling Fields
+
+You can disable the entire form or specific fields:
+
+```python
+# Disable all fields
+form_renderer = PydanticForm("my_form", FormModel, disabled=True)
+
+# Disable specific fields only
+form_renderer = PydanticForm(
+    "my_form",
+    FormModel,
+    disabled_fields=["field1", "field3"]
+)
+```
+
+### Excluding Fields
+
+Exclude specific fields from being rendered in the form:
 
 ```python
 form_renderer = PydanticForm(
-    "my_form", 
-    FormModel, 
+    "my_form",
+    FormModel,
     exclude_fields=["internal_field", "computed_field"]
 )
 ```
 
-When fields are excluded from the UI, `fh-pydantic-form` will automatically inject their default values (if defined in the Pydantic model) during form parsing and validation. This ensures that:
+**Important:** When fields are excluded from the UI, `fh-pydantic-form` automatically injects their default values during form parsing and validation. This ensures:
 
 - **Hidden fields with defaults** are still included in the final validated data
 - **Required fields without defaults** will still cause validation errors if not provided elsewhere
 - **Default factories** are executed to provide computed default values
 - **Nested BaseModel defaults** are converted to dictionaries for consistency
 
-This automatic default injection means you can safely exclude fields that should not be user-editable while maintaining data integrity during validation.
+This automatic default injection means you can safely exclude fields that shouldn't be user-editable while maintaining data integrity.
 
- 
-## Manipulating lists fields 
+## Refreshing & Resetting
 
-When you have `BaseModels` with fields that are e.g. `List[str]` or even `List[BaseModel]` you want to be able to easily edit the list by adding, deleting and moving items. For this we need a little bit of javascript and register some additional routes:
-
-```python
-from fh_pydantic_form import PydanticForm, list_manipulation_js
-
-app, rt = fh.fast_app(
-    hdrs=[
-        mui.Theme.blue.headers(),
-        list_manipulation_js(),
-    ],
-    pico=False,
-    live=True,
-)
-
-
-class ListModel(BaseModel):
-    name: str = ""
-    tags: List[str] = Field(["tag1", "tag2"])
-
-
-form_renderer = PydanticForm("list_model", ListModel)
-form_renderer.register_routes(app)
-```
-
-## Refreshing and resetting the form
-
-You can set the initial values of the form by passing an instantiated BaseModel:
-
-```python
-form_renderer = PydanticForm("my_form", ListModel, initial_values=ListModel(name="John", tags=["happy", "joy"]))
-```
-
-You can reset the form back to these initial values by adding a `form_render.reset_button()` to your UI:
+Forms support dynamic refresh and reset functionality:
 
 ```python
 mui.Form(
     form_renderer.render_inputs(),
     fh.Div(
-        mui.Button("Validate and Show JSON",cls=mui.ButtonT.primary,),
-        form_renderer.refresh_button(),
-        form_renderer.reset_button(),
+        mui.Button("Submit", type="submit", cls=mui.ButtonT.primary),
+        form_renderer.refresh_button("🔄 Refresh"),  # Update display
+        form_renderer.reset_button("↩️ Reset"),      # Restore initial values
+        cls="mt-4 flex items-center gap-2",
     ),
-    hx_post="/submit_form",
-    hx_target="#result",
-    hx_swap="innerHTML",
+    # ... rest of form setup
 )
 ```
 
-The refresh button 🔄 refreshes the list item labels. These are rendered initially to summarize the underlying item, but do not automatically update after editing unless refreshed. You can also use the 🔄 icon next to the list field label. 
+### Setting Initial Values
 
-
-## Custom renderers
-
-The library is extensible by adding your own input renderers for your types. This can be used to override e.g. the default BaseModelFieldRenderer for nested BaseModels, but also to register types that are not (yet) supported (but submit a PR then as well!)
-
-You can register a renderer based on type, type str, or a predicate function:
+You can set initial form values by passing a model instance or dictionary:
 
 ```python
-from fh_pydantic_form import FieldRendererRegistry
+initial_data = MyModel(name="John", tags=["happy", "joy"])
+form_renderer = PydanticForm("my_form", MyModel, initial_values=initial_data)
+```
 
+- **Refresh button** updates the form display based on current values (useful for updating list item summaries)
+- **Reset button** restores all fields to their initial values with confirmation
+- Both use HTMX for seamless updates without page reloads
+
+## Label Colors
+
+Customize the appearance of field labels with the `label_colors` parameter:
+
+```python
+form_renderer = PydanticForm(
+    "my_form",
+    MyModel,
+    label_colors={
+        "name": "text-blue-600",    # Tailwind CSS class
+        "score": "#E12D39",        # Hex color value
+        "status": "text-green-500", # Another Tailwind class
+    },
+)
+```
+
+**Supported formats:**
+- **Tailwind CSS classes:** `"text-blue-600"`, `"text-red-500"`, etc.
+- **Hex color values:** `"#FF0000"`, `"#0066CC"`, etc.
+- **CSS color names:** `"red"`, `"blue"`, `"darkgreen"`, etc.
+
+Label colors are applied to the field labels only and work with all spacing themes.
+
+## Schema Drift Resilience
+
+`fh-pydantic-form` gracefully handles model evolution and schema changes:
+
+### Surviving Model Changes
+
+Initial values can come from **older or newer** versions of your model – unknown fields are ignored gracefully and missing fields use defaults, so your admin dashboard never crashes after a deploy.
+
+```python
+# Your model evolves over time
+class UserModel(BaseModel):
+    name: str
+    email: str           # Added in v2
+    phone: Optional[str] # Added in v3
+
+# Old data still works
+old_data = {"name": "John"}  # Missing newer fields
+form = PydanticForm("user", UserModel, initial_values=old_data)
+
+# Newer data works too
+new_data = {"name": "Jane", "email": "jane@example.com", "phone": "555-1234", "removed_field": "ignored"}
+form = PydanticForm("user", UserModel, initial_values=new_data)
+```
+
+**Benefits:**
+- **Backward compatibility:** Old data structures continue to work
+- **Forward compatibility:** Unknown fields are silently ignored
+- **Graceful degradation:** Missing fields fall back to model defaults
+- **Production stability:** No crashes during rolling deployments
+
+## Custom Renderers
+
+The library is extensible through custom field renderers for specialized input types:
+
+```python
 from fh_pydantic_form.field_renderers import BaseFieldRenderer
+from fh_pydantic_form import FieldRendererRegistry
 
 class CustomDetail(BaseModel):
     value: str = "Default value"
@@ -257,9 +424,8 @@ class CustomDetail(BaseModel):
     def __str__(self) -> str:
         return f"{self.value} ({self.confidence})"
 
-
 class CustomDetailFieldRenderer(BaseFieldRenderer):
-    """display value input and dropdown side by side"""
+    """Display value input and dropdown side by side"""
 
     def render_input(self):
         value_input = fh.Div(
@@ -270,10 +436,10 @@ class CustomDetailFieldRenderer(BaseFieldRenderer):
                 placeholder=f"Enter {self.original_field_name.replace('_', ' ')} value",
                 cls="uk-input w-full",  
             ),
-            cls="flex-grow", # apply some custom css
+            cls="flex-grow",
         )
 
-        confidence_options_ft = [
+        confidence_options = [
             fh.Option(
                 opt, value=opt, selected=(opt == self.value.get("confidence", "MEDIUM"))
             )
@@ -281,46 +447,70 @@ class CustomDetailFieldRenderer(BaseFieldRenderer):
         ]
 
         confidence_select = mui.Select(
-            *confidence_options_ft,
+            *confidence_options,
             id=f"{self.field_name}_confidence",
             name=f"{self.field_name}_confidence",
-            cls_wrapper="w-[110px] min-w-[110px] flex-shrink-0",  # apply some custom css
+            cls_wrapper="w-[110px] min-w-[110px] flex-shrink-0",
         )
 
         return fh.Div(
             value_input,
             confidence_select,
-            cls="flex items-start gap-2 w-full",  # apply some custom css
+            cls="flex items-start gap-2 w-full",
         )
 
+# Register the custom renderer (multiple ways)
+FieldRendererRegistry.register_type_renderer(CustomDetail, CustomDetailFieldRenderer)
 
-# these are all equivalent. You can either register the type directly
-FieldRendererRegistry.register_type_renderer(CustomDetail, CustomDetailFieldRender)
-# or just by the name of the type
-FieldRendererRegistry.register_type_name_renderer("CustomDetail", CustomDetailFieldRender)
-# or register I predicate function
-FieldRendererRegistry.register_type_renderer_with_predicate(lambda: x: isinstance(x, CustomDetail), CustomDetailFieldRender)
-```
-
-You can also pass these directly to the `PydanticForm` with the custom_renderers argument:
-
-```python
-
+# Or pass directly to PydanticForm
 form_renderer = PydanticForm(
-    form_name="main_form",
-    model_class=ComplexSchema,
-    initial_values=initial_values,
-    custom_renderers=[
-        (CustomDetail, CustomDetailFieldRenderer)
-    ],  # Register Detail renderer
+    "my_form",
+    MyModel,
+    custom_renderers=[(CustomDetail, CustomDetailFieldRenderer)],
 )
 ```
+
+### Registration Methods
+
+- **Type-based:** `register_type_renderer(CustomDetail, CustomDetailFieldRenderer)`
+- **Type name:** `register_type_name_renderer("CustomDetail", CustomDetailFieldRenderer)`
+- **Predicate:** `register_type_renderer_with_predicate(lambda field: isinstance(field.annotation, CustomDetail), CustomDetailFieldRenderer)`
+
+## API Reference
+
+### PydanticForm Constructor
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `form_name` | `str` | Required | Unique identifier for the form (used for HTMX routes and prefixes) |
+| `model_class` | `Type[BaseModel]` | Required | The Pydantic model class to render |
+| `initial_values` | `Optional[Union[BaseModel, Dict]]` | `None` | Initial form values as model instance or dictionary |
+| `custom_renderers` | `Optional[List[Tuple[Type, Type[BaseFieldRenderer]]]]` | `None` | List of (type, renderer_class) pairs for custom rendering |
+| `disabled` | `bool` | `False` | Whether to disable all form inputs |
+| `disabled_fields` | `Optional[List[str]]` | `None` | List of specific field names to disable |
+| `label_colors` | `Optional[Dict[str, str]]` | `None` | Mapping of field names to CSS colors or Tailwind classes |
+| `exclude_fields` | `Optional[List[str]]` | `None` | List of field names to exclude from rendering (auto-injected on submission) |
+| `spacing` | `SpacingValue` | `"normal"` | Spacing theme: `"normal"`, `"compact"`, or `SpacingTheme` enum |
+
+### Key Methods
+
+| Method | Purpose |
+|--------|---------|
+| `render_inputs()` | Generate the HTML form inputs (without `<form>` wrapper) |
+| `refresh_button(text=None, **kwargs)` | Create a refresh button component |
+| `reset_button(text=None, **kwargs)` | Create a reset button component |
+| `register_routes(app)` | Register HTMX endpoints for list manipulation |
+| `parse(form_dict)` | Parse raw form data into model-compatible dictionary |
+| `model_validate_request(req)` | Extract, parse, and validate form data from request |
+
+### Utility Functions
+
+| Function | Purpose |
+|----------|---------|
+| `list_manipulation_js()` | JavaScript for list reordering and toggle functionality |
+| `default_dict_for_model(model_class)` | Generate default values for all fields in a model |
+| `default_for_annotation(annotation)` | Get sensible default for a type annotation |
 
 ## Contributing
 
 Contributions are welcome! Please feel free to open an issue or submit a pull request.
-
-
-
-
-

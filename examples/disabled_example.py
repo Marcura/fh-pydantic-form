@@ -35,6 +35,7 @@ renderer_partially_disabled = PydanticForm(
     form_name="partial_disabled_form",
     model_class=DisabledExampleModel,
     disabled_fields=["count", "is_required"],  # Disable count and is_required
+    spacing="compact",  # Demonstrate that disabled + compact work together
 )
 
 
@@ -88,6 +89,10 @@ def get():
                 ),
                 mui.CardBody(
                     fh.P("Only the 'count' and 'is_required' fields are disabled."),
+                    fh.P(
+                        "This form also uses compact spacing theme.",
+                        cls="text-sm text-gray-600 mb-2",
+                    ),
                     mui.Form(
                         renderer_partially_disabled.render_inputs(),
                         mui.Button("Submit", type="submit", cls=mui.ButtonT.primary),

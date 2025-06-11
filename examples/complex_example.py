@@ -214,7 +214,10 @@ form_renderer_normal = PydanticForm(
         "processing_flags",
         "backup_address",
     ],
-    label_colors={"name": "blue", "score": "#FF0000"},
+    label_colors={
+        "name": "blue",
+        "score": "#FF0000",
+    },  # Customize field label colors - see README "Label Colors" section
     spacing="normal",  # Now supports string values with type safety
 )
 
