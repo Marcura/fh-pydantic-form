@@ -839,6 +839,16 @@ def datetime_model_list_client():
     return TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def _stub_fasthtml_serve(monkeypatch):
+    """
+    Prevent `fh.serve()` from starting a real event-loop when any example
+    is imported.  It only affects the *examples* because core library code
+    never calls `fh.serve()` at import time.
+    """
+    monkeypatch.setattr("fasthtml.common.serve", lambda *a, **kw: None, raising=False)
+
+
 @pytest.fixture(scope="module")
 def user_default_list_client():
     """TestClient for testing list operations with user-defined default methods."""
