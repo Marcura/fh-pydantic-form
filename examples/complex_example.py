@@ -742,12 +742,5 @@ async def post_main_form_compact(req):
         )
 
 
-# Keep the original route for backward compatibility
-@rt("/submit_form")
-async def post_main_form(req):
-    # Redirect to normal form handler
-    return await post_main_form_normal(req)
-
-
 if __name__ == "__main__":
     fh.serve()
