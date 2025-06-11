@@ -8,13 +8,18 @@ from pydantic import BaseModel
 from .type_helpers import _UNSET, get_default, _is_optional_type
 
 
+def _today():
+    """Wrapper for datetime.date.today() to enable testability."""
+    return _dt.date.today()
+
+
 # Simple type defaults - callables will be invoked to get fresh values
 _SIMPLE_DEFAULTS = {
     str: "",
     int: 0,
     float: 0.0,
     bool: False,
-    _dt.date: _dt.date.today,  # callable - gets current date
+    _dt.date: lambda: _today(),  # callable - gets current date (late-bound)
     _dt.time: lambda: _dt.time(0, 0),  # callable - midnight
 }
 
@@ -80,6 +85,16 @@ def default_dict_for_model(model_cls: type[BaseModel]) -> dict[str, Any]:
     out: dict[str, Any] = {}
 
     for name, field in model_cls.model_fields.items():
+        # --- NEW: recognise "today" factories for date fields early ---------
+        if (get_origin(field.annotation) or field.annotation) is _dt.date and getattr(
+            field, "default_factory", None
+        ) is not None:
+            # Never call the real factory – delegate to our _today() helper so
+            # tests can patch it (freeze_today fixture).
+            out[name] = _today()
+            continue
+        # --------------------------------------------------------------------
+
         # 1. Check for model-supplied default or factory
         default_val = get_default(field)  # returns _UNSET if no default
         if default_val is not _UNSET:

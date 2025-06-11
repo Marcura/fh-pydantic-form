@@ -548,3 +548,337 @@ def sample_field_info():
     from pydantic.fields import FieldInfo
 
     return FieldInfo(annotation=str)
+
+
+@pytest.fixture
+def freeze_today(mocker):
+    """Freeze datetime.date.today to a predictable value for testing."""
+    return mocker.patch(
+        "fh_pydantic_form.defaults._today", return_value=datetime.date(2021, 1, 1)
+    )
+
+
+@pytest.fixture(scope="module")
+def simple_list_client():
+    """TestClient for testing simple list operations."""
+
+    class SimpleListModel(BaseModel):
+        name: str = "Test Model"
+        tags: List[str] = Field(default_factory=list)
+
+    form_renderer = PydanticForm("test_simple_list", SimpleListModel)
+    app, rt = fh.fast_app(
+        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()], pico=False, live=False
+    )
+    form_renderer.register_routes(app)
+
+    @rt("/")
+    def get():
+        return fh.Div(
+            mui.Container(
+                mui.CardHeader("Simple List Test Form"),
+                mui.Card(
+                    mui.CardBody(
+                        mui.Form(
+                            form_renderer.render_inputs(), id="test-simple-list-form"
+                        )
+                    ),
+                ),
+            ),
+        )
+
+    return TestClient(app)
+
+
+@pytest.fixture(scope="module")
+def address_list_client():
+    """TestClient for testing address list operations with model items."""
+
+    class AddressModel(BaseModel):
+        street: str
+        city: str
+        is_billing: bool = False
+
+        def __str__(self) -> str:
+            return f"{self.street}, {self.city} ({'billing' if self.is_billing else 'shipping'})"
+
+    class AddressListModel(BaseModel):
+        name: str = "Address List"
+        addresses: List[AddressModel] = Field(default_factory=list)
+
+    form_renderer = PydanticForm("test_address_list", AddressListModel)
+    app, rt = fh.fast_app(
+        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()], pico=False, live=False
+    )
+    form_renderer.register_routes(app)
+
+    @rt("/")
+    def get():
+        return fh.Div(
+            mui.Container(
+                mui.CardHeader("Address List Test Form"),
+                mui.Card(
+                    mui.CardBody(
+                        mui.Form(
+                            form_renderer.render_inputs(), id="test-address-list-form"
+                        )
+                    ),
+                ),
+            ),
+        )
+
+    return TestClient(app)
+
+
+@pytest.fixture(scope="module")
+def custom_model_list_client():
+    """TestClient for testing list operations with models that have explicit defaults."""
+
+    class CustomItemModel(BaseModel):
+        name: str = "Default Item"
+        value: str = "Default Value"
+        priority: int = 1
+        is_active: bool = True
+
+        def __str__(self) -> str:
+            return f"{self.name}: {self.value}"
+
+    class CustomListModel(BaseModel):
+        title: str = "Custom List"
+        items: List[CustomItemModel] = Field(default_factory=list)
+
+    form_renderer = PydanticForm("test_custom_list", CustomListModel)
+    app, rt = fh.fast_app(
+        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()], pico=False, live=False
+    )
+    form_renderer.register_routes(app)
+
+    @rt("/")
+    def get():
+        return fh.Div(
+            mui.Container(
+                mui.CardHeader("Custom List Test Form"),
+                mui.Card(
+                    mui.CardBody(
+                        mui.Form(
+                            form_renderer.render_inputs(), id="test-custom-list-form"
+                        )
+                    ),
+                ),
+            ),
+        )
+
+    return TestClient(app)
+
+
+@pytest.fixture(scope="module")
+def optional_model_list_client():
+    """TestClient for testing list operations with optional fields."""
+
+    class OptionalItemModel(BaseModel):
+        name: str  # Required field
+        description: Optional[str]  # Optional field without default
+        nickname: Optional[str] = "Default Nick"  # Optional field with default
+        score: Optional[int]  # Optional field without default
+
+        def __str__(self) -> str:
+            return f"{self.name} ({self.nickname or 'no nickname'})"
+
+    class OptionalListModel(BaseModel):
+        title: str = "Optional List"
+        items: List[OptionalItemModel] = Field(default_factory=list)
+
+    form_renderer = PydanticForm("test_optional_list", OptionalListModel)
+    app, rt = fh.fast_app(
+        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()], pico=False, live=False
+    )
+    form_renderer.register_routes(app)
+
+    @rt("/")
+    def get():
+        return fh.Div(
+            mui.Container(
+                mui.CardHeader("Optional List Test Form"),
+                mui.Card(
+                    mui.CardBody(
+                        mui.Form(
+                            form_renderer.render_inputs(), id="test-optional-list-form"
+                        )
+                    ),
+                ),
+            ),
+        )
+
+    return TestClient(app)
+
+
+@pytest.fixture(scope="module")
+def literal_model_list_client():
+    """TestClient for testing list operations with Literal fields."""
+
+    class LiteralItemModel(BaseModel):
+        name: str
+        status: Literal["PENDING", "ACTIVE", "COMPLETED"]
+        priority: Optional[Literal["HIGH", "MEDIUM", "LOW"]]
+
+        def __str__(self) -> str:
+            return f"{self.name} ({self.status})"
+
+    class LiteralListModel(BaseModel):
+        title: str = "Literal List"
+        items: List[LiteralItemModel] = Field(default_factory=list)
+
+    form_renderer = PydanticForm("test_literal_list", LiteralListModel)
+    app, rt = fh.fast_app(
+        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()], pico=False, live=False
+    )
+    form_renderer.register_routes(app)
+
+    @rt("/")
+    def get():
+        return fh.Div(
+            mui.Container(
+                mui.CardHeader("Literal List Test Form"),
+                mui.Card(
+                    mui.CardBody(
+                        mui.Form(
+                            form_renderer.render_inputs(), id="test-literal-list-form"
+                        )
+                    ),
+                ),
+            ),
+        )
+
+    return TestClient(app)
+
+
+@pytest.fixture(scope="module")
+def nested_model_list_client():
+    """TestClient for testing list operations with nested models."""
+
+    class InnerModel(BaseModel):
+        inner_name: str
+        inner_value: int = 10
+
+        def __str__(self) -> str:
+            return f"Inner: {self.inner_name}"
+
+    class NestedItemModel(BaseModel):
+        name: str
+        inner: InnerModel
+
+        def __str__(self) -> str:
+            return f"{self.name} -> {self.inner}"
+
+    class NestedListModel(BaseModel):
+        title: str = "Nested List"
+        items: List[NestedItemModel] = Field(default_factory=list)
+
+    form_renderer = PydanticForm("test_nested_list", NestedListModel)
+    app, rt = fh.fast_app(
+        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()], pico=False, live=False
+    )
+    form_renderer.register_routes(app)
+
+    @rt("/")
+    def get():
+        return fh.Div(
+            mui.Container(
+                mui.CardHeader("Nested List Test Form"),
+                mui.Card(
+                    mui.CardBody(
+                        mui.Form(
+                            form_renderer.render_inputs(), id="test-nested-list-form"
+                        )
+                    ),
+                ),
+            ),
+        )
+
+    return TestClient(app)
+
+
+@pytest.fixture(scope="module")
+def datetime_model_list_client():
+    """TestClient for testing list operations with date/time fields."""
+
+    class DateTimeItemModel(BaseModel):
+        name: str
+        created_date: datetime.date
+        start_time: datetime.time
+        optional_date: Optional[datetime.date]
+
+        def __str__(self) -> str:
+            return f"{self.name} ({self.created_date})"
+
+    class DateTimeListModel(BaseModel):
+        title: str = "DateTime List"
+        items: List[DateTimeItemModel] = Field(default_factory=list)
+
+    form_renderer = PydanticForm("test_datetime_list", DateTimeListModel)
+    app, rt = fh.fast_app(
+        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()], pico=False, live=False
+    )
+    form_renderer.register_routes(app)
+
+    @rt("/")
+    def get():
+        return fh.Div(
+            mui.Container(
+                mui.CardHeader("DateTime List Test Form"),
+                mui.Card(
+                    mui.CardBody(
+                        mui.Form(
+                            form_renderer.render_inputs(), id="test-datetime-list-form"
+                        )
+                    ),
+                ),
+            ),
+        )
+
+    return TestClient(app)
+
+
+@pytest.fixture(scope="module")
+def user_default_list_client():
+    """TestClient for testing list operations with user-defined default methods."""
+
+    class UserDefaultItemModel(BaseModel):
+        name: str
+        value: str
+        count: int
+
+        @classmethod
+        def default(cls):
+            return cls(name="User Default Name", value="User Default Value", count=42)
+
+        def __str__(self) -> str:
+            return f"{self.name}: {self.value} (x{self.count})"
+
+    class UserDefaultListModel(BaseModel):
+        title: str = "User Default List"
+        items: List[UserDefaultItemModel] = Field(default_factory=list)
+
+    form_renderer = PydanticForm("test_user_default_list", UserDefaultListModel)
+    app, rt = fh.fast_app(
+        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()], pico=False, live=False
+    )
+    form_renderer.register_routes(app)
+
+    @rt("/")
+    def get():
+        return fh.Div(
+            mui.Container(
+                mui.CardHeader("User Default List Test Form"),
+                mui.Card(
+                    mui.CardBody(
+                        mui.Form(
+                            form_renderer.render_inputs(),
+                            id="test-user-default-list-form",
+                        )
+                    ),
+                ),
+            ),
+        )
+
+    return TestClient(app)
