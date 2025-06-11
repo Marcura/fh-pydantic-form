@@ -1,11 +1,35 @@
 from enum import Enum, auto
-from typing import Dict
+from typing import Dict, Literal, Union
 import fasthtml.common as fh
 
 
 class SpacingTheme(Enum):
     NORMAL = auto()
     COMPACT = auto()
+
+
+# Type alias for spacing values - supports both literal strings and enum values
+SpacingValue = Union[Literal["normal", "compact"], SpacingTheme]
+
+
+def _normalize_spacing(spacing_value: SpacingValue) -> SpacingTheme:
+    """Convert literal string or enum spacing value to SpacingTheme enum."""
+    if isinstance(spacing_value, str):
+        if spacing_value == "compact":
+            return SpacingTheme.COMPACT
+        elif spacing_value == "normal":
+            return SpacingTheme.NORMAL
+        else:
+            # This case shouldn't happen with proper Literal typing, but included for runtime safety
+            raise ValueError(
+                f"Invalid spacing value: {spacing_value}. Must be 'compact', 'normal', or SpacingTheme enum"
+            )
+    elif isinstance(spacing_value, SpacingTheme):
+        return spacing_value
+    else:
+        raise TypeError(
+            f"spacing must be Literal['normal', 'compact'] or SpacingTheme, got {type(spacing_value)}"
+        )
 
 
 SPACING_MAP: Dict[SpacingTheme, Dict[str, str]] = {
@@ -48,8 +72,9 @@ SPACING_MAP: Dict[SpacingTheme, Dict[str, str]] = {
 }
 
 
-def spacing(token: str, theme: SpacingTheme) -> str:
+def spacing(token: str, spacing: SpacingValue) -> str:
     """Return a Tailwind utility class for the given semantic token."""
+    theme = _normalize_spacing(spacing)
     return SPACING_MAP[theme][token]
 
 

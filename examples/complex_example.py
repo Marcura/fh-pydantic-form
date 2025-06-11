@@ -6,7 +6,7 @@ import fasthtml.common as fh
 import monsterui.all as mui
 from pydantic import BaseModel, Field, ValidationError
 
-from fh_pydantic_form import PydanticForm, SpacingTheme, list_manipulation_js
+from fh_pydantic_form import PydanticForm, list_manipulation_js
 from fh_pydantic_form.field_renderers import BaseFieldRenderer
 from fh_pydantic_form.ui_style import COMPACT_EXTRA_CSS
 
@@ -215,7 +215,7 @@ form_renderer_normal = PydanticForm(
         "backup_address",
     ],
     label_colors={"name": "blue", "score": "#FF0000"},
-    spacing_theme=SpacingTheme.NORMAL,
+    spacing="normal",  # Now supports string values with type safety
 )
 
 form_renderer_compact = PydanticForm(
@@ -235,7 +235,7 @@ form_renderer_compact = PydanticForm(
         "backup_address",
     ],
     label_colors={"name": "blue", "score": "#FF0000"},
-    spacing_theme=SpacingTheme.COMPACT,
+    spacing="compact",  # Clean string-based API with full type safety
 )
 
 # Register routes for both forms

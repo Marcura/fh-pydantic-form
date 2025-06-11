@@ -29,7 +29,12 @@ from fh_pydantic_form.form_parser import (
 )
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import _UNSET, get_default
-from fh_pydantic_form.ui_style import SpacingTheme, spacing
+from fh_pydantic_form.ui_style import (
+    SpacingTheme,
+    SpacingValue,
+    spacing,
+    _normalize_spacing,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -206,7 +211,7 @@ class PydanticForm(Generic[ModelType]):
         Wrap inner markup with a '.compact-form' div and inject one <style>
         block when compact theme is used.
         """
-        if self.spacing_theme == SpacingTheme.COMPACT:
+        if self.spacing == SpacingTheme.COMPACT:
             from fh_pydantic_form.ui_style import COMPACT_EXTRA_CSS
 
             return fh.Div(COMPACT_EXTRA_CSS, inner, cls="compact-form")
@@ -223,7 +228,7 @@ class PydanticForm(Generic[ModelType]):
         disabled_fields: Optional[List[str]] = None,
         label_colors: Optional[Dict[str, str]] = None,
         exclude_fields: Optional[List[str]] = None,
-        spacing_theme: SpacingTheme = SpacingTheme.NORMAL,
+        spacing: SpacingValue = SpacingTheme.NORMAL,
     ):
         """
         Initialize the form renderer
@@ -239,7 +244,7 @@ class PydanticForm(Generic[ModelType]):
             disabled_fields: Optional list of top-level field names to disable specifically
             label_colors: Optional dictionary mapping field names to label colors (CSS color values)
             exclude_fields: Optional list of top-level field names to exclude from the form
-            spacing_theme: Spacing theme to use for form layout (NORMAL or COMPACT)
+            spacing: Spacing theme to use for form layout ("normal", "compact", or SpacingTheme enum)
         """
         self.name = form_name
         self.model_class = model_class
@@ -280,7 +285,7 @@ class PydanticForm(Generic[ModelType]):
         )  # Store as list for easier checking
         self.label_colors = label_colors or {}  # Store label colors mapping
         self.exclude_fields = exclude_fields or []  # Store excluded fields list
-        self.spacing_theme = spacing_theme  # Store spacing theme
+        self.spacing = _normalize_spacing(spacing)  # Store normalized spacing
 
         # Register custom renderers with the global registry if provided
         if custom_renderers:
@@ -386,7 +391,7 @@ class PydanticForm(Generic[ModelType]):
                 prefix=self.base_prefix,
                 disabled=is_field_disabled,  # Pass the calculated disabled state
                 label_color=label_color,  # Pass the label color if specified
-                spacing_theme=self.spacing_theme,  # Pass the spacing theme
+                spacing=self.spacing,  # Pass the spacing
             )
 
             rendered_field = renderer.render()
@@ -395,7 +400,7 @@ class PydanticForm(Generic[ModelType]):
         # Create container for inputs, ensuring items stretch to full width
         inputs_container = mui.DivVStacked(
             *form_inputs,
-            cls=f"{spacing('stack_gap', self.spacing_theme)} items-stretch",
+            cls=f"{spacing('stack_gap', self.spacing)} items-stretch",
         )
 
         # Define the ID for the wrapper div - this is what the HTMX request targets
@@ -451,7 +456,7 @@ class PydanticForm(Generic[ModelType]):
             form_name=self.name,
             model_class=self.model_class,
             # No initial_data needed here, we set values_dict below
-            spacing_theme=self.spacing_theme,
+            spacing=self.spacing,
         )
         # Set the values based on the parsed (or fallback) data
         temp_renderer.values_dict = parsed_data
@@ -494,7 +499,7 @@ class PydanticForm(Generic[ModelType]):
             disabled_fields=self.disabled_fields,
             label_colors=self.label_colors,
             exclude_fields=self.exclude_fields,
-            spacing_theme=self.spacing_theme,
+            spacing=self.spacing,
         )
 
         reset_inputs_component = temp_renderer.render_inputs()

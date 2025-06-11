@@ -18,7 +18,12 @@ from fh_pydantic_form.type_helpers import (
     _get_underlying_type_if_optional,
     _is_optional_type,
 )
-from fh_pydantic_form.ui_style import SpacingTheme, spacing
+from fh_pydantic_form.ui_style import (
+    SpacingTheme,
+    SpacingValue,
+    _normalize_spacing,
+    spacing,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +53,7 @@ class BaseFieldRenderer:
         prefix: str = "",
         disabled: bool = False,
         label_color: Optional[str] = None,
-        spacing_theme: SpacingTheme = SpacingTheme.NORMAL,
+        spacing: SpacingValue = SpacingTheme.NORMAL,
     ):
         """
         Initialize the field renderer
@@ -60,7 +65,7 @@ class BaseFieldRenderer:
             prefix: Optional prefix for the field name (used for nested fields)
             disabled: Whether the field should be rendered as disabled
             label_color: Optional CSS color value for the field label
-            spacing_theme: Spacing theme to use for layout (NORMAL or COMPACT)
+            spacing: Spacing theme to use for layout ("normal", "compact", or SpacingTheme enum)
         """
         self.field_name = f"{prefix}{field_name}" if prefix else field_name
         self.original_field_name = field_name
@@ -70,7 +75,7 @@ class BaseFieldRenderer:
         self.is_optional = _is_optional_type(field_info.annotation)
         self.disabled = disabled
         self.label_color = label_color
-        self.spacing_theme = spacing_theme
+        self.spacing = _normalize_spacing(spacing)
 
     def render_label(self) -> FT:
         """
@@ -98,7 +103,7 @@ class BaseFieldRenderer:
         label_attrs = {"For": self.field_name}
 
         # Build label classes with tokenized gap
-        label_gap_class = spacing("label_gap", self.spacing_theme)
+        label_gap_class = spacing("label_gap", self.spacing)
         base_classes = f"block text-sm font-medium text-gray-700 {label_gap_class}"
 
         cls_attr = base_classes
@@ -163,7 +168,7 @@ class BaseFieldRenderer:
             open=True,  # Open by default
             li_kwargs={"id": item_id},  # Pass the specific ID for the <li>
             cls=spacing(
-                "outer_margin_sm", self.spacing_theme
+                "outer_margin_sm", self.spacing
             ),  # Add spacing between accordion items
         )
 
@@ -173,7 +178,7 @@ class BaseFieldRenderer:
             id=accordion_id,  # ID for the accordion container (ul)
             multiple=True,  # Allow multiple open (though only one exists)
             collapsible=True,  # Allow toggling
-            cls=f"{spacing('accordion_divider', self.spacing_theme)} {spacing('accordion_content', self.spacing_theme)}".strip(),
+            cls=f"{spacing('accordion_divider', self.spacing)} {spacing('accordion_content', self.spacing)}".strip(),
         )
 
         return accordion_container
@@ -211,7 +216,7 @@ class StringFieldRenderer(BaseFieldRenderer):
             "required": is_field_required,
             "cls": _merge_cls(
                 "w-full",
-                f"{spacing('input_size', self.spacing_theme)} {spacing('input_padding', self.spacing_theme)}".strip(),
+                f"{spacing('input_size', self.spacing)} {spacing('input_padding', self.spacing)}".strip(),
             ),
         }
 
@@ -251,7 +256,7 @@ class NumberFieldRenderer(BaseFieldRenderer):
             "required": is_field_required,
             "cls": _merge_cls(
                 "w-full",
-                f"{spacing('input_size', self.spacing_theme)} {spacing('input_padding', self.spacing_theme)}".strip(),
+                f"{spacing('input_size', self.spacing)} {spacing('input_padding', self.spacing)}".strip(),
             ),
             "step": "any"
             if self.field_info.annotation is float
@@ -327,7 +332,7 @@ class DateFieldRenderer(BaseFieldRenderer):
             "required": is_field_required,
             "cls": _merge_cls(
                 "w-full",
-                f"{spacing('input_size', self.spacing_theme)} {spacing('input_padding', self.spacing_theme)}".strip(),
+                f"{spacing('input_size', self.spacing)} {spacing('input_padding', self.spacing)}".strip(),
             ),
         }
 
@@ -376,7 +381,7 @@ class TimeFieldRenderer(BaseFieldRenderer):
             "required": is_field_required,
             "cls": _merge_cls(
                 "w-full",
-                f"{spacing('input_size', self.spacing_theme)} {spacing('input_padding', self.spacing_theme)}".strip(),
+                f"{spacing('input_size', self.spacing)} {spacing('input_padding', self.spacing)}".strip(),
             ),
         }
 
@@ -447,7 +452,7 @@ class LiteralFieldRenderer(BaseFieldRenderer):
             "placeholder": placeholder_text,
             "cls": _merge_cls(
                 "w-full",
-                f"{spacing('input_size', self.spacing_theme)} {spacing('input_padding', self.spacing_theme)}".strip(),
+                f"{spacing('input_size', self.spacing)} {spacing('input_padding', self.spacing)}".strip(),
             ),
         }
 
@@ -509,19 +514,17 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
             open=True,  # Open by default
             li_kwargs={"id": item_id},  # Pass the specific ID for the <li>
             cls=spacing(
-                "outer_margin", self.spacing_theme
+                "outer_margin", self.spacing
             ),  # Add bottom margin to the <li> element
         )
 
         # 5. Wrap the single AccordionItem in an Accordion container
-        #    - Set multiple=True (harmless for single item)
-        #    - Set collapsible=True
         accordion_container = mui.Accordion(
             accordion_item,  # The single item to include
             id=accordion_id,  # ID for the accordion container (ul)
             multiple=True,  # Allow multiple open (though only one exists)
             collapsible=True,  # Allow toggling
-            cls=f"{spacing('accordion_divider', self.spacing_theme)} {spacing('accordion_content', self.spacing_theme)}".strip(),
+            cls=f"{spacing('accordion_divider', self.spacing)} {spacing('accordion_content', self.spacing)}".strip(),
         )
 
         return accordion_container
@@ -606,7 +609,7 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
                     value=nested_field_value,
                     prefix=nested_prefix,
                     disabled=self.disabled,  # Propagate disabled state to nested fields
-                    spacing_theme=self.spacing_theme,  # Propagate spacing theme to nested fields
+                    spacing=self.spacing,  # Propagate spacing to nested fields
                 )
 
                 nested_inputs.append(renderer.render())
@@ -627,11 +630,11 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
         # Create container for nested inputs
         nested_form_content = mui.DivVStacked(
             *nested_inputs,
-            cls=f"{spacing('inner_gap', self.spacing_theme)} items-stretch",
+            cls=f"{spacing('inner_gap', self.spacing)} items-stretch",
         )
 
         # Wrap in card for visual distinction
-        t = self.spacing_theme
+        t = self.spacing
         return mui.Card(
             nested_form_content,
             cls=f"{spacing('padding_sm', t)} mt-1 {spacing('card_border', t)} rounded".strip(),
@@ -697,7 +700,7 @@ class ListFieldRenderer(BaseFieldRenderer):
         return fh.Div(
             label_with_icon,
             self.render_input(),
-            cls=spacing("outer_margin", self.spacing_theme),
+            cls=spacing("outer_margin", self.spacing),
         )
 
     def render_input(self) -> FT:
@@ -760,7 +763,7 @@ class ListFieldRenderer(BaseFieldRenderer):
             id=container_id,
             multiple=True,  # Allow multiple items to be open at once
             collapsible=True,  # Make it collapsible
-            cls=f"{spacing('inner_gap_small', self.spacing_theme)} {spacing('accordion_content', self.spacing_theme)}".strip(),  # Add space between items and accordion content styling
+            cls=f"{spacing('inner_gap_small', self.spacing)} {spacing('accordion_content', self.spacing)}".strip(),  # Add space between items and accordion content styling
         )
 
         # Empty state message if no items
@@ -800,7 +803,7 @@ class ListFieldRenderer(BaseFieldRenderer):
             )
 
         # Return the complete component
-        t = self.spacing_theme
+        t = self.spacing
         return fh.Div(
             accordion,
             empty_state,
@@ -971,7 +974,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                                 value=nested_field_value,
                                 prefix=name_prefix,
                                 disabled=self.disabled,  # Propagate disabled state
-                                spacing_theme=self.spacing_theme,  # Propagate spacing theme
+                                spacing=self.spacing,  # Propagate spacing
                             )
 
                             # Add rendered field to valid fields
@@ -1006,7 +1009,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                     value=item,
                     prefix=self.prefix,  # Correct: Provide the form prefix
                     disabled=self.disabled,  # Propagate disabled state
-                    spacing_theme=self.spacing_theme,  # Propagate spacing theme
+                    spacing=self.spacing,  # Propagate spacing
                 )
                 input_element = simple_renderer.render_input()
                 item_content_elements.append(fh.Div(input_element))
@@ -1087,7 +1090,7 @@ class ListFieldRenderer(BaseFieldRenderer):
             )
 
             # Assemble actions div
-            t = self.spacing_theme
+            t = self.spacing
             actions = fh.Div(
                 fh.Div(  # Left side buttons
                     delete_button, add_below_button, cls="flex items-center"
@@ -1099,7 +1102,7 @@ class ListFieldRenderer(BaseFieldRenderer):
             )
 
             # Create a wrapper Div for the main content elements with proper padding
-            t = self.spacing_theme
+            t = self.spacing
             content_wrapper = fh.Div(
                 *item_content_elements,
                 cls=f"{spacing('card_body_pad', t)} {spacing('inner_gap', t)}",
@@ -1113,7 +1116,7 @@ class ListFieldRenderer(BaseFieldRenderer):
 
             # Build card classes conditionally based on spacing theme
             card_cls = "uk-card uk-margin-small-bottom"
-            if self.spacing_theme == SpacingTheme.NORMAL:
+            if self.spacing == SpacingTheme.NORMAL:
                 card_cls += " uk-card-default"
 
             return mui.AccordionItem(
@@ -1134,12 +1137,12 @@ class ListFieldRenderer(BaseFieldRenderer):
             li_attrs = {"id": f"{self.field_name}_{idx}_error_card"}
 
             # Wrap error component in a div with consistent padding
-            t = self.spacing_theme
+            t = self.spacing
             content_wrapper = fh.Div(content_component, cls=spacing("card_body_pad", t))
 
             # Build card classes conditionally based on spacing theme
             card_cls = "uk-card uk-margin-small-bottom"
-            if self.spacing_theme == SpacingTheme.NORMAL:
+            if self.spacing == SpacingTheme.NORMAL:
                 card_cls += " uk-card-default"
 
             return mui.AccordionItem(
