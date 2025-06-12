@@ -84,6 +84,46 @@ class BaseFieldRenderer:
         self.label_color = label_color
         self.spacing = _normalize_spacing(spacing)
 
+    def _is_inline_color(self, color: str) -> bool:
+        """
+        Determine if a color should be applied as an inline style or CSS class.
+
+        Args:
+            color: The color value to check
+
+        Returns:
+            True if the color should be applied as inline style, False if as CSS class
+        """
+        # Check if it's a hex color value (starts with #) or basic HTML color name
+        return color.startswith("#") or color in [
+            "red",
+            "blue",
+            "green",
+            "yellow",
+            "orange",
+            "purple",
+            "pink",
+            "cyan",
+            "magenta",
+            "brown",
+            "black",
+            "white",
+            "gray",
+            "grey",
+        ]
+
+    def _get_color_class(self, color: str) -> str:
+        """
+        Get the appropriate CSS class for a color.
+
+        Args:
+            color: The color name
+
+        Returns:
+            The CSS class string for the color
+        """
+        return f"text-{color}-600"
+
     def render_label(self) -> FT:
         """
         Render label for the field
@@ -118,13 +158,12 @@ class BaseFieldRenderer:
 
         # Apply color styling if specified
         if self.label_color:
-            # Check if it's a CSS class (contains letters/hyphens) or a color value
-            if self.label_color.replace("-", "").replace("#", "").isalnum():
-                # Looks like a CSS class, add it to the class list
-                cls_attr = f"block text-sm font-medium {self.label_color} {label_gap_class}".strip()
-            else:
+            if self._is_inline_color(self.label_color):
                 # Treat as color value
                 label_attrs["style"] = f"color: {self.label_color};"
+            else:
+                # Treat as CSS class (includes Tailwind colors like emerald, amber, rose, teal, indigo, lime, violet, etc.)
+                cls_attr = f"block text-sm font-medium {self._get_color_class(self.label_color)} {label_gap_class}".strip()
 
         # Create and return the label - using standard fh.Label with appropriate styling
         return fh.Label(
@@ -559,26 +598,36 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
         Returns:
             A FastHTML component (mui.Accordion) containing the accordion structure.
         """
-        # 1. Get the label content (the inner Span with text/tooltip)
-        label_component = self.render_label()
-        if isinstance(label_component, fh.FT) and label_component.children:
-            label_content = label_component.children[0]
-            # Extract label style if present
-            label_style = label_component.attrs.get("style", "")
-            # Apply label style directly to the span if needed
-            if label_style:
-                # Check if label_content is already a Span, otherwise wrap it
-                if isinstance(label_content, fh.Span):
-                    label_content.attrs["style"] = label_style
-                else:
-                    # This case is less likely if render_label returns Label(Span(...))
-                    label_content = fh.Span(label_content, style=label_style)
+
+        # Extract the label text and apply color styling
+        label_text = self.original_field_name.replace("_", " ").title()
+
+        # Create the title component with proper color styling
+        if self.label_color:
+            if self._is_inline_color(self.label_color):
+                # Color value - apply as inline style
+                title_component = fh.Span(
+                    label_text,
+                    style=f"color: {self.label_color};",
+                    cls="text-sm font-medium",
+                )
+            else:
+                # CSS class - apply as Tailwind class (includes emerald, amber, rose, teal, indigo, lime, violet, etc.)
+                title_component = fh.Span(
+                    label_text,
+                    cls=f"text-sm font-medium {self._get_color_class(self.label_color)}",
+                )
         else:
-            # Fallback if structure is different (should not happen ideally)
-            label_content = self.original_field_name.replace("_", " ").title()
-            label_style = f"color: {self.label_color};" if self.label_color else ""
-            if label_style:
-                label_content = fh.Span(label_content, style=label_style)
+            # No color specified - use default styling
+            title_component = fh.Span(
+                label_text, cls="text-sm font-medium text-gray-700"
+            )
+
+        # Add tooltip if description is available
+        description = getattr(self.field_info, "description", None)
+        if description:
+            title_component.attrs["uk-tooltip"] = description
+            title_component.attrs["title"] = description
 
         # 2. Render the nested input fields that will be the accordion content
         input_component = self.render_input()
@@ -588,13 +637,8 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
         accordion_id = f"{self.field_name}_accordion"
 
         # 4. Create the AccordionItem using the MonsterUI component
-        #    - Pass label_content as the title.
-        #    - Pass input_component as the content.
-        #    - Set 'open=True' to be expanded by default.
-        #    - Pass item_id via li_kwargs.
-        #    - Add 'mb-4' class for bottom margin spacing.
         accordion_item = mui.AccordionItem(
-            label_content,  # Title component (already potentially styled Span)
+            title_component,  # Title component with proper color styling
             input_component,  # Content component (the Card with nested fields)
             open=True,  # Open by default
             li_kwargs={"id": item_id},  # Pass the specific ID for the <li>
@@ -740,8 +784,36 @@ class ListFieldRenderer(BaseFieldRenderer):
         # Extract form name from prefix (removing trailing underscore if present)
         form_name = self.prefix.rstrip("_") if self.prefix else None
 
-        # Get the original label
-        original_label = self.render_label()
+        # Create the label text with proper color styling
+        label_text = self.original_field_name.replace("_", " ").title()
+
+        # Create the styled label span
+        if self.label_color:
+            if self._is_inline_color(self.label_color):
+                # Color value - apply as inline style
+                label_span = fh.Span(
+                    label_text,
+                    style=f"color: {self.label_color};",
+                    cls=f"block text-sm font-medium {spacing('label_gap', self.spacing)}",
+                )
+            else:
+                # CSS class - apply as Tailwind class (includes emerald, amber, rose, teal, indigo, lime, violet, etc.)
+                label_span = fh.Span(
+                    label_text,
+                    cls=f"block text-sm font-medium {self._get_color_class(self.label_color)} {spacing('label_gap', self.spacing)}",
+                )
+        else:
+            # No color specified - use default styling
+            label_span = fh.Span(
+                label_text,
+                cls=f"block text-sm font-medium text-gray-700 {spacing('label_gap', self.spacing)}",
+            )
+
+        # Add tooltip if description is available
+        description = getattr(self.field_info, "description", None)
+        if description:
+            label_span.attrs["uk-tooltip"] = description
+            label_span.attrs["title"] = description
 
         # Construct the container ID that will be generated by render_input()
         container_id = f"{self.prefix}{self.original_field_name}_items_container"
@@ -767,15 +839,15 @@ class ListFieldRenderer(BaseFieldRenderer):
 
             # Combine label and icon
             label_with_icon = fh.Div(
-                original_label,
+                label_span,  # Use the properly styled label span
                 refresh_icon_trigger,
                 cls="flex items-center cursor-pointer",  # Added cursor-pointer
                 onclick=f"toggleListItems('{container_id}'); return false;",  # Add click handler
             )
         else:
-            # If no form name, just use the original label but still make it clickable
+            # If no form name, just use the styled label but still make it clickable
             label_with_icon = fh.Div(
-                original_label,
+                label_span,  # Use the properly styled label span
                 cls="flex items-center cursor-pointer",  # Added cursor-pointer
                 onclick=f"toggleListItems('{container_id}'); return false;",  # Add click handler
                 uk_tooltip="Click to toggle all items open/closed",
