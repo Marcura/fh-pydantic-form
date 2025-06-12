@@ -22,13 +22,14 @@
 6. [Working with Lists](#working-with-lists)
 7. [Nested Models](#nested-models)
 8. [Literal & Enum Fields](#literal--enum-fields)
-9. [Disabling & Excluding Fields](#disabling--excluding-fields)
-10. [Refreshing & Resetting](#refreshing--resetting)
-11. [Label Colors](#label-colors)
-12. [Schema Drift Resilience](#schema-drift-resilience)
-13. [Custom Renderers](#custom-renderers)
-14. [API Reference](#api-reference)
-15. [Contributing](#contributing)
+9. [Initial Values & Enum Parsing](#initial-values--enum-parsing)
+10. [Disabling & Excluding Fields](#disabling--excluding-fields)
+11. [Refreshing & Resetting](#refreshing--resetting)
+12. [Label Colors](#label-colors)
+13. [Schema Drift Resilience](#schema-drift-resilience)
+14. [Custom Renderers](#custom-renderers)
+15. [API Reference](#api-reference)
+16. [Contributing](#contributing)
 
 ## Purpose
 
@@ -273,19 +274,151 @@ class User(BaseModel):
 
 ## Literal & Enum Fields
 
-`Literal` and enum-like fields are automatically rendered as dropdown selects:
+`fh-pydantic-form` provides comprehensive support for choice-based fields through `Literal`, `Enum`, and `IntEnum` types, all automatically rendered as dropdown selects:
+
+### Literal Fields
 
 ```python
-from typing import Literal
+from typing import Literal, Optional
 
 class OrderModel(BaseModel):
-    status: Literal["NEW", "PROCESSING", "SHIPPED", "DELIVERED"]
-    priority: Optional[Literal["LOW", "MEDIUM", "HIGH"]] = None
+    # Required Literal field - only defined choices available
+    shipping_method: Literal["STANDARD", "EXPRESS", "OVERNIGHT"] = "STANDARD"
+    
+    # Optional Literal field - includes "-- None --" option
+    category: Optional[Literal["ELECTRONICS", "CLOTHING", "BOOKS", "OTHER"]] = None
 ```
 
-- **Required Literal fields** show only the defined choices
-- **Optional Literal fields** include a "-- None --" option
-- Values are automatically converted during form parsing and validation
+### Enum Fields
+
+```python
+from enum import Enum, IntEnum
+
+class OrderStatus(Enum):
+    """Order status enum with string values."""
+    PENDING = "pending"
+    CONFIRMED = "confirmed" 
+    SHIPPED = "shipped"
+    DELIVERED = "delivered"
+    CANCELLED = "cancelled"
+
+class Priority(IntEnum):
+    """Priority levels using IntEnum for numeric ordering."""
+    LOW = 1
+    MEDIUM = 2
+    HIGH = 3
+    URGENT = 4
+
+class OrderModel(BaseModel):
+    # Required Enum field with default
+    status: OrderStatus = OrderStatus.PENDING
+    
+    # Optional Enum field without default
+    payment_method: Optional[PaymentMethod] = None
+    
+    # Required IntEnum field with default
+    priority: Priority = Priority.MEDIUM
+    
+    # Optional IntEnum field without default
+    urgency_level: Optional[Priority] = Field(
+        None, description="Override priority for urgent orders"
+    )
+    
+    # Enum field without default (required)
+    fulfillment_status: OrderStatus = Field(
+        ..., description="Current fulfillment status"
+    )
+```
+
+### Field Rendering Behavior
+
+| Field Type | Required | Optional | Notes |
+|------------|----------|----------|-------|
+| **Literal** | Shows only defined choices | Includes "-- None --" option | String values displayed as-is |
+| **Enum** | Shows enum member values | Includes "-- None --" option | Displays `enum.value` in dropdown |
+| **IntEnum** | Shows integer values | Includes "-- None --" option | Maintains numeric ordering |
+
+**Key features:**
+- **Automatic dropdown generation** for all choice-based field types
+- **Proper value handling** - enum values are correctly parsed during form submission
+- **Optional field support** - includes None option when fields are Optional
+- **Field descriptions** become tooltips on hover
+- **Default value selection** - dropdowns pre-select the appropriate default value
+
+## Initial Values & Enum Parsing
+
+`fh-pydantic-form` intelligently parses initial values from dictionaries, properly converting strings and integers to their corresponding enum types:
+
+### Setting Initial Values
+
+```python
+# Example initial values from a dictionary
+initial_values_dict = {
+    "shipping_method": "EXPRESS",      # Literal value as string
+    "category": "ELECTRONICS",         # Optional Literal value
+    "status": "shipped",               # Enum value (parsed to OrderStatus.SHIPPED)
+    "payment_method": "paypal",        # Optional Enum (parsed to PaymentMethod.PAYPAL)
+    "priority": 3,                     # IntEnum as integer (parsed to Priority.HIGH)
+    "urgency_level": 4,                # Optional IntEnum as integer (parsed to Priority.URGENT)
+    "fulfillment_status": "confirmed"  # Required Enum (parsed to OrderStatus.CONFIRMED)
+}
+
+# Create form with initial values
+form_renderer = PydanticForm("order_form", OrderModel, initial_values=initial_values_dict)
+```
+
+### Parsing Behavior
+
+The form automatically handles conversion between different value formats:
+
+| Input Type | Target Type | Example | Result |
+|------------|-------------|---------|--------|
+| String | Enum | `"shipped"` | `OrderStatus.SHIPPED` |
+| String | Optional[Enum] | `"paypal"` | `PaymentMethod.PAYPAL` |
+| Integer | IntEnum | `3` | `Priority.HIGH` |
+| Integer | Optional[IntEnum] | `4` | `Priority.URGENT` |
+| String | Literal | `"EXPRESS"` | `"EXPRESS"` (unchanged) |
+
+**Benefits:**
+- **Flexible data sources** - works with database records, API responses, or any dictionary
+- **Type safety** - ensures enum values are valid during parsing
+- **Graceful handling** - invalid enum values are passed through for Pydantic validation
+- **Consistent behavior** - same parsing logic for required and optional fields
+
+### Example Usage
+
+```python
+@rt("/")
+def get():
+    return mui.Form(
+        form_renderer.render_inputs(),  # Pre-populated with parsed enum values
+        fh.Div(
+            mui.Button("Submit", type="submit", cls=mui.ButtonT.primary),
+            form_renderer.refresh_button("🔄"),
+            form_renderer.reset_button("↩️"),  # Resets to initial parsed values
+            cls="mt-4 flex items-center gap-2",
+        ),
+        hx_post="/submit_order",
+        hx_target="#result",
+        id=f"{form_renderer.name}-form",
+    )
+
+@rt("/submit_order")
+async def post_submit_order(req):
+    try:
+        # Validates and converts form data back to proper enum types
+        validated_order: OrderModel = await form_renderer.model_validate_request(req)
+        
+        # Access enum properties
+        print(f"Status: {validated_order.status.value} ({validated_order.status.name})")
+        print(f"Priority: {validated_order.priority.value} ({validated_order.priority.name})")
+        
+        return success_response(validated_order)
+    except ValidationError as e:
+        return error_response(e)
+```
+
+This makes it easy to work with enum-based forms when loading data from databases, APIs, or configuration files.
 
 ## Disabling & Excluding Fields
 
