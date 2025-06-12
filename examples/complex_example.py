@@ -232,8 +232,28 @@ form_renderer_normal = PydanticForm(
         "backup_address",
     ],
     label_colors={
+        # Basic fields
         "name": "blue",
-        "score": "#FF0000",
+        "age": "green",
+        "score": "#FF0000",  # red
+        "is_active": "purple",
+        "description": "orange",
+        # Enum fields
+        "customer_type": "teal",
+        "priority": "cyan",
+        # Date/time fields
+        "creation_date": "pink",
+        "start_time": "indigo",
+        # Status fields
+        "status": "yellow",
+        "optional_status": "lime",
+        # List fields
+        "tags": "amber",
+        # Nested model fields
+        "main_address": "emerald",
+        "other_addresses": "red",
+        "custom_detail": "violet",
+        "more_custom_details": "rose",
     },  # Customize field label colors - see README "Label Colors" section
     spacing="normal",  # Now supports string values with type safety
 )
@@ -254,7 +274,30 @@ form_renderer_compact = PydanticForm(
         "processing_flags",
         "backup_address",
     ],
-    label_colors={"name": "blue", "score": "#FF0000"},
+    label_colors={
+        # Basic fields
+        "name": "blue",
+        "age": "green",
+        "score": "#FF0000",  # red
+        "is_active": "purple",
+        "description": "orange",
+        # Enum fields
+        "customer_type": "teal",
+        "priority": "cyan",
+        # Date/time fields
+        "creation_date": "pink",
+        "start_time": "indigo",
+        # Status fields
+        "status": "yellow",
+        "optional_status": "lime",
+        # List fields
+        "tags": "amber",
+        # Nested model fields
+        "main_address": "emerald",
+        "other_addresses": "red",
+        "custom_detail": "violet",
+        "more_custom_details": "rose",
+    },
     spacing="compact",  # Clean string-based API with full type safety
 )
 
