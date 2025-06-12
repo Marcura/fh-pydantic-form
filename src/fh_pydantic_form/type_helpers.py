@@ -1,5 +1,6 @@
 import logging
 from enum import Enum
+from types import UnionType
 from typing import Any, Literal, Union, get_args, get_origin
 
 logger = logging.getLogger(__name__)
@@ -19,7 +20,7 @@ def _is_optional_type(annotation: Any) -> bool:
         True if the annotation is Optional[T], False otherwise
     """
     origin = get_origin(annotation)
-    if origin is Union:
+    if origin in (Union, UnionType):
         args = get_args(annotation)
         # Check if NoneType is one of the args and there are exactly two args
         return len(args) == 2 and type(None) in args

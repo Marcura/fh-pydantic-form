@@ -16,8 +16,10 @@ from pydantic.fields import FieldInfo
 
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import (
+    _UNSET,
     _get_underlying_type_if_optional,
     _is_optional_type,
+    get_default,
 )
 from fh_pydantic_form.ui_style import (
     SpacingTheme,
@@ -319,11 +321,8 @@ class DateFieldRenderer(BaseFieldRenderer):
         elif isinstance(self.value, date):
             formatted_value = self.value.isoformat()  # YYYY-MM-DD
 
-        is_field_required = (
-            not self.is_optional
-            and self.field_info.default is None
-            and getattr(self.field_info, "default_factory", None) is None
-        )
+        has_default = get_default(self.field_info) is not _UNSET
+        is_field_required = not self.is_optional and not has_default
 
         placeholder_text = f"Select {self.original_field_name.replace('_', ' ')}"
         if self.is_optional:
