@@ -479,18 +479,10 @@ mui.Form(
 )
 ```
 
-### Setting Initial Values
-
-You can set initial form values by passing a model instance or dictionary:
-
-```python
-initial_data = MyModel(name="John", tags=["happy", "joy"])
-form_renderer = PydanticForm("my_form", MyModel, initial_values=initial_data)
-```
-
 - **Refresh button** updates the form display based on current values (useful for updating list item summaries)
 - **Reset button** restores all fields to their initial values with confirmation
 - Both use HTMX for seamless updates without page reloads
+
 
 ## Label Colors
 
@@ -513,15 +505,31 @@ form_renderer = PydanticForm(
 - **Hex color values:** `"#FF0000"`, `"#0066CC"`, etc.
 - **CSS color names:** `"red"`, `"blue"`, `"darkgreen"`, etc.
 
-Label colors are applied to the field labels only and work with all spacing themes.
+This can be useful for e.g. highlighting the values of different fields in a pdf with different highlighting colors matching the form input label color. 
 
-## Schema Drift Resilience
+
+## Setting Initial Values
+
+You can set initial form values of the form by passing a model instance or dictionary:
+
+```python
+initial_data = MyModel(name="John", tags=["happy", "joy"])
+form_renderer = PydanticForm("my_form", MyModel, initial_values=initial_data)
+
+
+initial_data_dict = {"name": "John"} 
+form_renderer = PydanticForm("my_form", MyModel, initial_values=initial_values_dict)
+```
+
+The dictionary does not have to be complete, and we try to handle schema drift gracefully. If you exclude fields from the form, we fill those fields with the initial_values or the default values.
+
+
+
+### Schema Drift Resilience
 
 `fh-pydantic-form` gracefully handles model evolution and schema changes:
 
-### Surviving Model Changes
-
-Initial values can come from **older or newer** versions of your model – unknown fields are ignored gracefully and missing fields use defaults, so your admin dashboard never crashes after a deploy.
+Initial values can come from **older or newer** versions of your model – unknown fields are ignored gracefully and missing fields use defaults.
 
 ```python
 # Your model evolves over time
