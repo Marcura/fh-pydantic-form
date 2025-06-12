@@ -205,11 +205,13 @@ class StringFieldRenderer(BaseFieldRenderer):
         Returns:
             A TextInput component appropriate for string values
         """
-        is_field_required = (
-            not self.is_optional
-            and self.field_info.default is None
-            and getattr(self.field_info, "default_factory", None) is None
-        )
+        # is_field_required = (
+        #     not self.is_optional
+        #     and self.field_info.default is None
+        #     and getattr(self.field_info, "default_factory", None) is None
+        # )
+        has_default = get_default(self.field_info) is not _UNSET
+        is_field_required = not self.is_optional and not has_default
 
         placeholder_text = f"Enter {self.original_field_name.replace('_', ' ')}"
         if self.is_optional:
@@ -245,11 +247,9 @@ class NumberFieldRenderer(BaseFieldRenderer):
         Returns:
             A NumberInput component appropriate for numeric values
         """
-        is_field_required = (
-            not self.is_optional
-            and self.field_info.default is None
-            and getattr(self.field_info, "default_factory", None) is None
-        )
+        # Determine if field is required
+        has_default = get_default(self.field_info) is not _UNSET
+        is_field_required = not self.is_optional and not has_default
 
         placeholder_text = f"Enter {self.original_field_name.replace('_', ' ')}"
         if self.is_optional:
@@ -367,11 +367,9 @@ class TimeFieldRenderer(BaseFieldRenderer):
         elif isinstance(self.value, time):
             formatted_value = self.value.strftime("%H:%M")  # HH:MM
 
-        is_field_required = (
-            not self.is_optional
-            and self.field_info.default is None
-            and getattr(self.field_info, "default_factory", None) is None
-        )
+        # Determine if field is required
+        has_default = get_default(self.field_info) is not _UNSET
+        is_field_required = not self.is_optional and not has_default
 
         placeholder_text = f"Select {self.original_field_name.replace('_', ' ')}"
         if self.is_optional:
@@ -417,11 +415,8 @@ class LiteralFieldRenderer(BaseFieldRenderer):
             )
 
         # Determine if field is required
-        is_field_required = (
-            not self.is_optional
-            and self.field_info.default is None
-            and getattr(self.field_info, "default_factory", None) is None
-        )
+        has_default = get_default(self.field_info) is not _UNSET
+        is_field_required = not self.is_optional and not has_default
 
         # Create options for each literal value
         options = []
@@ -497,11 +492,8 @@ class EnumFieldRenderer(BaseFieldRenderer):
             )
 
         # Determine if field is required
-        is_field_required = (
-            not self.is_optional
-            and self.field_info.default is None
-            and getattr(self.field_info, "default_factory", None) is None
-        )
+        has_default = get_default(self.field_info) is not _UNSET
+        is_field_required = not self.is_optional and not has_default
 
         # Create options for each enum value
         options = []
