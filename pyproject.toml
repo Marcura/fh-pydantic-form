@@ -43,6 +43,13 @@ Documentation = "https://github.com/Marcura/fh-pydantic-form"
 testpaths = ["tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
+markers = [
+    "integration: integration tests needing TestClient or external dependencies",
+    "property: property-based tests using hypothesis for fuzzing/robustness",
+    "slow: tests that take longer to run",
+    "enum: tests specifically for enum field functionality",
+    "unit: fast unit tests with minimal dependencies",
+]
 
 [build-system]
 requires = ["hatchling"]

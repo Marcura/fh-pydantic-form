@@ -26,6 +26,16 @@ def _is_optional_type(annotation: Any) -> bool:
     return False
 
 
+# Explicit exports for public API
+__all__ = [
+    "_is_optional_type",
+    "_get_underlying_type_if_optional",
+    "_is_literal_type",
+    "_is_enum_type",
+    "default_for_annotation",
+]
+
+
 def _get_underlying_type_if_optional(annotation: Any) -> Any:
     """
     Extract the type T from Optional[T], otherwise return the original annotation.
@@ -132,3 +142,7 @@ def _is_pydantic_undefined(value: Any) -> bool:
         pass
 
     return False
+
+
+# Local import placed after _UNSET is defined to avoid circular-import problems
+from .defaults import default_for_annotation  # noqa: E402

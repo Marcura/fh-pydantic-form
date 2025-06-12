@@ -51,7 +51,20 @@ def register_default_renderers() -> None:
     FieldRendererRegistry.register_type_renderer(datetime.date, DateFieldRenderer)
     FieldRendererRegistry.register_type_renderer(datetime.time, TimeFieldRenderer)
 
-    # Register Literal field renderer
+    # Register Enum field renderer (before Literal to prioritize Enum handling)
+    def is_enum_field(field_info):
+        """Check if field is an Enum type"""
+        annotation = getattr(field_info, "annotation", None)
+        if not annotation:
+            return False
+        underlying_type = _get_underlying_type_if_optional(annotation)
+        return isinstance(underlying_type, type) and issubclass(underlying_type, Enum)
+
+    FieldRendererRegistry.register_type_renderer_with_predicate(
+        is_enum_field, EnumFieldRenderer
+    )
+
+    # Register Literal field renderer (after Enum to avoid conflicts)
     def is_literal_field(field_info):
         """Check if field is a Literal type"""
         annotation = getattr(field_info, "annotation", None)
@@ -63,19 +76,6 @@ def register_default_renderers() -> None:
 
     FieldRendererRegistry.register_type_renderer_with_predicate(
         is_literal_field, LiteralFieldRenderer
-    )
-
-    # Register Enum field renderer
-    def is_enum_field(field_info):
-        """Check if field is an Enum type"""
-        annotation = getattr(field_info, "annotation", None)
-        if not annotation:
-            return False
-        underlying_type = _get_underlying_type_if_optional(annotation)
-        return isinstance(underlying_type, type) and issubclass(underlying_type, Enum)
-
-    FieldRendererRegistry.register_type_renderer_with_predicate(
-        is_enum_field, EnumFieldRenderer
     )
 
     # Register list renderer for List[*] types

@@ -31,7 +31,11 @@ logger = logging.getLogger(__name__)
 
 def _merge_cls(base: str, extra: str) -> str:
     """Return base plus extra class(es) separated by a single space (handles blanks)."""
-    return f"{base} {extra}".strip() if extra else base
+    if extra:
+        combined = f"{base} {extra}".strip()
+        # Remove duplicate whitespace
+        return " ".join(combined.split())
+    return base
 
 
 class BaseFieldRenderer:
@@ -94,7 +98,8 @@ class BaseFieldRenderer:
         # Create span attributes with tooltip if description is available
         span_attrs = {}
         if description:
-            span_attrs["uk_tooltip"] = description
+            span_attrs["uk-tooltip"] = description  # UIkit tooltip
+            span_attrs["title"] = description  # Standard HTML tooltip
             # Removed cursor-help class while preserving tooltip functionality
 
         # Create the span with the label text and tooltip

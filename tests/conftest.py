@@ -1,4 +1,5 @@
 import datetime
+from enum import Enum, IntEnum
 from typing import List, Literal, Optional
 
 import fasthtml.common as fh  # type: ignore
@@ -9,6 +10,32 @@ from starlette.testclient import TestClient
 
 # Remove imports from examples
 from fh_pydantic_form import PydanticForm, list_manipulation_js
+
+
+# Define test Enum classes
+class OrderStatus(Enum):
+    NEW = "NEW"
+    PROCESSING = "PROCESSING"
+    SHIPPED = "SHIPPED"
+    DELIVERED = "DELIVERED"
+
+
+class Priority(Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
+
+class PriorityInt(IntEnum):
+    LOW = 1
+    MEDIUM = 2
+    HIGH = 3
+
+
+class ShippingMethod(Enum):
+    STANDARD = "STANDARD"
+    EXPRESS = "EXPRESS"
+    OVERNIGHT = "OVERNIGHT"
 
 
 # Define test-specific Address model
@@ -98,6 +125,34 @@ class ListTestModel(BaseModel):
 
     name: str = ""
     tags: List[str] = Field(["tag1", "tag2"])
+
+
+# Define Enum test models
+class EnumTestModel(BaseModel):
+    """Simple enum test model for fixtures."""
+
+    status: OrderStatus = OrderStatus.NEW
+    priority: Optional[Priority] = None
+    priority_int: Optional[PriorityInt] = None
+
+
+class ComplexEnumTestModel(BaseModel):
+    """Complex enum test model with various enum field types."""
+
+    # Required enum fields
+    status: OrderStatus = OrderStatus.NEW
+    shipping_method: ShippingMethod = ShippingMethod.STANDARD
+
+    # Optional enum fields
+    priority: Optional[Priority] = None
+
+    # Basic fields mixed with enums
+    name: str = "Test Order"
+    order_id: int = 1
+
+    # Lists of enums
+    status_history: List[OrderStatus] = Field(default_factory=list)
+    available_priorities: List[Priority] = Field(default_factory=list)
 
 
 @pytest.fixture(scope="module")
@@ -459,6 +514,167 @@ def complex_initial_values(complex_test_model, address_model, custom_detail_mode
             custom_detail_model(value="Test Detail 1", confidence="MEDIUM"),
         ],
     )
+
+
+# Enum-related fixtures
+@pytest.fixture(scope="session")
+def order_status_enum():
+    """Returns the OrderStatus enum class."""
+    return OrderStatus
+
+
+@pytest.fixture(scope="session")
+def priority_enum():
+    """Returns the Priority enum class."""
+    return Priority
+
+
+@pytest.fixture(scope="session")
+def shipping_method_enum():
+    """Returns the ShippingMethod enum class."""
+    return ShippingMethod
+
+
+@pytest.fixture(scope="module")
+def enum_test_model():
+    """Returns the EnumTestModel class."""
+    return EnumTestModel
+
+
+@pytest.fixture(scope="module")
+def complex_enum_test_model():
+    """Returns the ComplexEnumTestModel class."""
+    return ComplexEnumTestModel
+
+
+@pytest.fixture(scope="module")
+def enum_form_renderer(enum_test_model):
+    """PydanticForm renderer for simple enum model."""
+    return PydanticForm("enum_test", enum_test_model)
+
+
+@pytest.fixture(scope="module")
+def complex_enum_form_renderer(complex_enum_test_model):
+    """PydanticForm renderer for complex enum model."""
+    initial_values = complex_enum_test_model(
+        status=OrderStatus.PROCESSING,
+        shipping_method=ShippingMethod.EXPRESS,
+        priority=Priority.HIGH,
+        name="Test Complex Order",
+        order_id=12345,
+        status_history=[OrderStatus.NEW, OrderStatus.PROCESSING],
+        available_priorities=[Priority.LOW, Priority.MEDIUM],
+    )
+    return PydanticForm(
+        "complex_enum_test",
+        complex_enum_test_model,
+        initial_values=initial_values,
+    )
+
+
+@pytest.fixture(scope="module")
+def enum_client(enum_form_renderer):
+    """TestClient for enum form testing."""
+    from pydantic import ValidationError
+
+    form_renderer = enum_form_renderer
+    app, rt = fh.fast_app(
+        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()], pico=False, live=False
+    )
+    form_renderer.register_routes(app)
+
+    @rt("/")
+    def get():
+        return fh.Div(
+            mui.Container(
+                mui.CardHeader("Enum Test Form"),
+                mui.Card(
+                    mui.CardBody(
+                        mui.Form(
+                            form_renderer.render_inputs(),
+                            mui.Button(
+                                "Submit", type="submit", cls=mui.ButtonT.primary
+                            ),
+                            hx_post="/submit_form",
+                            hx_target="#result",
+                            hx_swap="innerHTML",
+                            id="enum-test-form",
+                        )
+                    ),
+                ),
+                fh.Div(id="result"),
+            ),
+        )
+
+    @rt("/submit_form", methods=["POST"])
+    async def post_main_form(req):
+        try:
+            validated = await form_renderer.model_validate_request(req)
+            return mui.Card(
+                mui.CardHeader(fh.H3("Validation Successful")),
+                mui.CardBody(fh.Pre(validated.model_dump_json(indent=2))),
+            )
+        except ValidationError as e:
+            return mui.Card(
+                mui.CardHeader(fh.H3("Validation Error", cls="text-red-500")),
+                mui.CardBody(fh.Pre(e.json(indent=2))),
+            )
+
+    return TestClient(app)
+
+
+@pytest.fixture(scope="module")
+def complex_enum_client(complex_enum_form_renderer):
+    """TestClient for complex enum form testing."""
+    from pydantic import ValidationError
+
+    form_renderer = complex_enum_form_renderer
+    app, rt = fh.fast_app(
+        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()], pico=False, live=False
+    )
+    form_renderer.register_routes(app)
+
+    @rt("/")
+    def get():
+        return fh.Div(
+            mui.Container(
+                mui.H1("Complex Enum Test Form"),
+                mui.Card(
+                    mui.CardBody(
+                        mui.Form(
+                            form_renderer.render_inputs(),
+                            fh.Div(
+                                mui.Button("Validate", cls=mui.ButtonT.primary),
+                                form_renderer.refresh_button(),
+                                form_renderer.reset_button(),
+                                cls="mt-4 flex items-center gap-3",
+                            ),
+                            hx_post="/submit_form",
+                            hx_target="#result",
+                            hx_swap="innerHTML",
+                            id="complex-enum-test-form",
+                        )
+                    ),
+                ),
+                fh.Div(id="result"),
+            ),
+        )
+
+    @rt("/submit_form", methods=["POST"])
+    async def post_main_form(req):
+        try:
+            validated = await form_renderer.model_validate_request(req)
+            return mui.Card(
+                mui.CardHeader(fh.H3("Validation Successful")),
+                mui.CardBody(fh.Pre(validated.model_dump_json(indent=2))),
+            )
+        except ValidationError as e:
+            return mui.Card(
+                mui.CardHeader(fh.H3("Validation Error", cls="text-red-500")),
+                mui.CardBody(fh.Pre(e.json(indent=2))),
+            )
+
+    return TestClient(app)
 
 
 @pytest.fixture(scope="module")

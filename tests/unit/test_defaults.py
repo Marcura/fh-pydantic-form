@@ -1,4 +1,5 @@
 import datetime
+from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 from unittest.mock import Mock
 
@@ -6,6 +7,23 @@ import pytest
 from pydantic import BaseModel, Field
 
 from fh_pydantic_form.defaults import default_dict_for_model, default_for_annotation
+
+
+# Test Enums for defaults testing
+class StatusEnum(Enum):
+    PENDING = "PENDING"
+    ACTIVE = "ACTIVE"
+    COMPLETED = "COMPLETED"
+
+
+class PriorityEnum(Enum):
+    LOW = 1
+    MEDIUM = 2
+    HIGH = 3
+
+
+class EmptyEnum(Enum):
+    pass
 
 
 class TestDefaultForAnnotation:
@@ -23,6 +41,10 @@ class TestDefaultForAnnotation:
             (Literal["A", "B", "C"], "A"),
             (Literal["HIGH", "MEDIUM", "LOW"], "HIGH"),
             (Literal[1, 2, 3], 1),
+            (StatusEnum, "PENDING"),  # First enum member value
+            (PriorityEnum, 1),  # First enum member value (integer)
+            (Optional[StatusEnum], None),  # Optional enum → None
+            (Optional[PriorityEnum], None),  # Optional enum → None
         ],
     )
     def test_primitive_defaults(self, annotation, expected):
@@ -60,6 +82,57 @@ class TestDefaultForAnnotation:
 
         result = default_for_annotation(mock_annotation)
         assert result is None
+
+    def test_enum_default_first_member_value(self):
+        """Test that Enum defaults to first member's value."""
+        result = default_for_annotation(StatusEnum)
+        assert result == "PENDING"  # First member value
+
+        result = default_for_annotation(PriorityEnum)
+        assert result == 1  # First member value (integer)
+
+    def test_optional_enum_default_none(self):
+        """Test that Optional[Enum] defaults to None."""
+        result = default_for_annotation(Optional[StatusEnum])
+        assert result is None
+
+        result = default_for_annotation(Optional[PriorityEnum])
+        assert result is None
+
+    def test_empty_enum_returns_none(self):
+        """Test that empty Enum returns None."""
+        result = default_for_annotation(EmptyEnum)
+        assert result is None
+
+    def test_enum_with_complex_values(self):
+        """Test enum with complex member values."""
+
+        class ComplexEnum(Enum):
+            COMPLEX_A = {"key": "value", "number": 42}
+            COMPLEX_B = ("tuple", "value")
+
+        result = default_for_annotation(ComplexEnum)
+        assert result == {"key": "value", "number": 42}  # First member value
+
+    def test_enum_subclass_default(self):
+        """Test that Enum subclasses work correctly."""
+        from enum import Enum
+
+        # Use functional API to avoid Python 3.12 inheritance restrictions
+        ExtendedStatusEnum = Enum(
+            "ExtendedStatusEnum",
+            [
+                ("PENDING", "PENDING"),
+                ("IN_PROGRESS", "IN_PROGRESS"),
+                ("COMPLETED", "COMPLETED"),
+                ("ARCHIVED", "ARCHIVED"),
+            ],
+        )
+
+        result = default_for_annotation(ExtendedStatusEnum)
+        # Should get first member from the extended enum
+        expected_first_member = list(ExtendedStatusEnum)[0].value
+        assert result == expected_first_member
 
 
 class TestDefaultDictForModel:
@@ -159,6 +232,95 @@ class TestDefaultDictForModel:
         expected = {
             "status": "PENDING",
             "priority": None,  # Optional Literal gets None
+        }
+        assert result == expected
+
+    def test_model_with_enum_fields(self):
+        """Test that Enum fields get the first enum member value."""
+
+        class ModelWithEnums(BaseModel):
+            status: StatusEnum
+            priority: Optional[PriorityEnum]
+
+        result = default_dict_for_model(ModelWithEnums)
+
+        expected = {
+            "status": "PENDING",  # First member of StatusEnum
+            "priority": None,  # Optional Enum gets None
+        }
+        assert result == expected
+
+    def test_model_with_enum_defaults(self):
+        """Test that explicit enum defaults take precedence."""
+
+        class ModelWithEnumDefaults(BaseModel):
+            status: StatusEnum = StatusEnum.COMPLETED
+            priority: PriorityEnum = PriorityEnum.HIGH
+            optional_status: Optional[StatusEnum] = StatusEnum.ACTIVE
+
+        result = default_dict_for_model(ModelWithEnumDefaults)
+
+        expected = {
+            "status": "COMPLETED",  # Explicit default
+            "priority": 3,  # Explicit default value
+            "optional_status": "ACTIVE",  # Explicit default
+        }
+        assert result == expected
+
+    def test_model_with_enum_factory_defaults(self):
+        """Test that enum default_factory functions work correctly."""
+
+        def get_default_status():
+            return StatusEnum.ACTIVE
+
+        class ModelWithEnumFactory(BaseModel):
+            status: StatusEnum = Field(default_factory=get_default_status)
+            priority: Optional[PriorityEnum] = Field(
+                default_factory=lambda: PriorityEnum.MEDIUM
+            )
+
+        result = default_dict_for_model(ModelWithEnumFactory)
+
+        expected = {
+            "status": "ACTIVE",  # From factory
+            "priority": 2,  # From lambda factory
+        }
+        assert result == expected
+
+    def test_model_with_list_of_enums(self):
+        """Test that List[Enum] fields start empty."""
+
+        class ModelWithEnumLists(BaseModel):
+            status_history: List[StatusEnum]
+            priority_options: List[PriorityEnum] = Field(default_factory=list)
+
+        result = default_dict_for_model(ModelWithEnumLists)
+
+        expected: Dict[str, Any] = {
+            "status_history": [],
+            "priority_options": [],
+        }
+        assert result == expected
+
+    def test_nested_model_with_enums(self):
+        """Test that nested models with enums are processed correctly."""
+
+        class EnumDetail(BaseModel):
+            status: StatusEnum = StatusEnum.PENDING
+            priority: Optional[PriorityEnum] = None
+
+        class ModelWithNestedEnums(BaseModel):
+            name: str
+            detail: EnumDetail
+
+        result = default_dict_for_model(ModelWithNestedEnums)
+
+        expected = {
+            "name": "",
+            "detail": {
+                "status": "PENDING",
+                "priority": None,
+            },
         }
         assert result == expected
 
@@ -364,3 +526,150 @@ class TestDefaultDictForModel:
             "more_details": [],
         }
         assert result == expected
+
+    def test_complex_mixed_scenario_with_enums(self, freeze_today):
+        """Test a complex model mixing all default types including enums."""
+
+        class EnumDetail(BaseModel):
+            value: str = "Default Detail"
+            confidence: Literal["HIGH", "MEDIUM", "LOW"] = "HIGH"
+            status: StatusEnum = StatusEnum.ACTIVE
+
+        class ComplexEnumModel(BaseModel):
+            # Heuristic defaults
+            name: str
+            age: int
+
+            # Explicit defaults
+            city: str = "Amsterdam"
+            is_active: bool = True
+
+            # Optional fields
+            nickname: Optional[str]
+            score: Optional[float] = 95.5
+
+            # Factory defaults
+            created_at: datetime.date = Field(default_factory=datetime.date.today)
+            tags: List[str] = Field(default_factory=list)
+
+            # Enum types
+            status: StatusEnum
+            priority: Optional[PriorityEnum]
+            explicit_status: StatusEnum = StatusEnum.COMPLETED
+
+            # Nested model with enums
+            detail: EnumDetail
+
+            # Lists with enums
+            status_history: List[StatusEnum]
+            priority_options: List[PriorityEnum] = Field(default_factory=list)
+
+        result = default_dict_for_model(ComplexEnumModel)
+
+        expected = {
+            "name": "",
+            "age": 0,
+            "city": "Amsterdam",
+            "is_active": True,
+            "nickname": None,
+            "score": 95.5,
+            "created_at": datetime.date(2021, 1, 1),
+            "tags": [],
+            "status": "PENDING",  # First StatusEnum member
+            "priority": None,  # Optional enum
+            "explicit_status": "COMPLETED",  # Explicit default
+            "detail": {
+                "value": "Default Detail",
+                "confidence": "HIGH",
+                "status": "ACTIVE",  # Explicit default in nested model
+            },
+            "status_history": [],
+            "priority_options": [],
+        }
+        assert result == expected
+
+
+class TestEnumDefaults:
+    """Dedicated test class for enum-specific default behavior."""
+
+    def test_user_defined_enum_default_classmethod(self):
+        """Test that user-defined default() classmethod works with enums."""
+
+        class CustomEnumModel(BaseModel):
+            status: StatusEnum
+            priority: PriorityEnum
+
+            @classmethod
+            def default(cls):
+                return {
+                    "status": StatusEnum.COMPLETED,
+                    "priority": PriorityEnum.HIGH,
+                }
+
+        result = default_dict_for_model(CustomEnumModel)
+
+        expected = {
+            "status": "COMPLETED",
+            "priority": 3,
+        }
+        assert result == expected
+
+    def test_enum_default_conversion_in_nested_models(self):
+        """Test that enum defaults in nested models are converted to values."""
+
+        class EnumAddress(BaseModel):
+            street: str = "Main St"
+            status: StatusEnum = StatusEnum.ACTIVE
+
+        class PersonWithEnumAddress(BaseModel):
+            name: str
+            address: EnumAddress
+
+        result = default_dict_for_model(PersonWithEnumAddress)
+
+        expected = {
+            "name": "",
+            "address": {
+                "street": "Main St",
+                "status": "ACTIVE",
+            },
+        }
+        assert result == expected
+
+    def test_enum_basemodel_default_conversion(self):
+        """Test that BaseModel defaults with enums are converted correctly."""
+
+        class EnumConfig(BaseModel):
+            status: StatusEnum = StatusEnum.PENDING
+            priority: PriorityEnum = PriorityEnum.LOW
+
+        class ConfiguredModel(BaseModel):
+            name: str
+            config: EnumConfig = Field(
+                default_factory=lambda: EnumConfig(
+                    status=StatusEnum.ACTIVE, priority=PriorityEnum.HIGH
+                )
+            )
+
+        result = default_dict_for_model(ConfiguredModel)
+
+        expected = {
+            "name": "",
+            "config": {
+                "status": "ACTIVE",
+                "priority": 3,
+            },
+        }
+        assert result == expected
+
+    @pytest.mark.parametrize(
+        "enum_class, expected_default",
+        [
+            (StatusEnum, "PENDING"),
+            (PriorityEnum, 1),
+        ],
+    )
+    def test_parametrized_enum_defaults(self, enum_class, expected_default):
+        """Test enum defaults with parametrized enum classes."""
+        result = default_for_annotation(enum_class)
+        assert result == expected_default

@@ -65,6 +65,26 @@ def default_for_annotation(annotation: Any) -> Any:
     return None
 
 
+def _convert_enum_values(obj: Any) -> Any:
+    """
+    Recursively convert enum instances to their values in nested structures.
+
+    Args:
+        obj: Object that may contain enum instances
+
+    Returns:
+        Object with enum instances converted to their values
+    """
+    if isinstance(obj, Enum):
+        return obj.value
+    elif isinstance(obj, dict):
+        return {key: _convert_enum_values(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [_convert_enum_values(item) for item in obj]
+    else:
+        return obj
+
+
 def default_dict_for_model(model_cls: type[BaseModel]) -> dict[str, Any]:
     """
     Recursively build a dict with sensible defaults for all fields in a Pydantic model.
@@ -84,9 +104,10 @@ def default_dict_for_model(model_cls: type[BaseModel]) -> dict[str, Any]:
     # Check for user-defined default classmethod first
     if hasattr(model_cls, "default") and callable(model_cls.default):
         instance = model_cls.default()  # may return model instance or dict
-        return (
+        result = (
             instance.model_dump() if isinstance(instance, BaseModel) else dict(instance)
         )
+        return _convert_enum_values(result)
 
     out: dict[str, Any] = {}
 
@@ -107,6 +128,9 @@ def default_dict_for_model(model_cls: type[BaseModel]) -> dict[str, Any]:
             # Handle BaseModel defaults by converting to dict
             if hasattr(default_val, "model_dump"):
                 out[name] = default_val.model_dump()
+            # Convert enum instances to their values
+            elif isinstance(default_val, Enum):
+                out[name] = default_val.value
             else:
                 out[name] = default_val
             continue
@@ -133,4 +157,4 @@ def default_dict_for_model(model_cls: type[BaseModel]) -> dict[str, Any]:
         # 4. Fallback to smart defaults for primitives
         out[name] = default_for_annotation(ann)
 
-    return out
+    return _convert_enum_values(out)

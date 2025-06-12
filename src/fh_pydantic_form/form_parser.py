@@ -1,4 +1,5 @@
 import logging
+from enum import Enum
 from typing import (
     Any,
     Dict,
@@ -189,7 +190,26 @@ def _parse_enum_field(field_name: str, form_data: Dict[str, Any], field_info) ->
         if value == "" or value == "-- None --":
             return None
 
-    # Return the actual submitted value (string) for Pydantic validation
+    enum_cls = _get_underlying_type_if_optional(field_info.annotation)
+    if isinstance(enum_cls, type) and issubclass(enum_cls, Enum) and value is not None:
+        try:
+            first = next(iter(enum_cls))
+            # Handle integer enums - convert string to int
+            if isinstance(first.value, int):
+                try:
+                    value = int(value)
+                except (TypeError, ValueError):
+                    # leave it as-is; pydantic will raise if really invalid
+                    pass
+            # Handle string enums - keep the value as-is, let Pydantic handle validation
+            elif isinstance(first.value, str):
+                # Keep the submitted value unchanged for string enums
+                pass
+        except StopIteration:
+            # Empty enum, leave value as-is
+            pass
+
+    # Return the actual submitted value for Pydantic validation
     return value
 
 
@@ -451,6 +471,25 @@ def _parse_list_fields(
                                 f"Setting missing boolean '{model_field_name}' to False for item in list '{field_name}'"
                             )
                             item_data[model_field_name] = False
+
+            # Convert string to int for integer-valued enums in simple lists
+            if (
+                not field_def["is_model_type"]
+                and isinstance(item_type, type)
+                and issubclass(item_type, Enum)
+                and isinstance(item_data, str)
+            ):
+                try:
+                    first = next(iter(item_type))
+                    if isinstance(first.value, int):
+                        try:
+                            item_data = int(item_data)
+                        except (TypeError, ValueError):
+                            # leave it as-is; pydantic will raise if really invalid
+                            pass
+                except StopIteration:
+                    # Empty enum, leave item_data as-is
+                    pass
 
             # For model types, keep as dict for now
             items.append(item_data)

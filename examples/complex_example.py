@@ -1,5 +1,6 @@
 import datetime
 import logging
+from enum import Enum, IntEnum
 from typing import List, Literal, Optional
 
 import fasthtml.common as fh
@@ -39,6 +40,17 @@ class CustomDetail(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.value} ({self.confidence})"
+
+
+class CustomerTypeEnum(Enum):
+    INDIVIDUAL = "INDIVIDUAL"
+    BUSINESS = "BUSINESS"
+
+
+class PriorityIntEnum(IntEnum):
+    LOW = 1
+    MEDIUM = 2
+    HIGH = 3
 
 
 class CustomDetailFieldRenderer(BaseFieldRenderer):
@@ -96,6 +108,10 @@ class ComplexSchema(BaseModel):
     score: float = Field(description="Score of the customer")
     is_active: bool = Field(description="Is the customer active")
     description: Optional[str] = Field(description="Description of the customer")
+    customer_type: CustomerTypeEnum = Field(description="Type of the customer")
+    priority: Optional[PriorityIntEnum] = Field(
+        None, description="Priority of the customer"
+    )
 
     # Date and time fields
     creation_date: datetime.date = Field(
@@ -171,6 +187,7 @@ initial_values = ComplexSchema(
     score=88.5,
     is_active=True,
     description="Demo description",
+    customer_type=CustomerTypeEnum.INDIVIDUAL,
     creation_date=datetime.date(2023, 1, 1),
     start_time=datetime.time(12, 0, 0),
     status="PENDING",
@@ -224,7 +241,7 @@ form_renderer_normal = PydanticForm(
 form_renderer_compact = PydanticForm(
     form_name="main_form_compact",
     model_class=ComplexSchema,
-    initial_values=initial_values,
+    initial_values=initial_values.model_dump(),  # also works with dict
     custom_renderers=[
         (CustomDetail, CustomDetailFieldRenderer)
     ],  # Register Detail renderer
