@@ -637,6 +637,7 @@ def get():
                                         hx_post="/submit_form_normal",
                                         hx_target="#result-normal",
                                         hx_swap="innerHTML",
+                                        id=f"{form_renderer_normal.name}-form",
                                     )
                                 ),
                             ),
@@ -668,6 +669,7 @@ def get():
                                         hx_post="/submit_form_compact",
                                         hx_target="#result-compact",
                                         hx_swap="innerHTML",
+                                        id=f"{form_renderer_compact.name}-form",
                                     ),
                                     cls="compact-form",  # Add compact styling class
                                 ),

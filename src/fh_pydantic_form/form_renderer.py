@@ -227,6 +227,39 @@ class PydanticForm(Generic[ModelType]):
             cls=wrapper_cls,
         )
 
+    def _clone_with_values(self, values: Dict[str, Any]) -> "PydanticForm":
+        """
+        Create a copy of this renderer with the same configuration but different values.
+
+        This preserves all constructor arguments (label_colors, custom_renderers, etc.)
+        to avoid configuration drift during refresh operations.
+
+        Args:
+            values: New values dictionary to use in the cloned renderer
+
+        Returns:
+            A new PydanticForm instance with identical configuration but updated values
+        """
+        # Get custom renderers if they were registered (not stored directly on instance)
+        # We'll rely on global registry state being preserved
+
+        clone = PydanticForm(
+            form_name=self.name,
+            model_class=self.model_class,
+            initial_values=None,  # Will be set via values_dict below
+            custom_renderers=None,  # Registry is global, no need to re-register
+            disabled=self.disabled,
+            disabled_fields=self.disabled_fields,
+            label_colors=self.label_colors,
+            exclude_fields=self.exclude_fields,
+            spacing=self.spacing,
+        )
+
+        # Set the values directly
+        clone.values_dict = values
+
+        return clone
+
     def __init__(
         self,
         form_name: str,
@@ -461,15 +494,8 @@ class PydanticForm(Generic[ModelType]):
                 cls=mui.AlertT.warning + " mb-4",  # Add margin bottom
             )
 
-        # Create Temporary Renderer instance
-        temp_renderer = PydanticForm(
-            form_name=self.name,
-            model_class=self.model_class,
-            # No initial_data needed here, we set values_dict below
-            spacing=self.spacing,
-        )
-        # Set the values based on the parsed (or fallback) data
-        temp_renderer.values_dict = parsed_data
+        # Create temporary renderer with same configuration but updated values
+        temp_renderer = self._clone_with_values(parsed_data)
 
         refreshed_inputs_component = temp_renderer.render_inputs()
 
@@ -703,8 +729,12 @@ class PydanticForm(Generic[ModelType]):
                 else default_for_annotation(item_type)
             )
 
-            # Build `prefix` for IDs: "<form_name>_" + "_".join(html_parts) + "_"
-            html_prefix = f"{self.base_prefix}{'_'.join(html_parts)}_"
+            # Build prefix **without** the list field itself to avoid duplication
+            parts_before_list = html_parts[:-1]  # drop final segment
+            if parts_before_list:
+                html_prefix = f"{self.base_prefix}{'_'.join(parts_before_list)}_"
+            else:
+                html_prefix = self.base_prefix
 
             # Create renderer for the list field
             renderer = ListFieldRenderer(
@@ -745,9 +775,6 @@ class PydanticForm(Generic[ModelType]):
         # Define the target wrapper ID
         form_content_wrapper_id = f"{self.name}-inputs-wrapper"
 
-        # Define the form ID to include
-        form_id = f"{self.name}-form"
-
         # Define the target URL
         refresh_url = f"/form/{self.name}/refresh"
 
@@ -758,7 +785,7 @@ class PydanticForm(Generic[ModelType]):
             "hx_target": f"#{form_content_wrapper_id}",  # Target the wrapper Div ID
             "hx_swap": "innerHTML",
             "hx_trigger": "click",  # Explicit trigger on click
-            "hx_include": f"#{form_id}",  # Include all form fields in the request
+            "hx_include": "closest form",  # Include all form fields from the enclosing form
             "uk_tooltip": "Update the form display based on current values (e.g., list item titles)",
             "cls": mui.ButtonT.secondary,
         }
@@ -841,3 +868,12 @@ class PydanticForm(Generic[ModelType]):
         logger.info(f"Request validation successful for form '{self.name}'")
 
         return validated_model
+
+    def form_id(self) -> str:
+        """
+        Get the standard form ID for this renderer.
+
+        Returns:
+            The form ID string that should be used for the HTML form element
+        """
+        return f"{self.name}-form"

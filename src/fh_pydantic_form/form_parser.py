@@ -275,7 +275,9 @@ def _parse_nested_model_field(
             break
 
     if found_any_subfield:
-        # Process each field in the nested model
+        # ------------------------------------------------------------------
+        # 1. Process each **non-list** field in the nested model
+        # ------------------------------------------------------------------
         for sub_field_name, sub_field_info in nested_model_class.model_fields.items():
             sub_key = f"{current_prefix}{sub_field_name}"
             annotation = getattr(sub_field_info, "annotation", None)
@@ -310,6 +312,22 @@ def _parse_nested_model_field(
             # Handle missing optional fields
             elif is_optional:
                 nested_data[sub_field_name] = None
+
+        # ------------------------------------------------------------------
+        # 2. Handle **list fields** inside this nested model (e.g. Address.tags)
+        #    Re-use the generic helpers so behaviour matches top-level lists.
+        # ------------------------------------------------------------------
+        nested_list_defs = _identify_list_fields(nested_model_class)
+        if nested_list_defs:
+            list_results = _parse_list_fields(
+                form_data,
+                nested_list_defs,
+                current_prefix,  # ← prefix for this nested model
+            )
+            # Merge without clobbering keys already set in step 1
+            for lf_name, lf_val in list_results.items():
+                if lf_name not in nested_data:
+                    nested_data[lf_name] = lf_val
 
         return nested_data
 

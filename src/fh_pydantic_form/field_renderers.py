@@ -827,7 +827,8 @@ class ListFieldRenderer(BaseFieldRenderer):
             A FastHTML component containing the complete field with refresh icon
         """
         # Extract form name from prefix (removing trailing underscore if present)
-        form_name = self.prefix.rstrip("_") if self.prefix else None
+        # form_name = self.prefix.rstrip("_") if self.prefix else None
+        form_name = self._form_name or None
 
         # Create the label text with proper color styling
         label_text = self.original_field_name.replace("_", " ").title()
@@ -878,7 +879,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                 hx_post=f"/form/{form_name}/refresh",
                 hx_target=f"#{form_name}-inputs-wrapper",
                 hx_swap="innerHTML",
-                hx_include=f"#{form_name}-form",
+                hx_include="closest form",  # ← key change
                 uk_tooltip="Refresh form display to update list summaries",
             )
 
