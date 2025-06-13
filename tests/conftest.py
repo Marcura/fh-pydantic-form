@@ -5,7 +5,7 @@ from typing import List, Literal, Optional
 import fasthtml.common as fh  # type: ignore
 import monsterui.all as mui  # type: ignore
 import pytest
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from starlette.testclient import TestClient
 
 # Remove imports from examples
@@ -1142,5 +1142,238 @@ def user_default_list_client():
                 ),
             ),
         )
+
+    return TestClient(app)
+
+
+# Nested List Testing Fixtures
+@pytest.fixture(scope="module")
+def nested_list_test_models():
+    """Models for testing nested list scenarios."""
+
+    class TaggedAddress(BaseModel):
+        street: str
+        city: str = "Default City"
+        tags: List[str] = Field(default_factory=list)
+        is_primary: bool = False
+
+        def __str__(self) -> str:
+            tag_str = ", ".join(self.tags) if self.tags else "no tags"
+            return f"{self.street}, {self.city} ({tag_str})"
+
+    class ContactInfo(BaseModel):
+        phone: str
+        email: str
+        notes: List[str] = Field(default_factory=list)
+
+        def __str__(self) -> str:
+            return f"{self.phone} / {self.email}"
+
+    class Company(BaseModel):
+        name: str
+        industry: str = "Technology"
+        locations: List[TaggedAddress] = Field(default_factory=list)
+        contacts: List[ContactInfo] = Field(default_factory=list)
+        tags: List[str] = Field(default_factory=list)
+
+        def __str__(self) -> str:
+            return f"{self.name} ({self.industry})"
+
+    class NestedProject(BaseModel):
+        title: str
+        description: str = ""
+        companies: List[Company] = Field(default_factory=list)
+        milestones: List[str] = Field(default_factory=list)
+
+        def __str__(self) -> str:
+            return f"Project: {self.title}"
+
+    return {
+        "TaggedAddress": TaggedAddress,
+        "ContactInfo": ContactInfo,
+        "Company": Company,
+        "NestedProject": NestedProject,
+    }
+
+
+@pytest.fixture
+def simple_nested_form_data():
+    """Simple nested list form data for basic testing."""
+    return {
+        "test_nested_company_name": "Acme Corp",
+        "test_nested_company_industry": "Software",
+        "test_nested_company_tags_0": "startup",
+        "test_nested_company_tags_1": "tech",
+        "test_nested_company_locations_0_street": "123 Main St",
+        "test_nested_company_locations_0_city": "Boston",
+        "test_nested_company_locations_0_tags_0": "headquarters",
+        "test_nested_company_locations_0_tags_1": "main-office",
+        "test_nested_company_locations_0_is_primary": "on",
+    }
+
+
+@pytest.fixture
+def complex_nested_form_data():
+    """Complex nested list form data with multiple levels."""
+    return {
+        "test_nested_company_name": "Acme Corp",
+        "test_nested_company_industry": "Software",
+        "test_nested_company_tags_0": "startup",
+        "test_nested_company_tags_1": "tech",
+        # First location with tags
+        "test_nested_company_locations_0_street": "123 Main St",
+        "test_nested_company_locations_0_city": "Boston",
+        "test_nested_company_locations_0_tags_0": "headquarters",
+        "test_nested_company_locations_0_tags_1": "main-office",
+        "test_nested_company_locations_0_is_primary": "on",
+        # Second location with different tags
+        "test_nested_company_locations_1_street": "456 Oak Ave",
+        "test_nested_company_locations_1_city": "Cambridge",
+        "test_nested_company_locations_1_tags_0": "satellite",
+        "test_nested_company_locations_1_tags_new_12345": "new-tag",
+        # Contact with notes
+        "test_nested_company_contacts_0_phone": "555-1234",
+        "test_nested_company_contacts_0_email": "contact@acme.com",
+        "test_nested_company_contacts_0_notes_0": "Primary contact",
+        "test_nested_company_contacts_0_notes_1": "Available 9-5",
+    }
+
+
+@pytest.fixture
+def deeply_nested_form_data():
+    """Deeply nested structure for stress testing."""
+    return {
+        "test_project_title": "Mega Project",
+        "test_project_description": "Large scale project",
+        "test_project_milestones_0": "Phase 1",
+        "test_project_milestones_1": "Phase 2",
+        # Company 1 with nested data
+        "test_project_companies_0_name": "Company A",
+        "test_project_companies_0_industry": "Tech",
+        "test_project_companies_0_tags_0": "partner",
+        "test_project_companies_0_locations_0_street": "100 Tech St",
+        "test_project_companies_0_locations_0_city": "Tech City",
+        "test_project_companies_0_locations_0_tags_0": "main",
+        "test_project_companies_0_contacts_0_phone": "555-0001",
+        "test_project_companies_0_contacts_0_email": "a@company.com",
+        "test_project_companies_0_contacts_0_notes_0": "Lead contact",
+        # Company 2 with nested data
+        "test_project_companies_1_name": "Company B",
+        "test_project_companies_1_industry": "Finance",
+        "test_project_companies_1_tags_0": "client",
+        "test_project_companies_1_locations_0_street": "200 Money St",
+        "test_project_companies_1_locations_0_city": "Finance City",
+        "test_project_companies_1_locations_0_tags_0": "branch",
+        "test_project_companies_1_contacts_0_phone": "555-0002",
+        "test_project_companies_1_contacts_0_email": "b@company.com",
+        "test_project_companies_1_contacts_0_notes_0": "Account manager",
+    }
+
+
+@pytest.fixture
+def nested_list_parser_simple(nested_list_test_models):
+    """Form parser configured for simple nested list testing."""
+    return PydanticForm("test_nested_company", nested_list_test_models["Company"])
+
+
+@pytest.fixture
+def nested_list_parser_complex(nested_list_test_models):
+    """Form parser configured for complex nested list testing."""
+    return PydanticForm("test_project", nested_list_test_models["NestedProject"])
+
+
+@pytest.fixture
+def malformed_nested_form_data():
+    """Malformed nested data for error handling tests."""
+    return {
+        "test_nested_company_name": "Bad Corp",
+        # Missing indices and malformed field names
+        "test_nested_company_locations_street": "No index",
+        "test_nested_company_locations_0_invalid_field": "Bad field",
+        "test_nested_company_locations_abc_city": "Non-numeric index",
+        "test_nested_company_tags_": "Empty index",
+        "test_nested_company_contacts_0_notes_x_content": "Invalid nested index",
+    }
+
+
+@pytest.fixture
+def empty_nested_lists_data():
+    """Data with empty nested lists for edge case testing."""
+    return {
+        "test_nested_company_name": "Empty Corp",
+        "test_nested_company_industry": "None",
+        # No list items - testing empty list handling
+    }
+
+
+@pytest.fixture
+def mixed_valid_invalid_nested_data():
+    """Mix of valid and invalid nested data."""
+    return {
+        "test_nested_company_name": "Mixed Corp",
+        # Valid location
+        "test_nested_company_locations_0_street": "Valid St",
+        "test_nested_company_locations_0_city": "Valid City",
+        "test_nested_company_locations_0_tags_0": "valid-tag",
+        # Invalid location data
+        "test_nested_company_locations_1_street": "",  # Empty required field
+        "test_nested_company_locations_1_tags_0": "valid-tag-in-invalid-item",
+        # Valid contact
+        "test_nested_company_contacts_0_phone": "555-1234",
+        "test_nested_company_contacts_0_email": "valid@email.com",
+        "test_nested_company_contacts_0_notes_0": "Valid note",
+        # Invalid contact
+        "test_nested_company_contacts_1_phone": "",  # Empty required field
+        "test_nested_company_contacts_1_email": "invalid-email",  # Invalid format
+        "test_nested_company_contacts_1_notes_0": "Note for invalid contact",
+    }
+
+
+@pytest.fixture(scope="module")
+def nested_list_client(nested_list_test_models):
+    """TestClient for testing nested list operations via HTTP."""
+
+    form_renderer = PydanticForm("test_nested_http", nested_list_test_models["Company"])
+    app, rt = fh.fast_app(
+        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()], pico=False, live=False
+    )
+    form_renderer.register_routes(app)
+
+    @rt("/")
+    def get():
+        return fh.Div(
+            mui.Container(
+                mui.CardHeader("Nested List Test Form"),
+                mui.Card(
+                    mui.CardBody(
+                        mui.Form(
+                            form_renderer.render_inputs(),
+                            mui.Button(
+                                "Submit", type="submit", cls=mui.ButtonT.primary
+                            ),
+                            hx_post="/submit_form",
+                            hx_target="#result",
+                            hx_swap="innerHTML",
+                            id="test-nested-http-form",
+                        )
+                    ),
+                ),
+                fh.Div(id="result"),
+            ),
+        )
+
+    @rt("/submit_form", methods=["POST"])
+    async def post_main_form(req):
+        try:
+            validated = await form_renderer.model_validate_request(req)
+            return mui.Card(
+                mui.CardHeader(fh.H3("Validation Successful")),
+                mui.CardBody(fh.Pre(validated.model_dump_json(indent=2))),
+            )
+        except ValidationError as e:
+            return mui.Card(
+                mui.CardHeader(fh.H3("Validation Error", cls="text-red-500")),
+                mui.CardBody(fh.Pre(e.json(indent=2))),
+            )
 
     return TestClient(app)

@@ -893,6 +893,8 @@ class ListFieldRenderer(BaseFieldRenderer):
                 hx_swap="innerHTML",
                 hx_include="closest form",  # ← key change
                 uk_tooltip="Refresh form display to update list summaries",
+                # Prevent 'toggleListItems' on the parent from firing
+                onclick="event.stopPropagation();",
             )
 
             # Combine label and icon

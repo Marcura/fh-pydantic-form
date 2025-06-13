@@ -600,6 +600,8 @@ class PydanticForm(Generic[ModelType]):
         Ensures that every field listed in self.exclude_fields is present in data
         if the model defines a default or default_factory, or if initial_values were provided.
 
+        Also ensures all model fields have appropriate defaults if missing.
+
         Priority order:
         1. initial_values (if provided during form creation)
         2. model defaults/default_factory
@@ -612,6 +614,7 @@ class PydanticForm(Generic[ModelType]):
         Returns:
             The same dictionary instance for method chaining
         """
+        # Handle excluded fields first
         for field_name in self.exclude_fields:
             # Skip if already present (e.g., user provided initial_values)
             if field_name in data:
@@ -647,6 +650,22 @@ class PydanticForm(Generic[ModelType]):
             else:
                 # No default → leave missing; validation will surface error
                 logger.debug(f"No default found for excluded field '{field_name}'")
+
+        # Also handle any other missing fields that should have defaults
+        for field_name, field_info in self.model_class.model_fields.items():
+            if field_name not in data:
+                # Try to inject defaults for missing fields
+                if field_name in self.initial_values_dict:
+                    initial_val = self.initial_values_dict[field_name]
+                    if hasattr(initial_val, "model_dump"):
+                        initial_val = initial_val.model_dump()
+                    data[field_name] = initial_val
+                else:
+                    default_val = get_default(field_info)
+                    if default_val is not _UNSET:
+                        if hasattr(default_val, "model_dump"):
+                            default_val = default_val.model_dump()
+                        data[field_name] = default_val
 
         return data
 
