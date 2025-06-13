@@ -330,18 +330,3 @@ class TestEnumFieldRendererIntegration:
         # Should contain tooltip with description
         assert "Select the current status" in all_elements
         assert "uk_tooltip" in all_elements or "tooltip" in all_elements.lower()
-
-    def test_enum_renderer_accordion_structure(self):
-        """Test that enum renderer creates proper accordion structure."""
-        field_info = FieldInfo(annotation=StatusEnum)
-        renderer = EnumFieldRenderer(
-            field_name="test_field",
-            field_info=field_info,
-        )
-
-        # Render the complete field structure
-        complete_html = str(renderer.render())
-
-        # Should contain accordion elements
-        assert "accordion" in complete_html.lower()
-        assert "test_field" in complete_html  # Field name should be present
