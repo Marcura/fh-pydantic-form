@@ -448,52 +448,23 @@ def _parse_list_fields(
 
         items = []
         for idx_str in ordered_indices:
+            # ------------------------------------------------------------------
+            # If this list stores *BaseModel* items, completely re-parse the item
+            # so that any inner lists (e.g. tags inside Address) become real lists
+            # instead of a bunch of 'tags_0', 'tags_new_xxx' flat entries.
+            # ------------------------------------------------------------------
+            if field_def["is_model_type"]:
+                item_prefix = f"{base_prefix}{field_name}_{idx_str}_"
+                parsed_item = _parse_model_list_item(form_data, item_type, item_prefix)
+                items.append(parsed_item)
+                continue
+
+            # ───────── simple (non-model) items – keep existing logic ──────────
             item_data = list_items_temp[field_name][idx_str]
-
-            # Handle empty strings for optional fields inside models
-            if isinstance(item_data, dict):
-                # Check each subfield for optional type and empty string
-                for subfield_name, subfield_value in list(item_data.items()):
-                    # Get the corresponding field_info from the item_type
-                    if (
-                        hasattr(item_type, "model_fields")
-                        and subfield_name in item_type.model_fields
-                    ):
-                        subfield_info = item_type.model_fields[subfield_name]
-                        # Convert empty strings to None for optional fields
-                        if subfield_value == "" and _is_optional_type(
-                            subfield_info.annotation
-                        ):
-                            item_data[subfield_name] = None
-                        # Convert 'on' to True for boolean fields
-                        elif subfield_value == "on":
-                            annotation = getattr(subfield_info, "annotation", None)
-                            base_type = _get_underlying_type_if_optional(annotation)
-                            if base_type is bool:
-                                item_data[subfield_name] = True
-
-                # Handle missing boolean fields in model list items
-                if field_def["is_model_type"] and hasattr(item_type, "model_fields"):
-                    # Iterate through all model fields to find missing boolean fields
-                    for (
-                        model_field_name,
-                        model_field_info,
-                    ) in item_type.model_fields.items():
-                        annotation = getattr(model_field_info, "annotation", None)
-                        base_type = _get_underlying_type_if_optional(annotation)
-                        is_bool_type = base_type is bool
-
-                        # If it's a boolean field and not in the item_data, set it to False
-                        if is_bool_type and model_field_name not in item_data:
-                            logger.info(
-                                f"Setting missing boolean '{model_field_name}' to False for item in list '{field_name}'"
-                            )
-                            item_data[model_field_name] = False
 
             # Convert string to int for integer-valued enums in simple lists
             if (
-                not field_def["is_model_type"]
-                and isinstance(item_type, type)
+                isinstance(item_type, type)
                 and issubclass(item_type, Enum)
                 and isinstance(item_data, str)
             ):
@@ -509,7 +480,6 @@ def _parse_list_fields(
                     # Empty enum, leave item_data as-is
                     pass
 
-            # For model types, keep as dict for now
             items.append(item_data)
 
         if items:  # Only add if items were found
@@ -531,6 +501,39 @@ def _parse_list_fields(
                     pass
 
     return final_lists
+
+
+def _parse_model_list_item(
+    form_data: Dict[str, Any],
+    item_type,
+    item_prefix: str,
+) -> Dict[str, Any]:
+    """
+    Fully parse a single BaseModel list item – including its own nested lists.
+
+    Re-uses the existing non-list and list helpers so we don't duplicate logic.
+
+    Args:
+        form_data: Dictionary containing form field data
+        item_type: The BaseModel class for this list item
+        item_prefix: Prefix for this specific list item (e.g., "main_form_compact_other_addresses_0_")
+
+    Returns:
+        Dictionary with fully parsed item data including nested lists
+    """
+    nested_list_defs = _identify_list_fields(item_type)
+    # 1. Parse scalars & nested models
+    result = _parse_non_list_fields(
+        form_data,
+        item_type,
+        nested_list_defs,
+        base_prefix=item_prefix,
+    )
+    # 2. Parse inner lists
+    result.update(
+        _parse_list_fields(form_data, nested_list_defs, base_prefix=item_prefix)
+    )
+    return result
 
 
 def _parse_list_item_key(
