@@ -321,6 +321,29 @@ class BooleanFieldRenderer(BaseFieldRenderer):
 
         return mui.CheckboxX(**checkbox_attrs)
 
+    def render(self) -> FT:
+        """
+        Render the complete field (label + input) with spacing, placing the checkbox next to the label.
+
+        Returns:
+            A FastHTML component containing the complete field
+        """
+        # Get the label component
+        label_component = self.render_label()
+
+        # Get the checkbox component
+        checkbox_component = self.render_input()
+
+        # Create a flex container to place label and checkbox side by side
+        return fh.Div(
+            fh.Div(
+                label_component,
+                checkbox_component,
+                cls="flex items-center gap-2",  # Use flexbox to align items horizontally with a small gap
+            ),
+            cls=spacing("outer_margin", self.spacing),
+        )
+
 
 class DateFieldRenderer(BaseFieldRenderer):
     """Renderer for date fields"""
