@@ -29,6 +29,7 @@ class Address(BaseModel):
     street: str = "123 Main St"
     city: str  # = "Anytown"
     is_billing: bool = False
+    tags: List[str] = Field(default=["tag1"], description="Tags for the address")
 
     def __str__(self) -> str:
         return f"{self.street}, {self.city} ({'billing' if self.is_billing else 'shipping'})"

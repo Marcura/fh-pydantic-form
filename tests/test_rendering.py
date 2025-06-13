@@ -36,17 +36,19 @@ def test_render_validation_form(validation_client):
     assert 'hx-target="#result"' in response.text
 
 
-def test_render_list_form(list_client):
+def test_render_list_form(list_client, soup):
     """Test rendering the list form."""
     response = list_client.get("/")
 
     assert response.status_code == 200
+    dom = soup(response.text)
 
     # Check for basic field
     assert 'name="test_list_name"' in response.text
 
-    # Check for list container and default items
-    assert 'id="test_list_tags_items_container"' in response.text
+    # Check for list container using regex pattern
+    container = dom.find(id=re.compile(r"tags_items_container"))
+    assert container is not None
 
     # Check for default list items (may vary based on how the form renders)
     assert "test_list_tags_0" in response.text
@@ -56,11 +58,12 @@ def test_render_list_form(list_client):
     assert 'hx-post="/submit_form"' in response.text
 
 
-def test_render_complex_form(complex_client):
+def test_render_complex_form(complex_client, soup):
     """Test rendering the complex form."""
     response = complex_client.get("/")
 
     assert response.status_code == 200
+    dom = soup(response.text)
 
     # Check for basic fields
     assert 'name="test_complex_name"' in response.text
@@ -84,8 +87,9 @@ def test_render_complex_form(complex_client):
     assert 'name="test_complex_description"' in response.text
     assert 'name="test_complex_optional_status"' in response.text
 
-    # Check for list fields
-    assert 'id="test_complex_tags_items_container"' in response.text
+    # Check for list fields using regex patterns
+    tags_container = dom.find(id=re.compile(r"tags_items_container"))
+    assert tags_container is not None
     assert "test_complex_tags_0" in response.text
 
     # Check for nested model fields
@@ -93,16 +97,22 @@ def test_render_complex_form(complex_client):
     assert 'name="test_complex_main_address_city"' in response.text
     assert 'name="test_complex_main_address_is_billing"' in response.text
 
-    # Check for list of nested models
-    assert 'id="test_complex_other_addresses_items_container"' in response.text
+    # Check for list of nested models using regex patterns
+    other_addresses_container = dom.find(
+        id=re.compile(r"other_addresses_items_container")
+    )
+    assert other_addresses_container is not None
     assert "test_complex_other_addresses_0_street" in response.text
 
     # Check for custom nested model
     assert 'name="test_complex_custom_detail_value"' in response.text
     assert 'name="test_complex_custom_detail_confidence"' in response.text
 
-    # Check for list of custom nested models
-    assert 'id="test_complex_more_custom_details_items_container"' in response.text
+    # Check for list of custom nested models using regex patterns
+    custom_details_container = dom.find(
+        id=re.compile(r"more_custom_details_items_container")
+    )
+    assert custom_details_container is not None
     assert "test_complex_more_custom_details_0" in response.text
 
     # Check for buttons

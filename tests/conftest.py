@@ -1065,6 +1065,42 @@ def _stub_fasthtml_serve(monkeypatch):
     monkeypatch.setattr("fasthtml.common.serve", lambda *a, **kw: None, raising=False)
 
 
+# --- HTML parsing helper fixtures ---
+@pytest.fixture
+def soup():
+    """Return a callable that converts HTML text to BeautifulSoup object."""
+
+    def _make(html: str):
+        import bs4
+
+        return bs4.BeautifulSoup(html, "html.parser")
+
+    return _make
+
+
+@pytest.fixture
+def patch_time(mocker):
+    """Freeze time.time() so placeholder IDs are stable inside tests."""
+    return mocker.patch("time.time", return_value=1_700_000_000)
+
+
+@pytest.fixture
+def add_item(htmx_headers, soup):
+    """
+    Helper to POST to the generic list/add route and return (response, bs4_dom).
+
+    Usage:
+        resp, dom = add_item(list_client, "test_list", "tags")
+    """
+
+    def _add(client, form_name: str, list_path: str):
+        url = f"/form/{form_name}/list/add/{list_path}"
+        r = client.post(url, headers=htmx_headers)
+        return r, soup(r.text)
+
+    return _add
+
+
 @pytest.fixture(scope="module")
 def user_default_list_client():
     """TestClient for testing list operations with user-defined default methods."""

@@ -84,6 +84,7 @@ dev-dependencies = [
     "hypothesis>=6.135.4",
     "pytest-mock>=3.14.1",
     "pytest-asyncio>=1.0.0",
+    "beautifulsoup4>=4.13.4",
 ]
 
 [tool.mypy]

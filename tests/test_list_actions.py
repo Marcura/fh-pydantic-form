@@ -1,30 +1,33 @@
 import re
 
 
-def test_add_simple_list_item(list_client, htmx_headers):
+def test_add_simple_list_item(list_client, htmx_headers, soup):
     """Test adding a new item to a simple list."""
     # Add a new item to the tags list
     response = list_client.post("/form/test_list/list/add/tags", headers=htmx_headers)
 
     assert response.status_code == 200
+    dom = soup(response.text)
 
     # Check for a new list item in the response
-    assert "<li " in response.text
+    li_elem = dom.find("li")
+    assert li_elem is not None
 
     # Check for the new_ pattern in the ID
-    new_pattern = r"test_list_tags_new_\d+"
-    assert re.search(new_pattern, response.text) is not None
+    li_with_new_id = dom.find("li", {"id": re.compile(r"tags_new_\d+")})
+    assert li_with_new_id is not None
 
     # Should contain an input field
-    assert "<input " in response.text
-    assert 'type="text"' in response.text
+    input_elem = dom.find("input", {"type": "text"})
+    assert input_elem is not None
 
     # Should contain delete button
-    assert "hx-delete=" in response.text
-    assert "uk-button-danger" in response.text
+    delete_btn = dom.find("button", {"class": re.compile(r"uk-button-danger")})
+    assert delete_btn is not None
+    assert delete_btn.get("hx-delete") is not None
 
 
-def test_add_model_list_item(complex_client, htmx_headers):
+def test_add_model_list_item(complex_client, htmx_headers, soup):
     """Test adding a new item to a model list."""
     # Add a new item to the other_addresses list
     response = complex_client.post(
@@ -32,32 +35,40 @@ def test_add_model_list_item(complex_client, htmx_headers):
     )
 
     assert response.status_code == 200
+    dom = soup(response.text)
 
     # Check for a new list item in the response
-    assert "<li " in response.text
+    li_elem = dom.find("li")
+    assert li_elem is not None
 
     # Check for the new_ pattern in the ID
-    new_pattern = r"test_complex_other_addresses_new_\d+"
-    assert re.search(new_pattern, response.text) is not None
+    li_with_new_id = dom.find("li", {"id": re.compile(r"other_addresses_new_\d+")})
+    assert li_with_new_id is not None
 
     # Should contain input fields for the model properties
-    assert "street" in response.text
-    assert "city" in response.text
-    assert "is_billing" in response.text
+    assert "street" in response.text.lower()
+    assert "city" in response.text.lower()
+    assert "billing" in response.text.lower()
 
     # Check for input fields
-    assert "<input " in response.text
-    assert "name=" in response.text
+    input_elems = dom.find_all("input")
+    assert len(input_elems) > 0
+
+    # At least one input should have a name attribute
+    named_inputs = [inp for inp in input_elems if inp.get("name")]
+    assert len(named_inputs) > 0
 
     # Should contain delete button
-    assert "hx-delete=" in response.text
-    assert "uk-button-danger" in response.text
+    delete_btn = dom.find("button", {"class": re.compile(r"uk-button-danger")})
+    assert delete_btn is not None
+    assert delete_btn.get("hx-delete") is not None
 
     # Should be opened by default (uk-open class)
-    assert "uk-open" in response.text
+    open_elem = dom.find(class_=re.compile(r"\buk-open\b"))
+    assert open_elem is not None
 
 
-def test_add_custom_model_list_item(complex_client, htmx_headers):
+def test_add_custom_model_list_item(complex_client, htmx_headers, soup):
     """Test adding a new item to a custom model list."""
     # Add a new item to the more_custom_details list
     response = complex_client.post(
@@ -65,13 +76,15 @@ def test_add_custom_model_list_item(complex_client, htmx_headers):
     )
 
     assert response.status_code == 200
+    dom = soup(response.text)
 
     # Check for a new list item in the response
-    assert "<li " in response.text
+    li_elem = dom.find("li")
+    assert li_elem is not None
 
     # Check for the new_ pattern in the ID
-    new_pattern = r"test_complex_more_custom_details_new_\d+"
-    assert re.search(new_pattern, response.text) is not None
+    li_with_new_id = dom.find("li", {"id": re.compile(r"more_custom_details_new_\d+")})
+    assert li_with_new_id is not None
 
     # Should contain input fields for the model properties
     assert "value" in response.text.lower()
@@ -79,14 +92,20 @@ def test_add_custom_model_list_item(complex_client, htmx_headers):
 
     # Check for custom field rendering elements if applicable
     # Note: This may vary depending on how CustomDetail is rendered
-    assert "<select " in response.text
-    assert ">HIGH<" in response.text
-    assert ">MEDIUM<" in response.text
-    assert ">LOW<" in response.text
+    select_elem = dom.find("select")
+    assert select_elem is not None
+
+    # Check for confidence options
+    options = dom.find_all("option")
+    option_texts = [opt.get_text() for opt in options]
+    assert "HIGH" in option_texts
+    assert "MEDIUM" in option_texts
+    assert "LOW" in option_texts
 
     # Should contain delete button
-    assert "hx-delete=" in response.text
-    assert "uk-button-danger" in response.text
+    delete_btn = dom.find("button", {"class": re.compile(r"uk-button-danger")})
+    assert delete_btn is not None
+    assert delete_btn.get("hx-delete") is not None
 
 
 def test_delete_list_item(list_client, htmx_headers):

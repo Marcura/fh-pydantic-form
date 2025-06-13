@@ -28,6 +28,7 @@ from fh_pydantic_form.form_parser import (
     _parse_list_fields,
     _parse_non_list_fields,
 )
+from fh_pydantic_form.list_path import walk_path
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import _UNSET, get_default
 from fh_pydantic_form.ui_style import (
@@ -393,6 +394,7 @@ class PydanticForm(Generic[ModelType]):
                 disabled=is_field_disabled,  # Pass the calculated disabled state
                 label_color=label_color,  # Pass the label color if specified
                 spacing=self.spacing,  # Pass the spacing
+                field_path=[field_name],  # Set top-level field path
             )
 
             rendered_field = renderer.render()
@@ -652,123 +654,72 @@ class PydanticForm(Generic[ModelType]):
             f"Registered reset route for form '{self.name}' at {reset_route_path}"
         )
 
-        @app.route(f"/form/{self.name}/list/add/{{field_name}}")
-        async def post_list_add(req, field_name: str):
+        # Try the route with a more explicit pattern
+        route_pattern = f"/form/{self.name}/list/{{action}}/{{list_path:path}}"
+        logger.debug(f"Registering list action route: {route_pattern}")
+
+        @app.route(route_pattern, methods=["POST", "DELETE"])
+        async def list_action(req, action: str, list_path: str):
             """
-            Handle adding an item to a list for this specific form
+            Handle list actions (add/delete) for nested lists in this specific form
 
             Args:
                 req: The request object
-                field_name: The name of the list field
+                action: Either "add" or "delete"
+                list_path: Path to the list field (e.g., "tags" or "main_address/tags" or "other_addresses/1/tags")
 
             Returns:
-                A component for the new list item
+                A component for the new list item (add) or empty response (delete)
             """
-            # Find field info
-            field_info = None
-            item_type = None
+            if action not in {"add", "delete"}:
+                return fh.Response(status_code=400, content="Unknown list action")
 
-            if field_name in self.model_class.model_fields:
-                field_info = self.model_class.model_fields[field_name]
-                annotation = getattr(field_info, "annotation", None)
-
-                if (
-                    annotation is not None
-                    and hasattr(annotation, "__origin__")
-                    and annotation.__origin__ is list
-                ):
-                    item_type = annotation.__args__[0]
-
-                if not item_type:
-                    logger.error(
-                        f"Cannot determine item type for list field {field_name}"
-                    )
-                    return mui.Alert(
-                        f"Cannot determine item type for list field {field_name}",
-                        cls=mui.AlertT.error,
-                    )
-
-            # Create a default item using smart defaults
-            default_item_dict: Dict[str, Any] | str | Any | None = None
+            segments = list_path.split("/")
             try:
-                if not item_type:
-                    logger.warning(
-                        f"item_type was None when trying to create default for {field_name}"
-                    )
-                    default_item_dict = ""
-                elif hasattr(item_type, "model_fields"):
-                    # For Pydantic models, use smart default generation
-                    default_item_dict = default_dict_for_model(item_type)
-                else:
-                    # For simple types, use annotation-based defaults
-                    default_item_dict = default_for_annotation(item_type)
-
-                # Final fallback for exotic cases
-                if default_item_dict is None:
-                    default_item_dict = ""
-
-            except Exception as e:
-                logger.error(
-                    f"Error creating default item for {field_name}: {e}", exc_info=True
+                list_field_info, html_parts, item_type = walk_path(
+                    self.model_class, segments
                 )
-                return fh.Li(
-                    mui.Alert(
-                        f"Error creating default item: {str(e)}", cls=mui.AlertT.error
-                    ),
-                    cls="mb-2",
+            except ValueError as exc:
+                logger.warning("Bad list path %s – %s", list_path, exc)
+                return mui.Alert(str(exc), cls=mui.AlertT.error)
+
+            if req.method == "DELETE":
+                logger.debug(
+                    f"Received DELETE request for {list_path} for form '{self.name}'"
                 )
+                return fh.Response(status_code=200, content="")
+
+            # === add (POST) ===
+            default_item = (
+                default_dict_for_model(item_type)
+                if hasattr(item_type, "model_fields")
+                else default_for_annotation(item_type)
+            )
+
+            # Build `prefix` for IDs: "<form_name>_" + "_".join(html_parts) + "_"
+            html_prefix = f"{self.base_prefix}{'_'.join(html_parts)}_"
+
+            # Create renderer for the list field
+            renderer = ListFieldRenderer(
+                field_name=segments[-1],
+                field_info=list_field_info,
+                value=[],
+                prefix=html_prefix,
+                spacing=self.spacing,
+                disabled=self.disabled,
+                field_path=segments,  # Pass the full path segments
+                form_name=self.name,  # Pass the explicit form name
+            )
 
             # Generate a unique placeholder index
             placeholder_idx = f"new_{int(pytime.time() * 1000)}"
 
-            # Create a list renderer
-            if field_info is not None:
-                list_renderer = ListFieldRenderer(
-                    field_name=field_name,
-                    field_info=field_info,
-                    value=[],  # Empty list, we only need to render one item
-                    prefix=self.base_prefix,  # Use the form's base prefix
-                )
-            else:
-                logger.error(f"field_info is None for field {field_name}")
-                return mui.Alert(
-                    f"Field info not found for {field_name}",
-                    cls=mui.AlertT.error,
-                )
-
-            # The default_item_dict is already in the correct format (dict for models, primitive for simple types)
-            item_data_for_renderer = default_item_dict
-            logger.debug(
-                f"Add item: Using smart default for renderer: {item_data_for_renderer}"
-            )
-
             # Render the new item card, set is_open=True to make it expanded by default
-            new_item_card = list_renderer._render_item_card(
-                item_data_for_renderer,  # Pass the dictionary or simple value
-                placeholder_idx,
-                item_type,
-                is_open=True,
+            new_card = renderer._render_item_card(
+                default_item, placeholder_idx, item_type, is_open=True
             )
 
-            return new_item_card
-
-        @app.route(f"/form/{self.name}/list/delete/{{field_name}}", methods=["DELETE"])
-        async def delete_list_item(req, field_name: str):
-            """
-            Handle deleting an item from a list for this specific form
-
-            Args:
-                req: The request object
-                field_name: The name of the list field
-
-            Returns:
-                Empty string to delete the target element
-            """
-            # Return empty string to delete the target element
-            logger.debug(
-                f"Received DELETE request for {field_name} for form '{self.name}'"
-            )
-            return fh.Response(status_code=200, content="")
+            return new_card
 
     def refresh_button(self, text: Optional[str] = None, **kwargs) -> FT:
         """
