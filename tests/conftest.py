@@ -48,6 +48,18 @@ class AddressTestModel(BaseModel):
         return f"{self.street}, {self.city} ({'billing' if self.is_billing else 'shipping'})"
 
 
+# Define Address model with tags for nested list testing
+class AddressWithTagsTestModel(BaseModel):
+    street: str = "123 Main St"
+    city: str = "Anytown"
+    is_billing: bool = False
+    tags: List[str] = Field(default_factory=list, description="Tags for the address")
+
+    def __str__(self) -> str:
+        tag_str = ", ".join(self.tags) if self.tags else "no tags"
+        return f"{self.street}, {self.city} ({tag_str}) ({'billing' if self.is_billing else 'shipping'})"
+
+
 # Define test-specific CustomDetail model
 class CustomDetailTestModel(BaseModel):
     value: str = "Default value"
@@ -96,6 +108,59 @@ class ComplexTestSchema(BaseModel):
     )
     # list of nested models
     other_addresses: List[AddressTestModel] = Field(
+        default_factory=list, description="Other addresses of the customer"
+    )
+
+    # single custom nested model
+    custom_detail: CustomDetailTestModel = Field(
+        default_factory=CustomDetailTestModel,
+        description="Custom detail of the customer",
+    )
+    # list of custom nested models
+    more_custom_details: List[CustomDetailTestModel] = Field(
+        default_factory=list, description="More custom details of the customer"
+    )
+
+
+class ComplexNestedTestSchema(BaseModel):
+    """
+    Test model with nested list support - addresses that contain tags
+    """
+
+    name: str = Field(description="Name of the customer")
+    age: int = Field(description="Age of the customer")
+    score: float = Field(description="Score of the customer")
+    is_active: bool = Field(description="Is the customer active")
+    description: Optional[str] = Field(description="Description of the customer")
+
+    # Date and time fields
+    creation_date: datetime.date = Field(
+        default_factory=datetime.date.today, description="Creation date of the customer"
+    )
+    start_time: datetime.time = Field(
+        default_factory=lambda: datetime.datetime.now().time().replace(microsecond=0),
+        description="Start time of the customer",
+    )
+
+    # Literal/enum field
+    status: Literal["PENDING", "PROCESSING", "COMPLETED"] = Field(
+        description="Status of the customer"
+    )
+    # Optional fields
+    optional_status: Optional[Literal["PENDING", "PROCESSING", "COMPLETED"]] = Field(
+        description="Optional status of the customer"
+    )
+
+    # Lists of simple types
+    tags: List[str] = Field(default_factory=list, description="Tags of the customer")
+
+    # Nested model with tags (nested list support)
+    main_address: AddressWithTagsTestModel = Field(
+        default_factory=AddressWithTagsTestModel,
+        description="Main address of the customer",
+    )
+    # list of nested models with tags (double nested list support)
+    other_addresses: List[AddressWithTagsTestModel] = Field(
         default_factory=list, description="Other addresses of the customer"
     )
 
@@ -440,6 +505,18 @@ def address_model():
 
 
 @pytest.fixture(scope="module")
+def address_model_with_tags():
+    """Returns the AddressWithTagsTestModel for nested list testing."""
+    return AddressWithTagsTestModel
+
+
+@pytest.fixture(scope="module")
+def complex_nested_test_model():
+    """Returns the ComplexNestedTestSchema for nested list testing."""
+    return ComplexNestedTestSchema
+
+
+@pytest.fixture(scope="module")
 def custom_detail_model():
     """Returns the test-specific CustomDetailTestModel for reuse in tests."""
     return CustomDetailTestModel
@@ -653,6 +730,99 @@ def complex_enum_client(complex_enum_form_renderer):
                             hx_target="#result",
                             hx_swap="innerHTML",
                             id="complex-enum-test-form",
+                        )
+                    ),
+                ),
+                fh.Div(id="result"),
+            ),
+        )
+
+    @rt("/submit_form", methods=["POST"])
+    async def post_main_form(req):
+        try:
+            validated = await form_renderer.model_validate_request(req)
+            return mui.Card(
+                mui.CardHeader(fh.H3("Validation Successful")),
+                mui.CardBody(fh.Pre(validated.model_dump_json(indent=2))),
+            )
+        except ValidationError as e:
+            return mui.Card(
+                mui.CardHeader(fh.H3("Validation Error", cls="text-red-500")),
+                mui.CardBody(fh.Pre(e.json(indent=2))),
+            )
+
+    return TestClient(app)
+
+
+@pytest.fixture(scope="module")
+def complex_nested_client(
+    complex_nested_test_model, address_model_with_tags, custom_detail_model
+):
+    """TestClient for nested list testing."""
+    from pydantic import ValidationError
+
+    # Create initial values with nested lists
+    initial_values = complex_nested_test_model(
+        name="Nested Test User",
+        age=35,
+        score=92.0,
+        is_active=True,
+        description="Testing nested lists",
+        creation_date=datetime.date(2023, 1, 1),
+        start_time=datetime.time(12, 0, 0),
+        status="PENDING",
+        optional_status=None,
+        tags=["customer", "test"],
+        main_address=address_model_with_tags(
+            street="123 Main St",
+            city="Test City",
+            is_billing=True,
+            tags=["home", "primary"],
+        ),
+        custom_detail=custom_detail_model(value="Nested Detail", confidence="HIGH"),
+        other_addresses=[
+            address_model_with_tags(
+                street="456 Other St",
+                city="Other City",
+                is_billing=False,
+                tags=["work", "backup"],
+            ),
+        ],
+        more_custom_details=[
+            custom_detail_model(value="More Nested Detail", confidence="MEDIUM"),
+        ],
+    )
+
+    form_renderer = PydanticForm(
+        form_name="test_complex_nested",
+        model_class=complex_nested_test_model,
+        initial_values=initial_values,
+    )
+
+    app, rt = fh.fast_app(
+        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()], pico=False, live=False
+    )
+    form_renderer.register_routes(app)
+
+    @rt("/")
+    def get():
+        return fh.Div(
+            mui.Container(
+                mui.H1("Complex Nested Test Form"),
+                mui.Card(
+                    mui.CardBody(
+                        mui.Form(
+                            form_renderer.render_inputs(),
+                            fh.Div(
+                                mui.Button("Validate", cls=mui.ButtonT.primary),
+                                form_renderer.refresh_button(),
+                                form_renderer.reset_button(),
+                                cls="mt-4 flex items-center gap-3",
+                            ),
+                            hx_post="/submit_form",
+                            hx_target="#result",
+                            hx_swap="innerHTML",
+                            id="test-complex-nested-form",
                         )
                     ),
                 ),
