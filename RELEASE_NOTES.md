@@ -1,5 +1,49 @@
 # Release Notes
 
+## Version 0.2.1 (2025-01-13)
+
+### 🔧 UI/UX Improvements
+
+#### Compact Layout Enhancements
+- **IMPROVED**: Compact mode layout with better spacing and visual hierarchy
+  - Input fields now positioned next to labels in compact mode for better space utilization
+  - Checkbox fields properly aligned next to their labels for boolean values
+  - Refined spacing adjustments for improved visual density
+
+#### Form Structure Simplification
+- **SIMPLIFIED**: Removed accordion UI for simple fields to reduce visual complexity
+- **ENHANCED**: Better form organization with streamlined interface elements
+
+### 🐛 Bug Fixes
+
+#### List Handling Improvements
+- **FIXED**: Nested list functionality with proper rendering and interaction
+- **FIXED**: List collapse behavior for better user experience
+- **FIXED**: Form-specific list IDs to prevent conflicts in multi-form scenarios
+- **FIXED**: List refresh mechanism for dynamic content updates
+- **ADDED**: Comprehensive support for nested lists with proper state management
+
+#### Styling & Color Fixes
+- **FIXED**: Color assignment issues in UI components
+- **IMPROVED**: Better scoped compact CSS to prevent style conflicts
+
+### ✅ Testing & Quality
+
+#### Test Suite Improvements
+- **UPDATED**: Enhanced integration tests for enum field renderers
+- **FIXED**: Nested list test cases now passing
+- **REMOVED**: Outdated accordion tests to match simplified UI
+
+### 📊 Statistics
+- **15 commits** since v0.2.0
+- Focus on UI polish, nested list support, and compact mode refinements
+- Improved test coverage for complex form scenarios
+
+**Key Comparison to v0.2.0:**
+While v0.2.0 introduced major features like enum support and compact mode, v0.2.1 focuses on polishing these features with better UX, fixing edge cases in nested lists, and simplifying the overall form interface.
+
+---
+
 ## Version 0.2.0 (2025-01-06)
 
 ### 🎉 Major Features
