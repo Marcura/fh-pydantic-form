@@ -349,13 +349,25 @@ def _parse_nested_model_field(
     default_value = None
     default_applied = False
 
-    if hasattr(field_info, "default") and field_info.default is not None:
+    # Import PydanticUndefined to check for it specifically
+    try:
+        from pydantic_core import PydanticUndefined
+    except ImportError:
+        # Fallback for older pydantic versions
+        from pydantic.fields import PydanticUndefined
+
+    if (
+        hasattr(field_info, "default")
+        and field_info.default is not None
+        and field_info.default is not PydanticUndefined
+    ):
         default_value = field_info.default
         default_applied = True
         logger.debug(f"Nested field {field_name} using default value.")
     elif (
         hasattr(field_info, "default_factory")
         and field_info.default_factory is not None
+        and field_info.default_factory is not PydanticUndefined
     ):
         try:
             default_value = field_info.default_factory()
