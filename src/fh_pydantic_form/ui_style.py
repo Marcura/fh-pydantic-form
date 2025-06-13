@@ -55,9 +55,9 @@ SPACING_MAP: Dict[SpacingTheme, Dict[str, str]] = {
     SpacingTheme.COMPACT: {
         "outer_margin": "mb-0",
         "outer_margin_sm": "mb-0",
-        "inner_gap": "",
-        "inner_gap_small": "",
-        "stack_gap": "",
+        "inner_gap": "space-y-1",
+        "inner_gap_small": "space-y-0.5",
+        "stack_gap": "space-y-1",
         "padding": "p-1",
         "padding_sm": "p-0.5",
         "padding_card": "px-2 py-1",
