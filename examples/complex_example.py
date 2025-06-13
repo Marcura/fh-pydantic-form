@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field, ValidationError
 
 from fh_pydantic_form import PydanticForm, list_manipulation_js
 from fh_pydantic_form.field_renderers import BaseFieldRenderer
-from fh_pydantic_form.ui_style import COMPACT_EXTRA_CSS
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -18,7 +17,6 @@ app, rt = fh.fast_app(
     hdrs=[
         mui.Theme.blue.headers(),
         list_manipulation_js(),
-        COMPACT_EXTRA_CSS,  # Add compact styling
     ],
     pico=False,
     live=True,

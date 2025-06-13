@@ -1,5 +1,6 @@
 from enum import Enum, auto
 from typing import Dict, Literal, Union
+
 import fasthtml.common as fh
 
 
@@ -52,13 +53,13 @@ SPACING_MAP: Dict[SpacingTheme, Dict[str, str]] = {
         "input_padding": "",
     },
     SpacingTheme.COMPACT: {
-        "outer_margin": "mb-0.5",
-        "outer_margin_sm": "mb-0.5",
+        "outer_margin": "mb-0",
+        "outer_margin_sm": "mb-0",
         "inner_gap": "",
         "inner_gap_small": "",
         "stack_gap": "",
-        "padding": "p-2",
-        "padding_sm": "p-1",
+        "padding": "p-1",
+        "padding_sm": "p-0.5",
         "padding_card": "px-2 py-1",
         "card_border": "",
         "section_divider": "",
@@ -78,46 +79,52 @@ def spacing(token: str, spacing: SpacingValue) -> str:
     return SPACING_MAP[theme][token]
 
 
-# CSS override to kill any residual borders in compact mode
+# Optional minimal CSS for compact mode - affects only form inputs, not layout
+# Host applications can optionally inject this once at app level if desired
 COMPACT_EXTRA_CSS = fh.Style("""
-/* Aggressive margin reduction for all UIkit margin utilities */
-.compact-form .uk-margin-small-bottom,
-.compact-form .uk-margin,
-.compact-form .uk-margin-bottom {
-    margin-bottom: 2px !important;
-}
+/* Compact polish – applies ONLY inside .fhpf-compact ------------------- */
+.fhpf-compact {
 
-/* Remove borders and shrink accordion chrome */
-.compact-form .uk-accordion > li,
-.compact-form .uk-accordion .uk-accordion-content {
-    border: 0 !important;
-}
+  /* Accordion chrome: remove border and default 20 px gap */
+  .uk-accordion > li,
+  .uk-accordion > li + li {          /* second & later items */
+        border-top: 0 !important;
+        margin-top: 0 !important;
+  }
+  .uk-accordion-title::after {       /* the hair-line we still see */
+        border-top: 0 !important;
+  }
 
-/* Minimize accordion content padding */
-.compact-form .uk-accordion-content {
-    padding-top: 0.25rem !important;
-    padding-bottom: 0.25rem !important;
-}
+  /* Tighter title and content padding */
+  li > a.uk-accordion-title,
+  .uk-accordion-content {
+        padding-top: 0.25rem !important;
+        padding-bottom: 0.25rem !important;
+  }
 
-/* Shrink accordion item title padding */
-.compact-form li.uk-open > a {
-    padding-top: 0.25rem;
-    padding-bottom: 0.25rem;
-}
+  /* Remove residual card outline */
+  .uk-card,
+  .uk-card-body { border: 0 !important; }
 
-/* Apply smaller font and reduced padding to all form inputs */
-.compact-form input,
-.compact-form select,
-.compact-form textarea {
-    line-height: 1.25rem !important;   /* ~20px */
-    font-size: 0.8125rem !important;   /* 13px */
-}
+  /* Small-size inputs */
+  input, select, textarea {
+        line-height: 1.25rem !important;
+        font-size: 0.8125rem !important;
+        padding-top: 0.25rem !important;
+        padding-bottom: 0.25rem !important;
+  }
 
-/* Legacy overrides for specific UIkit classes */
-.compact-form input.uk-form-small,
-.compact-form select.uk-form-small,
-.compact-form textarea.uk-textarea-small {
-    padding-top: 2px !important;
-    padding-bottom: 2px !important;
+  /* Legacy uk-form-small support */
+  input.uk-form-small,
+  select.uk-form-small,
+  textarea.uk-textarea-small {
+        padding-top: 2px !important;
+        padding-bottom: 2px !important;
+  }
+
+  /* Kill generic uk-margin utilities inside the form */
+  .uk-margin-small-bottom,
+  .uk-margin,
+  .uk-margin-bottom { margin-bottom: 2px !important; }
 }
 """)

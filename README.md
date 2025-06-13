@@ -200,19 +200,8 @@ form_normal = PydanticForm("normal_form", MyModel, spacing="normal")
 form_compact = PydanticForm("compact_form", MyModel, spacing="compact")
 ```
 
-**Compact mode** automatically injects additional CSS (`COMPACT_EXTRA_CSS`) to minimize margins, borders, and padding throughout the form. You can also import and use this CSS independently:
 
-```python
-from fh_pydantic_form import COMPACT_EXTRA_CSS
-
-app, rt = fh.fast_app(
-    hdrs=[
-        mui.Theme.blue.headers(),
-        COMPACT_EXTRA_CSS,  # Apply compact styling globally
-    ],
-    # ...
-)
-```
+**Important:** The compact CSS is now scoped with `.fhpf-compact` classes and only affects form inputs, not layout containers. This prevents conflicts with your application's layout system.
 
 ## Working with Lists
 
