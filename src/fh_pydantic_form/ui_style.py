@@ -51,6 +51,8 @@ SPACING_MAP: Dict[SpacingTheme, Dict[str, str]] = {
         "accordion_content": "",
         "input_size": "",
         "input_padding": "",
+        "horizontal_gap": "gap-3",
+        "label_align": "items-start",
     },
     SpacingTheme.COMPACT: {
         "outer_margin": "mb-0",
@@ -69,6 +71,8 @@ SPACING_MAP: Dict[SpacingTheme, Dict[str, str]] = {
         "accordion_content": "uk-padding-remove-vertical",
         "input_size": "uk-form-small",
         "input_padding": "p-1",
+        "horizontal_gap": "gap-2",
+        "label_align": "items-center",
     },
 }
 

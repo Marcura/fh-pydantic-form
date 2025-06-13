@@ -195,6 +195,9 @@ class BaseFieldRenderer:
         """
         Render the complete field (label + input) with spacing
 
+        For compact spacing: renders label and input side-by-side
+        For normal spacing: renders label above input (traditional)
+
         Returns:
             A FastHTML component containing the complete field
         """
@@ -204,12 +207,24 @@ class BaseFieldRenderer:
         # 2. Render the input field
         input_component = self.render_input()
 
-        # 3. Return simple container with label and input
-        return fh.Div(
-            label_component,
-            input_component,
-            cls=spacing("outer_margin", self.spacing),
-        )
+        # 3. Choose layout based on spacing theme
+        if self.spacing == SpacingTheme.COMPACT:
+            # Horizontal layout for compact mode
+            return fh.Div(
+                fh.Div(
+                    label_component,
+                    input_component,
+                    cls=f"flex {spacing('horizontal_gap', self.spacing)} {spacing('label_align', self.spacing)}",
+                ),
+                cls=spacing("outer_margin", self.spacing),
+            )
+        else:
+            # Vertical layout for normal mode (existing behavior)
+            return fh.Div(
+                label_component,
+                input_component,
+                cls=spacing("outer_margin", self.spacing),
+            )
 
 
 # ---- Specific Field Renderers ----
