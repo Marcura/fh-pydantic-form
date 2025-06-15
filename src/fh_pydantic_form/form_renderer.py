@@ -435,6 +435,7 @@ class PydanticForm(Generic[ModelType]):
                 label_color=label_color,  # Pass the label color if specified
                 spacing=self.spacing,  # Pass the spacing
                 field_path=[field_name],  # Set top-level field path
+                comparison=None,  # No comparison for regular forms
             )
 
             rendered_field = renderer.render()

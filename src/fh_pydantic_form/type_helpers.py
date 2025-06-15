@@ -1,12 +1,27 @@
 import logging
 from enum import Enum
 from types import UnionType
-from typing import Any, Literal, Union, get_args, get_origin
+from typing import Any, Dict, Literal, NamedTuple, Optional, Union, get_args, get_origin
 
 logger = logging.getLogger(__name__)
 
 # Sentinel value to indicate no default is available
 _UNSET = object()
+
+
+# Comparison types for ComparisonForm feature
+class ComparisonMetric(NamedTuple):
+    """Metrics for comparing two field values"""
+
+    metric: Optional[Union[float, str]] = None  # Arbitrary score or label
+    color: str = "gray"  # CSS color or Tailwind class
+    comment: Optional[str] = None  # Tooltip/hover text explaining the difference
+
+
+# Type alias for comparison mapping
+ComparisonMap = Dict[
+    str, ComparisonMetric
+]  # Keys are dot-paths like "address.street" or "tags[0]"
 
 
 def _is_optional_type(annotation: Any) -> bool:
@@ -34,6 +49,8 @@ __all__ = [
     "_is_literal_type",
     "_is_enum_type",
     "default_for_annotation",
+    "ComparisonMetric",
+    "ComparisonMap",
 ]
 
 

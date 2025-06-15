@@ -18,6 +18,7 @@ from pydantic.fields import FieldInfo
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import (
     _UNSET,
+    ComparisonMetric,
     _get_underlying_type_if_optional,
     _is_optional_type,
     get_default,
@@ -41,7 +42,77 @@ def _merge_cls(base: str, extra: str) -> str:
     return base
 
 
-class BaseFieldRenderer:
+class ComparisonRendererMixin:
+    """Mixin to add comparison highlighting capabilities to field renderers"""
+
+    def _decorate_comparison(
+        self, element: FT, metric: Optional[ComparisonMetric]
+    ) -> FT:
+        """
+        Decorate an element with comparison visual feedback.
+
+        Args:
+            element: The FastHTML element to decorate
+            metric: Optional comparison metric with color, score, and comment
+
+        Returns:
+            Decorated element with background color, tooltip, and optional metric badge
+        """
+        if not metric:
+            return element
+
+        # Apply background color with opacity
+        if metric.color:
+            # Support both Tailwind classes and hex colors
+            if metric.color.startswith("#") or metric.color in [
+                "red",
+                "green",
+                "yellow",
+                "orange",
+                "blue",
+            ]:
+                # Use inline style for hex colors or basic color names
+                if hasattr(element, "attrs"):
+                    existing_style = element.attrs.get("style", "")
+                    new_style = f"background-color: {metric.color}20; {existing_style}"  # 20 = ~12% opacity in hex
+                    element.attrs["style"] = new_style
+            else:
+                # Assume it's a Tailwind class
+                element.cls = _merge_cls(
+                    getattr(element, "cls", ""), f"bg-{metric.color}/20"
+                )
+
+        # Add tooltip with comment if available
+        if metric.comment and hasattr(element, "attrs"):
+            element.attrs["uk-tooltip"] = metric.comment
+            element.attrs["title"] = metric.comment  # Fallback standard tooltip
+
+        # Add metric score badge if present
+        if metric.metric is not None:
+            # Determine badge color based on metric color
+            badge_cls = "ml-2 text-xs align-top "
+            if metric.color == "green" or metric.color.endswith("green"):
+                badge_cls += "uk-badge-success"
+            elif metric.color == "red" or metric.color.endswith("red"):
+                badge_cls += "uk-badge-danger"
+            elif (
+                metric.color == "yellow"
+                or metric.color == "orange"
+                or metric.color.endswith("yellow")
+            ):
+                badge_cls += "uk-badge-warning"
+            else:
+                badge_cls += "uk-badge"
+
+            badge = mui.Badge(str(metric.metric), cls=badge_cls)
+
+            # Wrap the element with the badge
+            return fh.Div(element, badge, cls="relative inline-flex items-start w-full")
+
+        return element
+
+
+class BaseFieldRenderer(ComparisonRendererMixin):
     """
     Base class for field renderers
 
@@ -49,6 +120,7 @@ class BaseFieldRenderer:
     - Rendering a label for the field
     - Rendering an appropriate input element for the field
     - Combining the label and input with proper spacing
+    - Optionally applying comparison visual feedback
 
     Subclasses must implement render_input()
     """
@@ -64,6 +136,7 @@ class BaseFieldRenderer:
         spacing: SpacingValue = SpacingTheme.NORMAL,
         field_path: Optional[List[str]] = None,
         form_name: Optional[str] = None,
+        comparison: Optional[ComparisonMetric] = None,
     ):
         """
         Initialize the field renderer
@@ -78,6 +151,7 @@ class BaseFieldRenderer:
             spacing: Spacing theme to use for layout ("normal", "compact", or SpacingTheme enum)
             field_path: Path segments from root to this field (for nested list support)
             form_name: Explicit form name (used for nested list URLs)
+            comparison: Optional comparison metric for visual feedback
         """
         self.field_name = f"{prefix}{field_name}" if prefix else field_name
         self.original_field_name = field_name
@@ -90,6 +164,7 @@ class BaseFieldRenderer:
         self.disabled = disabled
         self.label_color = label_color
         self.spacing = _normalize_spacing(spacing)
+        self.comparison = comparison
 
     def _is_inline_color(self, color: str) -> bool:
         """
@@ -210,7 +285,7 @@ class BaseFieldRenderer:
         # 3. Choose layout based on spacing theme
         if self.spacing == SpacingTheme.COMPACT:
             # Horizontal layout for compact mode
-            return fh.Div(
+            field_element = fh.Div(
                 fh.Div(
                     label_component,
                     input_component,
@@ -220,11 +295,14 @@ class BaseFieldRenderer:
             )
         else:
             # Vertical layout for normal mode (existing behavior)
-            return fh.Div(
+            field_element = fh.Div(
                 label_component,
                 input_component,
                 cls=spacing("outer_margin", self.spacing),
             )
+
+        # 4. Apply comparison decoration if available
+        return self._decorate_comparison(field_element, self.comparison)
 
 
 # ---- Specific Field Renderers ----
@@ -350,7 +428,7 @@ class BooleanFieldRenderer(BaseFieldRenderer):
         checkbox_component = self.render_input()
 
         # Create a flex container to place label and checkbox side by side
-        return fh.Div(
+        field_element = fh.Div(
             fh.Div(
                 label_component,
                 checkbox_component,
@@ -358,6 +436,9 @@ class BooleanFieldRenderer(BaseFieldRenderer):
             ),
             cls=spacing("outer_margin", self.spacing),
         )
+
+        # Apply comparison decoration if available
+        return self._decorate_comparison(field_element, self.comparison)
 
 
 class DateFieldRenderer(BaseFieldRenderer):
@@ -675,7 +756,8 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
             cls=f"{spacing('accordion_divider', self.spacing)} {spacing('accordion_content', self.spacing)}".strip(),
         )
 
-        return accordion_container
+        # 6. Apply comparison decoration if available
+        return self._decorate_comparison(accordion_container, self.comparison)
 
     def render_input(self) -> FT:
         """
@@ -760,6 +842,7 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
                     spacing=self.spacing,  # Propagate spacing to nested fields
                     field_path=self.field_path + [nested_field_name],  # Propagate path
                     form_name=self.explicit_form_name,  # Propagate form name
+                    comparison=None,  # Nested comparisons handled separately by ComparisonForm
                 )
 
                 nested_inputs.append(renderer.render())
@@ -926,11 +1009,14 @@ class ListFieldRenderer(BaseFieldRenderer):
             )
 
         # Return container with label+icon and input
-        return fh.Div(
+        field_element = fh.Div(
             label_with_icon,
             self.render_input(),
             cls=spacing("outer_margin", self.spacing),
         )
+
+        # Apply comparison decoration if available
+        return self._decorate_comparison(field_element, self.comparison)
 
     def render_input(self) -> FT:
         """
@@ -1203,6 +1289,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                                     str(idx),
                                     nested_field_name,
                                 ],  # Propagate path with index
+                                comparison=None,  # List item comparisons handled separately
                             )
 
                             # Add rendered field to valid fields
@@ -1240,6 +1327,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                     spacing=self.spacing,  # Propagate spacing
                     field_path=self.field_path
                     + [str(idx)],  # Propagate path with index
+                    comparison=None,  # List item comparisons handled separately
                 )
                 input_element = simple_renderer.render_input()
                 item_content_elements.append(fh.Div(input_element))

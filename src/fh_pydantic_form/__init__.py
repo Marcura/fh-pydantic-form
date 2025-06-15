@@ -19,6 +19,8 @@ from fh_pydantic_form.form_renderer import PydanticForm, list_manipulation_js
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import (
     _get_underlying_type_if_optional,
+    ComparisonMetric,
+    ComparisonMap,
 )
 from fh_pydantic_form.ui_style import (
     SpacingTheme,
@@ -29,6 +31,11 @@ from fh_pydantic_form.ui_style import (
 from fh_pydantic_form.defaults import (
     default_dict_for_model,
     default_for_annotation,
+)
+from fh_pydantic_form.comparison_form import (
+    ComparisonForm,
+    comparison_form_js,
+    simple_diff_comparison,
 )
 
 
@@ -122,4 +129,9 @@ __all__ = [
     "COMPACT_EXTRA_CSS",
     "default_dict_for_model",
     "default_for_annotation",
+    "ComparisonForm",
+    "ComparisonMetric",
+    "ComparisonMap",
+    "comparison_form_js",
+    "simple_diff_comparison",
 ]
