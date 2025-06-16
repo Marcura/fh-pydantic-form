@@ -1,5 +1,10 @@
 # Release Notes
 
+## Version 0.2.3 (2025-06-16 )
+
+- Removed the custom css injection for compact spacing. Instead applying to components directly. 
+
+
 ## Version 0.2.2 (2025-06-16 )
 
 - fix left alignment issue with inputs in the presence of outside css influences
