@@ -532,14 +532,6 @@ class LiteralFieldRenderer(BaseFieldRenderer):
         if select_spacing_cls:
             select_cls_parts.append(select_spacing_cls)
 
-        select_cls_parts = ["w-full"]
-        select_spacing_cls = spacing_many(
-            ["input_size", "input_padding", "input_line_height", "input_font_size"],
-            self.spacing,
-        )
-        if select_spacing_cls:
-            select_cls_parts.append(select_spacing_cls)
-
         select_attrs = {
             "id": self.field_name,
             "name": self.field_name,
