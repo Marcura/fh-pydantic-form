@@ -1,8 +1,6 @@
 from enum import Enum, auto
 from typing import Dict, Literal, Union
 
-import fasthtml.common as fh
-
 
 class SpacingTheme(Enum):
     NORMAL = auto()
@@ -113,74 +111,3 @@ def spacing_many(tokens: list[str], spacing: SpacingValue) -> str:
         if class_value:  # Only add non-empty class values
             classes.append(class_value)
     return " ".join(classes)
-
-
-# Optional minimal CSS for compact mode - affects only form inputs, not layout
-# Host applications can optionally inject this once at app level if desired
-COMPACT_EXTRA_CSS = fh.Style("""
-/* Compact polish – applies ONLY inside .fhpf-compact ------------------- */
-.fhpf-compact {
-  /* Force full width and left alignment */
-  width: 100% !important;
-  
-  /* Ensure all direct children are full width and left aligned */
-  & > * {
-    width: 100% !important;
-    justify-content: flex-start !important;
-    align-items: flex-start !important;
-  }
-  
-  /* Target the field containers specifically */
-  & > div > div {
-    width: 100% !important;
-    justify-content: flex-start !important;
-  }
-  
-  /* Ensure flex containers don't center */
-  .flex {
-    justify-content: flex-start !important;
-  }
-
-  /* Accordion chrome: remove border and default 20 px gap */
-  .uk-accordion > li,
-  .uk-accordion > li + li {          /* second & later items */
-        border-top: 0 !important;
-        margin-top: 0 !important;
-  }
-  .uk-accordion-title::after {       /* the hair-line we still see */
-        border-top: 0 !important;
-  }
-
-  /* Tighter title and content padding */
-  li > a.uk-accordion-title,
-  .uk-accordion-content {
-        padding-top: 0.25rem !important;
-        padding-bottom: 0.25rem !important;
-  }
-
-  /* Remove residual card outline */
-  .uk-card,
-  .uk-card-body { border: 0 !important; }
-
-  /* Small-size inputs */
-  input, select, textarea {
-        line-height: 1.25rem !important;
-        font-size: 0.8125rem !important;
-        padding-top: 0.25rem !important;
-        padding-bottom: 0.25rem !important;
-  }
-
-  /* Legacy uk-form-small support */
-  input.uk-form-small,
-  select.uk-form-small,
-  textarea.uk-textarea-small {
-        padding-top: 2px !important;
-        padding-bottom: 2px !important;
-  }
-
-  /* Kill generic uk-margin utilities inside the form */
-  .uk-margin-small-bottom,
-  .uk-margin,
-  .uk-margin-bottom { margin-bottom: 2px !important; }
-}
-""")
