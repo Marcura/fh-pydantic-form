@@ -32,7 +32,6 @@ from fh_pydantic_form.list_path import walk_path
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import _UNSET, get_default
 from fh_pydantic_form.ui_style import (
-    COMPACT_EXTRA_CSS,
     SpacingTheme,
     SpacingValue,
     _normalize_spacing,
@@ -213,19 +212,10 @@ class PydanticForm(Generic[ModelType]):
 
     def _compact_wrapper(self, inner: FT) -> FT:
         """
-        Wrap inner markup in a namespaced div.
-        Auto-inject the compact CSS the *first* time any compact form is rendered.
+        Wrap inner markup in a wrapper div.
         """
         wrapper_cls = "fhpf-wrapper w-full flex-1"
-
-        if self.spacing != SpacingTheme.COMPACT:
-            return fh.Div(inner, cls=wrapper_cls)
-
-        return fh.Div(
-            COMPACT_EXTRA_CSS,
-            fh.Div(inner, cls="fhpf-fields fhpf-compact"),
-            cls=wrapper_cls,
-        )
+        return fh.Div(inner, cls=wrapper_cls)
 
     def _clone_with_values(self, values: Dict[str, Any]) -> "PydanticForm":
         """

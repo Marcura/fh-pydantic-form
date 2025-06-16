@@ -44,13 +44,19 @@ SPACING_MAP: Dict[SpacingTheme, Dict[str, str]] = {
         "padding_sm": "p-3",
         "padding_card": "px-4 py-3",
         "card_border": "border",
+        "card_border_thin": "",
         "section_divider": "border-t border-gray-200",
         "accordion_divider": "uk-accordion-divider",
+        "accordion_title_pad": "",
+        "accordion_content_pad": "",
+        "accordion_item_margin": "uk-margin-small-bottom",
         "label_gap": "mb-1",
         "card_body_pad": "px-4 py-3",
         "accordion_content": "",
         "input_size": "",
         "input_padding": "",
+        "input_line_height": "",
+        "input_font_size": "",
         "horizontal_gap": "gap-3",
         "label_align": "items-start",
     },
@@ -64,13 +70,19 @@ SPACING_MAP: Dict[SpacingTheme, Dict[str, str]] = {
         "padding_sm": "p-0.5",
         "padding_card": "px-2 py-1",
         "card_border": "",
+        "card_border_thin": "",
         "section_divider": "",
         "accordion_divider": "",
+        "accordion_title_pad": "py-1",
+        "accordion_content_pad": "py-1",
+        "accordion_item_margin": "mb-0",
         "label_gap": "mb-0",
         "card_body_pad": "px-2 py-0.5",
         "accordion_content": "uk-padding-remove-vertical",
         "input_size": "uk-form-small",
         "input_padding": "p-1",
+        "input_line_height": "leading-5",
+        "input_font_size": "text-sm",
         "horizontal_gap": "gap-2",
         "label_align": "items-start",
     },
@@ -81,6 +93,26 @@ def spacing(token: str, spacing: SpacingValue) -> str:
     """Return a Tailwind utility class for the given semantic token."""
     theme = _normalize_spacing(spacing)
     return SPACING_MAP[theme][token]
+
+
+def spacing_many(tokens: list[str], spacing: SpacingValue) -> str:
+    """
+    Return combined Tailwind utility classes for multiple semantic tokens.
+
+    Args:
+        tokens: List of spacing token names
+        spacing: Spacing theme to use
+
+    Returns:
+        String of space-separated CSS classes
+    """
+    theme = _normalize_spacing(spacing)
+    classes = []
+    for token in tokens:
+        class_value = SPACING_MAP[theme].get(token, "")
+        if class_value:  # Only add non-empty class values
+            classes.append(class_value)
+    return " ".join(classes)
 
 
 # Optional minimal CSS for compact mode - affects only form inputs, not layout

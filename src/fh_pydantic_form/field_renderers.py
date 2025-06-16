@@ -27,6 +27,7 @@ from fh_pydantic_form.ui_style import (
     SpacingValue,
     _normalize_spacing,
     spacing,
+    spacing_many,
 )
 
 logger = logging.getLogger(__name__)
@@ -252,6 +253,14 @@ class StringFieldRenderer(BaseFieldRenderer):
         if self.is_optional:
             placeholder_text += " (Optional)"
 
+        input_cls_parts = ["w-full"]
+        input_spacing_cls = spacing_many(
+            ["input_size", "input_padding", "input_line_height", "input_font_size"],
+            self.spacing,
+        )
+        if input_spacing_cls:
+            input_cls_parts.append(input_spacing_cls)
+
         input_attrs = {
             "value": self.value or "",
             "id": self.field_name,
@@ -259,10 +268,7 @@ class StringFieldRenderer(BaseFieldRenderer):
             "type": "text",
             "placeholder": placeholder_text,
             "required": is_field_required,
-            "cls": _merge_cls(
-                "w-full",
-                f"{spacing('input_size', self.spacing)} {spacing('input_padding', self.spacing)}".strip(),
-            ),
+            "cls": " ".join(input_cls_parts),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -290,6 +296,14 @@ class NumberFieldRenderer(BaseFieldRenderer):
         if self.is_optional:
             placeholder_text += " (Optional)"
 
+        input_cls_parts = ["w-full"]
+        input_spacing_cls = spacing_many(
+            ["input_size", "input_padding", "input_line_height", "input_font_size"],
+            self.spacing,
+        )
+        if input_spacing_cls:
+            input_cls_parts.append(input_spacing_cls)
+
         input_attrs = {
             "value": str(self.value) if self.value is not None else "",
             "id": self.field_name,
@@ -297,10 +311,7 @@ class NumberFieldRenderer(BaseFieldRenderer):
             "type": "number",
             "placeholder": placeholder_text,
             "required": is_field_required,
-            "cls": _merge_cls(
-                "w-full",
-                f"{spacing('input_size', self.spacing)} {spacing('input_padding', self.spacing)}".strip(),
-            ),
+            "cls": " ".join(input_cls_parts),
             "step": "any"
             if self.field_info.annotation is float
             or get_origin(self.field_info.annotation) is float
@@ -386,6 +397,14 @@ class DateFieldRenderer(BaseFieldRenderer):
         if self.is_optional:
             placeholder_text += " (Optional)"
 
+        input_cls_parts = ["w-full"]
+        input_spacing_cls = spacing_many(
+            ["input_size", "input_padding", "input_line_height", "input_font_size"],
+            self.spacing,
+        )
+        if input_spacing_cls:
+            input_cls_parts.append(input_spacing_cls)
+
         input_attrs = {
             "value": formatted_value,
             "id": self.field_name,
@@ -393,10 +412,7 @@ class DateFieldRenderer(BaseFieldRenderer):
             "type": "date",
             "placeholder": placeholder_text,
             "required": is_field_required,
-            "cls": _merge_cls(
-                "w-full",
-                f"{spacing('input_size', self.spacing)} {spacing('input_padding', self.spacing)}".strip(),
-            ),
+            "cls": " ".join(input_cls_parts),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -433,6 +449,14 @@ class TimeFieldRenderer(BaseFieldRenderer):
         if self.is_optional:
             placeholder_text += " (Optional)"
 
+        input_cls_parts = ["w-full"]
+        input_spacing_cls = spacing_many(
+            ["input_size", "input_padding", "input_line_height", "input_font_size"],
+            self.spacing,
+        )
+        if input_spacing_cls:
+            input_cls_parts.append(input_spacing_cls)
+
         input_attrs = {
             "value": formatted_value,
             "id": self.field_name,
@@ -440,10 +464,7 @@ class TimeFieldRenderer(BaseFieldRenderer):
             "type": "time",
             "placeholder": placeholder_text,
             "required": is_field_required,
-            "cls": _merge_cls(
-                "w-full",
-                f"{spacing('input_size', self.spacing)} {spacing('input_padding', self.spacing)}".strip(),
-            ),
+            "cls": " ".join(input_cls_parts),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -503,18 +524,30 @@ class LiteralFieldRenderer(BaseFieldRenderer):
             placeholder_text += " (Optional)"
 
         # Prepare attributes dictionary
+        select_cls_parts = ["w-full"]
+        select_spacing_cls = spacing_many(
+            ["input_size", "input_padding", "input_line_height", "input_font_size"],
+            self.spacing,
+        )
+        if select_spacing_cls:
+            select_cls_parts.append(select_spacing_cls)
+
+        select_cls_parts = ["w-full"]
+        select_spacing_cls = spacing_many(
+            ["input_size", "input_padding", "input_line_height", "input_font_size"],
+            self.spacing,
+        )
+        if select_spacing_cls:
+            select_cls_parts.append(select_spacing_cls)
+
         select_attrs = {
             "id": self.field_name,
             "name": self.field_name,
             "required": is_field_required,
             "placeholder": placeholder_text,
-            "cls": _merge_cls(
-                "w-full",
-                f"{spacing('input_size', self.spacing)} {spacing('input_padding', self.spacing)}".strip(),
-            ),
+            "cls": " ".join(select_cls_parts),
         }
 
-        # Only add the disabled attribute if the field should actually be disabled
         if self.disabled:
             select_attrs["disabled"] = True
 
@@ -667,12 +700,15 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
         )
 
         # 5. Wrap the single AccordionItem in an Accordion container
+        accordion_cls = spacing_many(
+            ["accordion_divider", "accordion_content"], self.spacing
+        )
         accordion_container = mui.Accordion(
             accordion_item,  # The single item to include
             id=accordion_id,  # ID for the accordion container (ul)
             multiple=True,  # Allow multiple open (though only one exists)
             collapsible=True,  # Allow toggling
-            cls=f"{spacing('accordion_divider', self.spacing)} {spacing('accordion_content', self.spacing)} w-full".strip(),
+            cls=f"{accordion_cls} w-full".strip(),
         )
 
         return accordion_container
@@ -987,12 +1023,15 @@ class ListFieldRenderer(BaseFieldRenderer):
         container_id = self._container_id()
 
         # Use mui.Accordion component
+        accordion_cls = spacing_many(
+            ["inner_gap_small", "accordion_content", "accordion_divider"], self.spacing
+        )
         accordion = mui.Accordion(
             *item_elements,
             id=container_id,
             multiple=True,  # Allow multiple items to be open at once
             collapsible=True,  # Make it collapsible
-            cls=f"{spacing('inner_gap_small', self.spacing)} {spacing('accordion_content', self.spacing)}".strip(),  # Add space between items and accordion content styling
+            cls=accordion_cls.strip(),  # Add space between items and accordion content styling
         )
 
         # Empty state message if no items
@@ -1344,10 +1383,19 @@ class ListFieldRenderer(BaseFieldRenderer):
             )
             li_attrs = {"id": full_card_id}
 
-            # Build card classes conditionally based on spacing theme
-            card_cls = "uk-card uk-margin-small-bottom"
+            # Build card classes using spacing tokens
+            card_cls_parts = ["uk-card"]
             if self.spacing == SpacingTheme.NORMAL:
-                card_cls += " uk-card-default"
+                card_cls_parts.append("uk-card-default")
+
+            # Add spacing-based classes
+            card_spacing_cls = spacing_many(
+                ["accordion_item_margin", "card_border_thin"], self.spacing
+            )
+            if card_spacing_cls:
+                card_cls_parts.append(card_spacing_cls)
+
+            card_cls = " ".join(card_cls_parts)
 
             return mui.AccordionItem(
                 title_component,  # Title as first positional argument
@@ -1370,10 +1418,19 @@ class ListFieldRenderer(BaseFieldRenderer):
             t = self.spacing
             content_wrapper = fh.Div(content_component, cls=spacing("card_body_pad", t))
 
-            # Build card classes conditionally based on spacing theme
-            card_cls = "uk-card uk-margin-small-bottom"
+            # Build card classes using spacing tokens
+            card_cls_parts = ["uk-card"]
             if self.spacing == SpacingTheme.NORMAL:
-                card_cls += " uk-card-default"
+                card_cls_parts.append("uk-card-default")
+
+            # Add spacing-based classes
+            card_spacing_cls = spacing_many(
+                ["accordion_item_margin", "card_border_thin"], self.spacing
+            )
+            if card_spacing_cls:
+                card_cls_parts.append(card_spacing_cls)
+
+            card_cls = " ".join(card_cls_parts)
 
             return mui.AccordionItem(
                 title_component,  # Title as first positional argument
