@@ -1,6 +1,10 @@
 # Release Notes
 
-## Version 0.2.1 (2025-01-13)
+## Version 0.2.2 (2025-06-16 )
+
+- fix left alignment issue with inputs in the presence of outside css influences
+
+## Version 0.2.1 
 
 ### 🔧 UI/UX Improvements
 
@@ -44,7 +48,7 @@ While v0.2.0 introduced major features like enum support and compact mode, v0.2.
 
 ---
 
-## Version 0.2.0 (2025-01-06)
+## Version 0.2.0 
 
 ### 🎉 Major Features
 
