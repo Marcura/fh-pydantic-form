@@ -72,7 +72,7 @@ SPACING_MAP: Dict[SpacingTheme, Dict[str, str]] = {
         "input_size": "uk-form-small",
         "input_padding": "p-1",
         "horizontal_gap": "gap-2",
-        "label_align": "items-center",
+        "label_align": "items-start",
     },
 }
 
@@ -88,6 +88,26 @@ def spacing(token: str, spacing: SpacingValue) -> str:
 COMPACT_EXTRA_CSS = fh.Style("""
 /* Compact polish – applies ONLY inside .fhpf-compact ------------------- */
 .fhpf-compact {
+  /* Force full width and left alignment */
+  width: 100% !important;
+  
+  /* Ensure all direct children are full width and left aligned */
+  & > * {
+    width: 100% !important;
+    justify-content: flex-start !important;
+    align-items: flex-start !important;
+  }
+  
+  /* Target the field containers specifically */
+  & > div > div {
+    width: 100% !important;
+    justify-content: flex-start !important;
+  }
+  
+  /* Ensure flex containers don't center */
+  .flex {
+    justify-content: flex-start !important;
+  }
 
   /* Accordion chrome: remove border and default 20 px gap */
   .uk-accordion > li,
