@@ -214,9 +214,9 @@ class BaseFieldRenderer:
                 fh.Div(
                     label_component,
                     input_component,
-                    cls=f"flex {spacing('horizontal_gap', self.spacing)} {spacing('label_align', self.spacing)}",
+                    cls=f"flex {spacing('horizontal_gap', self.spacing)} {spacing('label_align', self.spacing)} w-full",
                 ),
-                cls=spacing("outer_margin", self.spacing),
+                cls=f"{spacing('outer_margin', self.spacing)} w-full",
             )
         else:
             # Vertical layout for normal mode (existing behavior)
