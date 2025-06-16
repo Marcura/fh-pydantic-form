@@ -61,26 +61,37 @@ class ComparisonRendererMixin:
         if not metric:
             return element
 
+        # Helper to convert color to rgba with opacity
+        def color_with_opacity(color: str, opacity: float = 0.12) -> str:
+            """Convert any color format to rgba with specified opacity"""
+            if color.startswith("#"):
+                # Convert hex to rgba
+                hex_color = color.lstrip("#")
+                if len(hex_color) == 3:
+                    hex_color = "".join([c * 2 for c in hex_color])
+                r = int(hex_color[0:2], 16)
+                g = int(hex_color[2:4], 16)
+                b = int(hex_color[4:6], 16)
+                return f"rgba({r}, {g}, {b}, {opacity})"
+            elif color.startswith("rgb"):
+                # Extract rgb values and add opacity
+                import re
+
+                nums = re.findall(r"\d+", color)
+                if len(nums) >= 3:
+                    return f"rgba({nums[0]}, {nums[1]}, {nums[2]}, {opacity})"
+            # For named colors or other formats, use as-is with opacity in hex notation
+            return f"{color}20"  # Fallback with hex opacity
+
         # Apply background color with opacity
         if metric.color:
-            # Support both Tailwind classes and hex colors
-            if metric.color.startswith("#") or metric.color in [
-                "red",
-                "green",
-                "yellow",
-                "orange",
-                "blue",
-            ]:
-                # Use inline style for hex colors or basic color names
-                if hasattr(element, "attrs"):
-                    existing_style = element.attrs.get("style", "")
-                    new_style = f"background-color: {metric.color}20; {existing_style}"  # 20 = ~12% opacity in hex
-                    element.attrs["style"] = new_style
-            else:
-                # Assume it's a Tailwind class
-                element.cls = _merge_cls(
-                    getattr(element, "cls", ""), f"bg-{metric.color}/20"
-                )
+            if hasattr(element, "attrs"):
+                existing_style = element.attrs.get("style", "")
+                bg_color = color_with_opacity(
+                    metric.color, 0.15
+                )  # 15% opacity for background
+                new_style = f"background-color: {bg_color}; {existing_style}"
+                element.attrs["style"] = new_style
 
         # Add tooltip with comment if available
         if metric.comment and hasattr(element, "attrs"):
@@ -89,25 +100,36 @@ class ComparisonRendererMixin:
 
         # Add metric score badge if present
         if metric.metric is not None:
-            # Determine badge color based on metric color
-            badge_cls = "ml-2 text-xs align-top "
-            if metric.color == "green" or metric.color.endswith("green"):
-                badge_cls += "uk-badge-success"
-            elif metric.color == "red" or metric.color.endswith("red"):
-                badge_cls += "uk-badge-danger"
-            elif (
-                metric.color == "yellow"
-                or metric.color == "orange"
-                or metric.color.endswith("yellow")
-            ):
-                badge_cls += "uk-badge-warning"
-            else:
-                badge_cls += "uk-badge"
+            # Create a custom pill/badge with the metric color
+            # Use higher opacity for the metric badge to make it stand out
+            badge_bg = (
+                metric.color if metric.color else "#6b7280"
+            )  # Default gray if no color
 
-            badge = mui.Badge(str(metric.metric), cls=badge_cls)
+            # Create custom styled span that looks like a pill
+            metric_badge = fh.Span(
+                str(metric.metric),
+                style=f"""
+                    background-color: {badge_bg};
+                    color: white;
+                    padding: 0.125rem 0.5rem;
+                    border-radius: 9999px;
+                    font-size: 0.75rem;
+                    font-weight: 500;
+                    display: inline-block;
+                    margin-left: 0.5rem;
+                    vertical-align: top;
+                    line-height: 1.25;
+                    white-space: nowrap;
+                    text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+                """,
+                cls="uk-text-nowrap",
+            )
 
             # Wrap the element with the badge
-            return fh.Div(element, badge, cls="relative inline-flex items-start w-full")
+            return fh.Div(
+                element, metric_badge, cls="relative inline-flex items-start w-full"
+            )
 
         return element
 
