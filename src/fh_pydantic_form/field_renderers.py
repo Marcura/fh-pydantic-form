@@ -354,9 +354,9 @@ class BooleanFieldRenderer(BaseFieldRenderer):
             fh.Div(
                 label_component,
                 checkbox_component,
-                cls="flex items-center gap-2",  # Use flexbox to align items horizontally with a small gap
+                cls="flex items-center gap-2 w-full",  # Use flexbox to align items horizontally with a small gap
             ),
-            cls=spacing("outer_margin", self.spacing),
+            cls=f"{spacing('outer_margin', self.spacing)} w-full",
         )
 
 
@@ -672,7 +672,7 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
             id=accordion_id,  # ID for the accordion container (ul)
             multiple=True,  # Allow multiple open (though only one exists)
             collapsible=True,  # Allow toggling
-            cls=f"{spacing('accordion_divider', self.spacing)} {spacing('accordion_content', self.spacing)}".strip(),
+            cls=f"{spacing('accordion_divider', self.spacing)} {spacing('accordion_content', self.spacing)} w-full".strip(),
         )
 
         return accordion_container
@@ -929,7 +929,7 @@ class ListFieldRenderer(BaseFieldRenderer):
         return fh.Div(
             label_with_icon,
             self.render_input(),
-            cls=spacing("outer_margin", self.spacing),
+            cls=f"{spacing('outer_margin', self.spacing)} w-full",
         )
 
     def render_input(self) -> FT:
