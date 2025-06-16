@@ -1,8 +1,6 @@
 from enum import Enum, auto
 from typing import Dict, Literal, Union
 
-import fasthtml.common as fh
-
 
 class SpacingTheme(Enum):
     NORMAL = auto()
@@ -44,13 +42,19 @@ SPACING_MAP: Dict[SpacingTheme, Dict[str, str]] = {
         "padding_sm": "p-3",
         "padding_card": "px-4 py-3",
         "card_border": "border",
+        "card_border_thin": "",
         "section_divider": "border-t border-gray-200",
         "accordion_divider": "uk-accordion-divider",
+        "accordion_title_pad": "",
+        "accordion_content_pad": "",
+        "accordion_item_margin": "uk-margin-small-bottom",
         "label_gap": "mb-1",
         "card_body_pad": "px-4 py-3",
         "accordion_content": "",
         "input_size": "",
         "input_padding": "",
+        "input_line_height": "",
+        "input_font_size": "",
         "horizontal_gap": "gap-3",
         "label_align": "items-start",
     },
@@ -64,15 +68,21 @@ SPACING_MAP: Dict[SpacingTheme, Dict[str, str]] = {
         "padding_sm": "p-0.5",
         "padding_card": "px-2 py-1",
         "card_border": "",
+        "card_border_thin": "",
         "section_divider": "",
         "accordion_divider": "",
+        "accordion_title_pad": "py-1",
+        "accordion_content_pad": "py-1",
+        "accordion_item_margin": "mb-0",
         "label_gap": "mb-0",
         "card_body_pad": "px-2 py-0.5",
         "accordion_content": "uk-padding-remove-vertical",
         "input_size": "uk-form-small",
-        "input_padding": "p-1",
+        "input_padding": "py-0.5 px-1",
+        "input_line_height": "leading-tight",
+        "input_font_size": "text-sm",
         "horizontal_gap": "gap-2",
-        "label_align": "items-center",
+        "label_align": "items-start",
     },
 }
 
@@ -83,52 +93,21 @@ def spacing(token: str, spacing: SpacingValue) -> str:
     return SPACING_MAP[theme][token]
 
 
-# Optional minimal CSS for compact mode - affects only form inputs, not layout
-# Host applications can optionally inject this once at app level if desired
-COMPACT_EXTRA_CSS = fh.Style("""
-/* Compact polish – applies ONLY inside .fhpf-compact ------------------- */
-.fhpf-compact {
+def spacing_many(tokens: list[str], spacing: SpacingValue) -> str:
+    """
+    Return combined Tailwind utility classes for multiple semantic tokens.
 
-  /* Accordion chrome: remove border and default 20 px gap */
-  .uk-accordion > li,
-  .uk-accordion > li + li {          /* second & later items */
-        border-top: 0 !important;
-        margin-top: 0 !important;
-  }
-  .uk-accordion-title::after {       /* the hair-line we still see */
-        border-top: 0 !important;
-  }
+    Args:
+        tokens: List of spacing token names
+        spacing: Spacing theme to use
 
-  /* Tighter title and content padding */
-  li > a.uk-accordion-title,
-  .uk-accordion-content {
-        padding-top: 0.25rem !important;
-        padding-bottom: 0.25rem !important;
-  }
-
-  /* Remove residual card outline */
-  .uk-card,
-  .uk-card-body { border: 0 !important; }
-
-  /* Small-size inputs */
-  input, select, textarea {
-        line-height: 1.25rem !important;
-        font-size: 0.8125rem !important;
-        padding-top: 0.25rem !important;
-        padding-bottom: 0.25rem !important;
-  }
-
-  /* Legacy uk-form-small support */
-  input.uk-form-small,
-  select.uk-form-small,
-  textarea.uk-textarea-small {
-        padding-top: 2px !important;
-        padding-bottom: 2px !important;
-  }
-
-  /* Kill generic uk-margin utilities inside the form */
-  .uk-margin-small-bottom,
-  .uk-margin,
-  .uk-margin-bottom { margin-bottom: 2px !important; }
-}
-""")
+    Returns:
+        String of space-separated CSS classes
+    """
+    theme = _normalize_spacing(spacing)
+    classes = []
+    for token in tokens:
+        class_value = SPACING_MAP[theme].get(token, "")
+        if class_value:  # Only add non-empty class values
+            classes.append(class_value)
+    return " ".join(classes)

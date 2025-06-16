@@ -26,7 +26,7 @@ from fh_pydantic_form.ui_style import (
     SpacingTheme,
     SpacingValue,
     spacing,
-    COMPACT_EXTRA_CSS,
+    spacing_many,
 )
 from fh_pydantic_form.defaults import (
     default_dict_for_model,
@@ -126,7 +126,7 @@ __all__ = [
     "SpacingTheme",
     "SpacingValue",
     "spacing",
-    "COMPACT_EXTRA_CSS",
+    "spacing_many",
     "default_dict_for_model",
     "default_for_annotation",
     "ComparisonForm",
