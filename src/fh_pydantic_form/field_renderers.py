@@ -63,6 +63,10 @@ class ComparisonRendererMixin:
         if not metric:
             return element
 
+        logger.info(
+            f"Metric value: {metric.metric} {type(metric.metric)} color: {metric.color}"
+        )
+
         # Helper to convert color to rgba with opacity
         def color_with_opacity(color: str, opacity: float = 0.12) -> str:
             """Convert any color format to rgba with specified opacity"""
@@ -102,18 +106,45 @@ class ComparisonRendererMixin:
 
         # Add metric score badge if present
         if metric.metric is not None:
-            # Create a custom pill/badge with the metric color
-            # Use higher opacity for the metric badge to make it stand out
-            badge_bg = (
-                metric.color if metric.color else "#6b7280"
-            )  # Default gray if no color
+            # Determine bullet colors based on LangSmith-style system when no color provided
+            if metric.color:
+                # Use provided color
+                badge_bg = metric.color
+                text_color = "white"
+            else:
+                if isinstance(metric.metric, (float, int)):
+                    metric_value = float(metric.metric)
+                    if metric_value == 0.0:
+                        # Bright red bullet/white text for failure values
+                        badge_bg = "#D32F2F"  # Crimson
+                        text_color = "white"
+                    elif metric_value < 0.5:
+                        # Dark red bullet/light red text for poor values
+                        badge_bg = "#8B0000"  # Dark Red
+                        text_color = "#fca5a5"  # light red
+                    elif metric_value >= 0.5 and metric_value < 0.9:
+                        # Medium green bullet/light green text for moderate values
+                        badge_bg = "#2E7D32"  # Forest Green
+                        text_color = "#86efac"  # light green
+                    elif metric_value >= 0.9 and metric_value < 1.0:
+                        # Medium green bullet/light green text for high values
+                        badge_bg = "#43A047"  # Medium Green
+                        text_color = "#86efac"  # light green
+                    elif metric_value == 1.0:
+                        # Bright green bullet/white text for perfect values
+                        badge_bg = "#00C853"  # Vivid Green
+                        text_color = "white"
+                else:
+                    # Fallback for edge cases
+                    badge_bg = "#6b7280"  # gray
+                    text_color = "white"
 
-            # Create custom styled span that looks like a pill
+            # Create custom styled span that looks like a bullet/pill
             metric_badge = fh.Span(
                 str(metric.metric),
                 style=f"""
                     background-color: {badge_bg};
-                    color: white;
+                    color: {text_color};
                     padding: 0.125rem 0.5rem;
                     border-radius: 9999px;
                     font-size: 0.75rem;

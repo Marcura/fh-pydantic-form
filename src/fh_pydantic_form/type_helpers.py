@@ -14,7 +14,7 @@ class ComparisonMetric(NamedTuple):
     """Metrics for comparing two field values"""
 
     metric: Optional[Union[float, str]] = None  # Arbitrary score or label
-    color: str = "gray"  # CSS color or Tailwind class
+    color: Optional[str] = None  # CSS color or Tailwind class
     comment: Optional[str] = None  # Tooltip/hover text explaining the difference
 
 

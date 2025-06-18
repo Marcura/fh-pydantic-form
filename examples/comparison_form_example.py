@@ -202,239 +202,211 @@ def create_evaluation_metrics() -> ComparisonMap:
         # Top-level fields
         "full_name": ComparisonMetric(
             metric=0.95,
-            color="green",
             comment="High confidence match with fuzzy string matching",
         ),
         "professional_title": ComparisonMetric(
             metric=0.80,
-            color="yellow",
             comment="Minor variation: 'Senior Engineer' vs 'Sr. Engineer'",
         ),
         "summary": ComparisonMetric(
             metric=0.72,
-            color="orange",
             comment="LLM paraphrased instead of extracting verbatim",
         ),
         # Nested BaseModel fields (ContactInfo)
         "contact": ComparisonMetric(
             metric=0.85,
-            color="green",
             comment="Contact section overall: 3/4 fields extracted",
         ),
         "contact.email": ComparisonMetric(
-            metric=1.0, color="green", comment="Email extracted exactly"
+            metric=1.0, comment="Email extracted exactly"
         ),
         "contact.phone": ComparisonMetric(
-            metric=0.0, color="red", comment="Phone number not found in source document"
+            metric=0.0, comment="Phone number not found in source document"
         ),
         "contact.linkedin": ComparisonMetric(
-            metric=0.9, color="green", comment="LinkedIn URL normalized correctly"
+            metric=0.9, comment="LinkedIn URL normalized correctly"
         ),
         "contact.github": ComparisonMetric(
-            metric=1.0, color="green", comment="GitHub profile extracted"
+            metric=1.0, comment="GitHub profile extracted"
         ),
         # Work Experience - First job
         "experience": ComparisonMetric(
-            metric=0.78,
-            color="yellow",
+            metric=0.45,
             comment="Experience section: 2 positions extracted with some missing details",
         ),
         "experience[0]": ComparisonMetric(
-            metric=0.85, color="green", comment="Most recent position well extracted"
+            metric=0.85, comment="Most recent position well extracted"
         ),
         "experience[0].company": ComparisonMetric(
-            metric=1.0, color="green", comment="Company name exact match"
+            metric=1.0, comment="Company name exact match"
         ),
         "experience[0].position": ComparisonMetric(
             metric=0.95,
-            color="green",
             comment="Title normalized: 'Sr.' expanded to 'Senior'",
         ),
         "experience[0].start_date": ComparisonMetric(
-            metric=1.0, color="green", comment="Start date parsed correctly"
+            metric=1.0, comment="Start date parsed correctly"
         ),
         "experience[0].end_date": ComparisonMetric(
-            metric=0.0, color="red", comment="Current position not marked as None"
+            metric=0.0, comment="Current position not marked as None"
         ),
         "experience[0].responsibilities": ComparisonMetric(
-            metric=0.67, color="yellow", comment="2 of 3 key responsibilities captured"
+            metric=0.40, comment="2 of 3 key responsibilities captured"
         ),
         "experience[0].responsibilities[0]": ComparisonMetric(
             metric=0.9,
-            color="green",
             comment="Leadership responsibility captured accurately",
         ),
         "experience[0].responsibilities[1]": ComparisonMetric(
             metric=0.7,
-            color="yellow",
             comment="Technical detail paraphrased: 'Architected' → 'Designed'",
         ),
         "experience[0].responsibilities[2]": ComparisonMetric(
-            metric=0.0, color="red", comment="Performance metric (70% reduction) missed"
+            metric=0.0, comment="Performance metric (70% reduction) missed"
         ),
         "experience[0].technologies": ComparisonMetric(
-            metric=0.8, color="green", comment="4 of 5 key technologies identified"
+            metric=0.8, comment="4 of 5 key technologies identified"
         ),
         # Work Experience - Second job
         "experience[1]": ComparisonMetric(
             metric=0.65,
-            color="orange",
             comment="Older position with incomplete extraction",
         ),
         "experience[1].company": ComparisonMetric(
             metric=0.8,
-            color="yellow",
             comment="Company name variation: missing subsidiary info",
         ),
         "experience[1].position": ComparisonMetric(
-            metric=1.0, color="green", comment="Position title exact match"
+            metric=1.0, comment="Position title exact match"
         ),
         "experience[1].responsibilities": ComparisonMetric(
-            metric=0.5, color="orange", comment="Only 50% of responsibilities found"
+            metric=0.5, comment="Only 50% of responsibilities found"
         ),
         # Education
         "education": ComparisonMetric(
-            metric=0.92, color="green", comment="Education section well extracted"
+            metric=0.92, comment="Education section well extracted"
         ),
         "education[0]": ComparisonMetric(
-            metric=0.95, color="green", comment="Primary degree extracted accurately"
+            metric=0.95, comment="Primary degree extracted accurately"
         ),
         "education[0].institution": ComparisonMetric(
-            metric=1.0, color="green", comment="University name correct"
+            metric=1.0, comment="University name correct"
         ),
         "education[0].degree": ComparisonMetric(
-            metric=1.0, color="green", comment="Degree type matched"
+            metric=1.0, comment="Degree type matched"
         ),
         "education[0].field_of_study": ComparisonMetric(
             metric=0.9,
-            color="green",
             comment="Field normalized: 'CS' → 'Computer Science'",
         ),
         "education[0].gpa": ComparisonMetric(
-            metric=0.0, color="gray", comment="GPA not mentioned in source document"
+            metric=0.0, comment="GPA not mentioned in source document"
         ),
         "education[0].honors": ComparisonMetric(
             metric=0.8,
-            color="green",
             comment="1 of 2 honors extracted (Dean's List found)",
         ),
         # Skills section with nested lists
         "skills": ComparisonMetric(
             metric=0.75,
-            color="yellow",
             comment="Skills section: good coverage with some categorization errors",
         ),
         "skills.programming_languages": ComparisonMetric(
             metric=0.85,
-            color="green",
             comment="Most programming languages identified correctly",
         ),
         "skills.programming_languages[0]": ComparisonMetric(
-            metric=1.0, color="green", comment="'Python' identified correctly"
+            metric=1.0, comment="'Python' identified correctly"
         ),
         "skills.programming_languages[1]": ComparisonMetric(
-            metric=0.9, color="green", comment="Normalized: 'JavaScript' from 'JS'"
+            metric=0.9, comment="Normalized: 'JavaScript' from 'JS'"
         ),
         "skills.programming_languages[2]": ComparisonMetric(
-            metric=0.0, color="red", comment="'Go' language missed in extraction"
+            metric=0.0, comment="'Go' language missed in extraction"
         ),
         "skills.frameworks": ComparisonMetric(
             metric=0.6,
-            color="orange",
             comment="Some frameworks misclassified as libraries",
         ),
         "skills.databases": ComparisonMetric(
-            metric=0.9, color="green", comment="Database technologies well identified"
+            metric=0.9, comment="Database technologies well identified"
         ),
         "skills.tools": ComparisonMetric(
-            metric=0.7, color="yellow", comment="Development tools partially extracted"
+            metric=0.7, comment="Development tools partially extracted"
         ),
         "skills.cloud_platforms": ComparisonMetric(
             metric=1.0,
-            color="green",
             comment="All cloud platforms correctly identified",
         ),
         # Projects
         "projects": ComparisonMetric(
-            metric=0.82, color="green", comment="Projects section well structured"
+            metric=0.82, comment="Projects section well structured"
         ),
         "projects[0]": ComparisonMetric(
-            metric=0.88, color="green", comment="Main project comprehensively extracted"
+            metric=0.88, comment="Main project comprehensively extracted"
         ),
         "projects[0].name": ComparisonMetric(
-            metric=1.0, color="green", comment="Project name exact match"
+            metric=1.0, comment="Project name exact match"
         ),
         "projects[0].description": ComparisonMetric(
             metric=0.85,
-            color="green",
             comment="Description captured with minor paraphrasing",
         ),
         "projects[0].technologies": ComparisonMetric(
-            metric=0.9, color="green", comment="9 of 10 technologies identified"
-        ),
-        "projects[0].technologies[0]": ComparisonMetric(
-            metric=1.0, color="green", comment="'React' correctly identified"
+            metric=0.9, comment="9 of 10 technologies identified"
         ),
         "projects[0].technologies[1]": ComparisonMetric(
             metric=0.8,
-            color="yellow",
             comment="Version info lost: 'Node.js 18' → 'Node.js'",
         ),
         "projects[0].outcomes": ComparisonMetric(
             metric=0.7,
-            color="yellow",
             comment="Quantitative metrics partially captured",
         ),
         # Publications
         "publications": ComparisonMetric(
             metric=0.6,
-            color="orange",
             comment="Academic publications challenging to extract",
         ),
         "publications[0]": ComparisonMetric(
             metric=0.75,
-            color="yellow",
             comment="Primary publication with some missing details",
         ),
         "publications[0].title": ComparisonMetric(
             metric=0.95,
-            color="green",
             comment="Title extracted with minor formatting differences",
         ),
         "publications[0].venue": ComparisonMetric(
             metric=0.8,
-            color="yellow",
             comment="Conference acronym expanded incorrectly",
         ),
         "publications[0].authors": ComparisonMetric(
-            metric=0.7, color="yellow", comment="2 of 4 co-authors missing"
+            metric=0.7, comment="2 of 4 co-authors missing"
         ),
         "publications[0].authors[0]": ComparisonMetric(
             metric=1.0,
-            color="green",
             comment="Primary author (candidate) correctly identified",
         ),
         # Languages
         "languages": ComparisonMetric(
-            metric=0.85, color="green", comment="Language proficiencies well extracted"
+            metric=0.85, comment="Language proficiencies well extracted"
         ),
         "languages[0]": ComparisonMetric(
-            metric=0.95, color="green", comment="Primary language captured"
+            metric=0.95, comment="Primary language captured"
         ),
         "languages[0].language": ComparisonMetric(
-            metric=1.0, color="green", comment="'English' identified"
+            metric=1.0, comment="'English' identified"
         ),
         "languages[0].proficiency": ComparisonMetric(
-            metric=0.9, color="green", comment="Proficiency mapped to enum correctly"
+            metric=0.9, comment="Proficiency mapped to enum correctly"
         ),
         # Metadata
         "extraction_confidence": ComparisonMetric(
             metric=0.76,
-            color="yellow",
             comment="Overall extraction confidence score: 76%",
         ),
         "extraction_timestamp": ComparisonMetric(
-            metric=1.0, color="gray", comment="Timestamp auto-generated"
+            metric=1.0, comment="Timestamp auto-generated"
         ),
     }
 
@@ -535,6 +507,7 @@ def create_reference_resume() -> ExtractedResume:
                 name="Real-time Analytics Dashboard",
                 description="Developed real-time analytics dashboard for monitoring system performance",
                 technologies=["React", "D3.js", "WebSocket", "Node.js", "InfluxDB"],
+                url=None,
                 outcomes="Provided insights that reduced system downtime by 40%",
             ),
         ],
@@ -755,12 +728,10 @@ def get_critical_failures(metrics: ComparisonMap) -> List[tuple[str, ComparisonM
 
     failures: List[tuple[str, ComparisonMetric]] = []
     for field in critical_fields:
-        if (
-            field in metrics
-            and isinstance(metrics[field].metric, (int, float))
-            and metrics[field].metric < 0.8
-        ):
-            failures.append((field, metrics[field]))
+        if field in metrics:
+            metric = metrics[field]
+            if isinstance(metric.metric, (int, float)) and float(metric.metric) < 0.8:
+                failures.append((field, metric))
 
     return failures
 
