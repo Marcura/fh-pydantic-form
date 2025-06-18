@@ -1,5 +1,9 @@
 # Release Notes
 
+
+## Version 0.2.4 (2025-06-18)
+
+- Added support for SkipJsonSchema fields. They will automatically be excluded from the form and defaults used for validation. 
 ## Version 0.2.3 (2025-06-16 )
 
 - Removed the custom css injection for compact spacing. Instead applying to components directly. 

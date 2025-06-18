@@ -1,6 +1,6 @@
 [project]
 name = "fh-pydantic-form"
-version = "0.2.3"
+version = "0.2.4"
 description = "a library to turn any pydantic BaseModel object into a fasthtml/monsterui input form"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -49,7 +49,7 @@ markers = [
     "slow: tests that take longer to run",
     "enum: tests specifically for enum field functionality",
     "unit: fast unit tests with minimal dependencies",
-    "e2e: end to end tests, somewhat slow"
+    "e2e: end to end tests, somewhat slow" 
 ]
 
 [build-system]
