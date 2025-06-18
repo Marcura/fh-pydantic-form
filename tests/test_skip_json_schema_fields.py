@@ -1,11 +1,11 @@
 """Comprehensive tests for SkipJsonSchema field handling in forms."""
 
 import datetime
-from typing import Any, Dict, List, Optional, Type
+from typing import Annotated, Any, Dict, List, Optional, Type
 from uuid import uuid4
 
 import pytest
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, create_model
 from pydantic.json_schema import SkipJsonSchema
 
 from fh_pydantic_form import PydanticForm
@@ -340,22 +340,17 @@ class TestSkipJsonSchemaIntegration:
     def test_various_skip_field_types(self, field_type: Any, default_value: Any):
         """Test various types wrapped in SkipJsonSchema."""
 
-        # Dynamically create a model with the proper field type
-        class TestModel(BaseModel):
-            visible_field: str = "visible"
-
-        # Add the skip field with proper SkipJsonSchema metadata
         # Extract the underlying type from SkipJsonSchema[T]
         underlying_type = (
             field_type.__args__[0] if hasattr(field_type, "__args__") else str
         )
 
-        # Create field with proper metadata
-        skip_field_info = Field(default=default_value)
-        skip_field_info.metadata = [SkipJsonSchema()]  # type: ignore
-
-        TestModel.__annotations__["skip_field"] = underlying_type
-        TestModel.model_fields["skip_field"] = skip_field_info
+        # Create model using create_model with Annotated type for SkipJsonSchema field
+        TestModel = create_model(
+            "TestModel",
+            visible_field=(str, "visible"),
+            skip_field=(Annotated[underlying_type, SkipJsonSchema()], default_value),
+        )
 
         form = PydanticForm("test_types", TestModel)
         rendered_str = str(form.render_inputs())

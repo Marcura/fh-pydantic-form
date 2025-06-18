@@ -123,10 +123,10 @@ class TestEnumFormE2E:
         assert "999" in response_text or "Input should be" in response_text
 
     def test_enum_form_submit_missing_required_field(self, enum_client, htmx_headers):
-        """Test submission with missing required enum field."""
+        """Test submission with missing enum field that has a default value."""
         form_data = {
-            # Missing required status field
-            "enum_test_priority": "1",
+            # Missing status field (but it has a default value)
+            "enum_test_priority": "LOW",  # Use valid enum value
         }
 
         response = enum_client.post(
@@ -135,10 +135,12 @@ class TestEnumFormE2E:
         assert response.status_code == 200
 
         response_text = response.text
-        assert "Validation Error" in response_text
+        # With the new behavior, validation succeeds because defaults are injected
+        assert "Validation Successful" in response_text
 
-        # Should indicate the missing field
-        assert "status" in response_text.lower() or "required" in response_text.lower()
+        # Should contain the default value for the missing status field
+        unescaped_text = unescaped(response_text)
+        assert '"status": "NEW"' in unescaped_text  # OrderStatus.NEW is the default
 
     @pytest.mark.parametrize(
         "status_value", ["NEW", "PROCESSING", "SHIPPED", "DELIVERED"]

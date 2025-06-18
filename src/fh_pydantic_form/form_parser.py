@@ -111,8 +111,7 @@ def _parse_non_list_fields(
                 result[field_name] = _parse_enum_field(full_key, form_data, field_info)
             elif _is_optional_type(annotation):  # Optional but omitted
                 result[field_name] = None
-            else:  # Required but omitted - set to None for consistent behavior
-                result[field_name] = None
+            # otherwise leave the key out – defaults will be injected later
 
         # Handle nested model fields (including Optional[NestedModel])
         elif (
