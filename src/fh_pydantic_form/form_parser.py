@@ -14,6 +14,7 @@ from fh_pydantic_form.type_helpers import (
     _is_enum_type,
     _is_literal_type,
     _is_optional_type,
+    _is_skip_json_schema_field,
 )
 
 logger = logging.getLogger(__name__)
@@ -77,6 +78,11 @@ def _parse_non_list_fields(
         if field_name in exclude_fields:
             continue
 
+        # Skip SkipJsonSchema fields - they should not be parsed from form data
+        if _is_skip_json_schema_field(field_info):
+            logger.debug(f"Skipping SkipJsonSchema field during parsing: {field_name}")
+            continue
+
         # Create full key with prefix
         full_key = f"{base_prefix}{field_name}"
 
@@ -91,11 +97,21 @@ def _parse_non_list_fields(
 
         # Handle Literal fields (including Optional[Literal[...]])
         elif _is_literal_type(annotation):
-            result[field_name] = _parse_literal_field(full_key, form_data, field_info)
+            if full_key in form_data:  # User sent it
+                result[field_name] = _parse_literal_field(
+                    full_key, form_data, field_info
+                )
+            elif _is_optional_type(annotation):  # Optional but omitted
+                result[field_name] = None
+            # otherwise leave the key out – defaults will be injected later
 
         # Handle Enum fields (including Optional[Enum])
         elif _is_enum_type(annotation):
-            result[field_name] = _parse_enum_field(full_key, form_data, field_info)
+            if full_key in form_data:  # User sent it
+                result[field_name] = _parse_enum_field(full_key, form_data, field_info)
+            elif _is_optional_type(annotation):  # Optional but omitted
+                result[field_name] = None
+            # otherwise leave the key out – defaults will be injected later
 
         # Handle nested model fields (including Optional[NestedModel])
         elif (
@@ -126,8 +142,13 @@ def _parse_non_list_fields(
 
         # Handle simple fields
         else:
-            # Use updated _parse_simple_field that handles optionality
-            result[field_name] = _parse_simple_field(full_key, form_data, field_info)
+            if full_key in form_data:  # User sent it
+                result[field_name] = _parse_simple_field(
+                    full_key, form_data, field_info
+                )
+            elif _is_optional_type(annotation):  # Optional but omitted
+                result[field_name] = None
+            # otherwise leave the key out – defaults will be injected later
 
     return result
 
@@ -281,6 +302,13 @@ def _parse_nested_model_field(
         for sub_field_name, sub_field_info in nested_model_class.model_fields.items():
             sub_key = f"{current_prefix}{sub_field_name}"
             annotation = getattr(sub_field_info, "annotation", None)
+
+            # Skip SkipJsonSchema fields - they should not be parsed from form data
+            if _is_skip_json_schema_field(sub_field_info):
+                logger.debug(
+                    f"Skipping SkipJsonSchema field in nested model during parsing: {sub_field_name}"
+                )
+                continue
 
             # Handle based on field type, with Optional unwrapping
             is_optional = _is_optional_type(annotation)
@@ -497,20 +525,9 @@ def _parse_list_fields(
         if items:  # Only add if items were found
             final_lists[field_name] = items
 
-    # For any list field that didn't have form data, use its default
-    for field_name, field_def in list_field_defs.items():
-        if field_name not in final_lists:
-            field_info = field_def["field_info"]
-            if hasattr(field_info, "default") and field_info.default is not None:
-                final_lists[field_name] = field_info.default
-            elif (
-                hasattr(field_info, "default_factory")
-                and field_info.default_factory is not None
-            ):
-                try:
-                    final_lists[field_name] = field_info.default_factory()
-                except Exception:
-                    pass
+    # DON'T set defaults for missing list fields here - let _inject_missing_defaults handle all defaults
+    # This allows the proper default injection mechanism to work for missing list fields
+    # Only keep this section for excluded fields if needed, but don't inject defaults for all missing fields
 
     return final_lists
 

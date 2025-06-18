@@ -15,9 +15,9 @@ from fastcore.xml import FT
 from pydantic import ValidationError
 from pydantic.fields import FieldInfo
 
+from fh_pydantic_form.constants import _UNSET
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import (
-    _UNSET,
     _get_underlying_type_if_optional,
     _is_optional_type,
     get_default,

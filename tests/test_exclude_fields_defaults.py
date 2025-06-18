@@ -381,6 +381,54 @@ def test_excluded_fields_partial_initial_values():
     assert validated_model.excluded_optional == "overridden_optional"
 
 
+def test_all_missing_fields_get_defaults():
+    """Test that ALL missing fields get defaults, not just excluded fields."""
+
+    class MixedDefaultsModel(BaseModel):
+        # Visible field that user will provide
+        visible_field: str
+
+        # Field that will be missing from form but has default
+        missing_with_default: str = "missing_default"
+
+        # Field that will be missing from form with factory
+        missing_with_factory: List[str] = Field(
+            default_factory=lambda: ["missing1", "missing2"]
+        )
+
+        # Optional field that will be missing
+        missing_optional: Optional[str] = None
+
+        # Required field without default that will be missing
+        missing_required: str
+
+    form_renderer = PydanticForm(
+        "test_form",
+        MixedDefaultsModel,
+        # Note: NOT excluding any fields, they're just missing from form data
+    )
+
+    # Simulate sparse form data - many fields missing
+    form_data = {
+        "test_form_visible_field": "user provided",
+        "test_form_missing_required": "also provided",  # Must provide this to avoid validation error
+    }
+
+    parsed_data = form_renderer.parse(form_data)
+
+    # All fields with defaults should be present even though not excluded
+    assert parsed_data["visible_field"] == "user provided"
+    assert parsed_data["missing_with_default"] == "missing_default"
+    assert parsed_data["missing_with_factory"] == ["missing1", "missing2"]
+    assert parsed_data["missing_optional"] is None
+    assert parsed_data["missing_required"] == "also provided"
+
+    # Validation should succeed
+    validated_model = MixedDefaultsModel.model_validate(parsed_data)
+    assert validated_model.missing_with_default == "missing_default"
+    assert validated_model.missing_with_factory == ["missing1", "missing2"]
+
+
 def test_excluded_fields_with_nested_initial_values():
     """Test that initial_values work correctly with nested models in excluded fields"""
     # Custom nested model values

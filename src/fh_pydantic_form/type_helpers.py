@@ -1,12 +1,88 @@
+# Explicit exports for public API
+__all__ = [
+    "_is_optional_type",
+    "_get_underlying_type_if_optional",
+    "_is_literal_type",
+    "_is_enum_type",
+    "_is_skip_json_schema_field",
+    "default_for_annotation",
+]
+
 import logging
 from enum import Enum
 from types import UnionType
-from typing import Any, Literal, Union, get_args, get_origin
+from typing import Annotated, Any, Literal, Union, get_args, get_origin
+
+from fh_pydantic_form.constants import _UNSET
 
 logger = logging.getLogger(__name__)
 
-# Sentinel value to indicate no default is available
-_UNSET = object()
+
+def _is_skip_json_schema_field(annotation_or_field_info: Any) -> bool:
+    """
+    Check if a field annotation or field_info indicates it should be skipped in JSON schema.
+
+    This handles the pattern where SkipJsonSchema is used with typing.Annotated:
+    - Annotated[str, SkipJsonSchema()]
+    - SkipJsonSchema[str] (which internally uses Annotated)
+    - Field metadata containing SkipJsonSchema (Pydantic 2 behavior)
+
+    Args:
+        annotation_or_field_info: The field annotation or field_info to check
+
+    Returns:
+        True if the field should be skipped in JSON schema
+    """
+    try:
+        from pydantic.json_schema import SkipJsonSchema
+
+        skip_json_schema_cls = SkipJsonSchema
+    except ImportError:  # very old Pydantic
+        skip_json_schema_cls = None
+
+    if skip_json_schema_cls is None:
+        return False
+
+    # Check if it's a field_info object with metadata
+    if hasattr(annotation_or_field_info, "metadata"):
+        metadata = getattr(annotation_or_field_info, "metadata", [])
+        if metadata:
+            for item in metadata:
+                if (
+                    item is skip_json_schema_cls
+                    or isinstance(item, skip_json_schema_cls)
+                    or (
+                        hasattr(item, "__class__")
+                        and item.__class__.__name__ == "SkipJsonSchema"
+                    )
+                ):
+                    return True
+
+    # Fall back to checking annotation (for backward compatibility)
+    annotation = annotation_or_field_info
+    if hasattr(annotation_or_field_info, "annotation"):
+        annotation = getattr(annotation_or_field_info, "annotation")
+
+    # 1. Direct or generic alias
+    if (
+        annotation is skip_json_schema_cls
+        or getattr(annotation, "__origin__", None) is skip_json_schema_cls
+    ):
+        return True
+
+    # 2. Something like Annotated[T, SkipJsonSchema()]
+    if get_origin(annotation) is Annotated:
+        for meta in get_args(annotation)[1:]:
+            meta_class = getattr(meta, "__class__", None)
+            if (
+                meta is skip_json_schema_cls  # plain class
+                or isinstance(meta, skip_json_schema_cls)  # instance
+                or (meta_class is not None and meta_class.__name__ == "SkipJsonSchema")
+            ):
+                return True
+
+    # 3. Fallback – cheap but effective
+    return "SkipJsonSchema" in repr(annotation)
 
 
 def _is_optional_type(annotation: Any) -> bool:
@@ -25,16 +101,6 @@ def _is_optional_type(annotation: Any) -> bool:
         # Check if NoneType is one of the args and there are exactly two args
         return len(args) == 2 and type(None) in args
     return False
-
-
-# Explicit exports for public API
-__all__ = [
-    "_is_optional_type",
-    "_get_underlying_type_if_optional",
-    "_is_literal_type",
-    "_is_enum_type",
-    "default_for_annotation",
-]
 
 
 def _get_underlying_type_if_optional(annotation: Any) -> Any:

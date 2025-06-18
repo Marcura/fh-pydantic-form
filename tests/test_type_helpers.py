@@ -1,9 +1,12 @@
 from typing import List, Literal, Optional, Union, get_args, get_origin
 
+import pytest
+
 from fh_pydantic_form.type_helpers import (
     _is_optional_type,
     _get_underlying_type_if_optional,
     _is_literal_type,
+    _is_skip_json_schema_field,
 )
 
 
@@ -83,3 +86,79 @@ class TestIsLiteralType:
     def test_non_literal_union(self):
         """Test with Union[str, int]."""
         assert _is_literal_type(Union[str, int]) is False
+
+
+class TestIsSkipJsonSchemaField:
+    """Test the _is_skip_json_schema_field function."""
+
+    @pytest.fixture
+    def skip_json_schema_annotations(self):
+        """Create various SkipJsonSchema annotations for testing."""
+        try:
+            from pydantic.json_schema import SkipJsonSchema
+
+            return {
+                "available": True,
+                "direct_str": SkipJsonSchema[str],
+                "direct_int": SkipJsonSchema[int],
+                "complex_list": SkipJsonSchema[List[str]],
+                "optional_skip": SkipJsonSchema[Optional[str]],
+            }
+        except ImportError:
+            # Handle case where pydantic version doesn't have SkipJsonSchema
+            return {"available": False}
+
+    def test_skip_json_schema_direct(self, skip_json_schema_annotations):
+        """Test direct SkipJsonSchema annotations."""
+        if not skip_json_schema_annotations.get("available"):
+            pytest.skip("SkipJsonSchema not available in this pydantic version")
+
+        assert (
+            _is_skip_json_schema_field(skip_json_schema_annotations["direct_str"])
+            is True
+        )
+        assert (
+            _is_skip_json_schema_field(skip_json_schema_annotations["direct_int"])
+            is True
+        )
+        assert (
+            _is_skip_json_schema_field(skip_json_schema_annotations["complex_list"])
+            is True
+        )
+
+    def test_skip_json_schema_with_optional(self, skip_json_schema_annotations):
+        """Test SkipJsonSchema with Optional types."""
+        if not skip_json_schema_annotations.get("available"):
+            pytest.skip("SkipJsonSchema not available in this pydantic version")
+
+        assert (
+            _is_skip_json_schema_field(skip_json_schema_annotations["optional_skip"])
+            is True
+        )
+
+    def test_non_skip_json_schema_types(self):
+        """Test that regular types return False."""
+        assert _is_skip_json_schema_field(str) is False
+        assert _is_skip_json_schema_field(int) is False
+        assert _is_skip_json_schema_field(List[str]) is False
+        assert _is_skip_json_schema_field(Optional[str]) is False
+        assert _is_skip_json_schema_field(Union[str, int]) is False
+
+    def test_skip_json_schema_string_fallback(self):
+        """Test string representation fallback detection."""
+
+        # Create a mock type that has SkipJsonSchema in its string representation
+        class MockSkipJsonSchemaType:
+            def __str__(self):
+                return "SkipJsonSchema[str]"
+
+        mock_type = MockSkipJsonSchemaType()
+        assert _is_skip_json_schema_field(mock_type) is True
+
+    def test_edge_cases(self):
+        """Test edge cases for SkipJsonSchema detection."""
+        # None should return False
+        assert _is_skip_json_schema_field(None) is False
+
+        # Empty type annotations
+        assert _is_skip_json_schema_field(type(None)) is False
