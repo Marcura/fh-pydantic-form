@@ -226,6 +226,7 @@ class ComparisonForm(Generic[ModelType]):
                 field_path=[field_name],
                 form_name=self.left_form.name,
                 comparison=comparison_metric,
+                comparison_map=self.comparison,  # Pass the full comparison map
             )
 
             # Create right renderer
@@ -239,6 +240,7 @@ class ComparisonForm(Generic[ModelType]):
                 field_path=[field_name],
                 form_name=self.right_form.name,
                 comparison=comparison_metric,
+                comparison_map=self.comparison,  # Pass the full comparison map
             )
 
             pairs.append((path_str, left_renderer, right_renderer))

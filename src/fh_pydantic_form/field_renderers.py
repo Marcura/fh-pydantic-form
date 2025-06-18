@@ -3,6 +3,7 @@ from datetime import date, time
 from enum import Enum
 from typing import (
     Any,
+    Dict,
     List,
     Optional,
     get_args,
@@ -160,6 +161,7 @@ class BaseFieldRenderer(ComparisonRendererMixin):
         field_path: Optional[List[str]] = None,
         form_name: Optional[str] = None,
         comparison: Optional[ComparisonMetric] = None,
+        comparison_map: Optional[Dict[str, ComparisonMetric]] = None,
     ):
         """
         Initialize the field renderer
@@ -175,6 +177,7 @@ class BaseFieldRenderer(ComparisonRendererMixin):
             field_path: Path segments from root to this field (for nested list support)
             form_name: Explicit form name (used for nested list URLs)
             comparison: Optional comparison metric for visual feedback
+            comparison_map: Optional full comparison map for auto-lookup
         """
         self.field_name = f"{prefix}{field_name}" if prefix else field_name
         self.original_field_name = field_name
@@ -187,7 +190,40 @@ class BaseFieldRenderer(ComparisonRendererMixin):
         self.disabled = disabled
         self.label_color = label_color
         self.spacing = _normalize_spacing(spacing)
-        self.comparison = comparison
+        self.comparison_map = comparison_map
+        # Initialize comparison attribute
+        self.comparison: Optional[ComparisonMetric] = None
+
+        # Auto-resolve comparison metric if not explicitly provided
+        if comparison is not None:
+            self.comparison = comparison
+        elif comparison_map:
+            path_string = self._build_path_string()
+            self.comparison = comparison_map.get(path_string)
+
+    def _build_path_string(self) -> str:
+        """
+        Convert field_path list to dot/bracket notation string for comparison lookup.
+
+        Examples:
+            ['experience', '0', 'company'] -> 'experience[0].company'
+            ['skills', 'programming_languages', '2'] -> 'skills.programming_languages[2]'
+
+        Returns:
+            Path string in dot/bracket notation
+        """
+        parts: List[str] = []
+        for segment in self.field_path:
+            # Check if segment is numeric or a list index pattern
+            if segment.isdigit() or segment.startswith("new_"):
+                # Interpret as list index
+                if parts:
+                    parts[-1] += f"[{segment}]"
+                else:  # Defensive fallback
+                    parts.append(f"[{segment}]")
+            else:
+                parts.append(segment)
+        return ".".join(parts)
 
     def _is_inline_color(self, color: str) -> bool:
         """
@@ -892,7 +928,8 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
                     spacing=self.spacing,  # Propagate spacing to nested fields
                     field_path=self.field_path + [nested_field_name],  # Propagate path
                     form_name=self.explicit_form_name,  # Propagate form name
-                    comparison=None,  # Nested comparisons handled separately by ComparisonForm
+                    comparison=None,  # Let auto-lookup handle it
+                    comparison_map=self.comparison_map,  # Pass down the comparison map
                 )
 
                 nested_inputs.append(renderer.render())
@@ -1287,6 +1324,12 @@ class ListFieldRenderer(BaseFieldRenderer):
                         value=item,
                         prefix=self.prefix,
                         disabled=self.disabled,  # Propagate disabled state
+                        spacing=self.spacing,  # Propagate spacing
+                        field_path=self.field_path
+                        + [str(idx)],  # Propagate path with index
+                        form_name=self.explicit_form_name,  # Propagate form name
+                        comparison=None,  # Let auto-lookup handle it
+                        comparison_map=self.comparison_map,  # Pass down the comparison map
                     )
                     # Add the rendered input to content elements
                     item_content_elements.append(item_renderer.render_input())
@@ -1342,7 +1385,9 @@ class ListFieldRenderer(BaseFieldRenderer):
                                     str(idx),
                                     nested_field_name,
                                 ],  # Propagate path with index
-                                comparison=None,  # List item comparisons handled separately
+                                form_name=self.explicit_form_name,  # Propagate form name
+                                comparison=None,  # Let auto-lookup handle it
+                                comparison_map=self.comparison_map,  # Pass down the comparison map
                             )
 
                             # Add rendered field to valid fields
@@ -1380,7 +1425,9 @@ class ListFieldRenderer(BaseFieldRenderer):
                     spacing=self.spacing,  # Propagate spacing
                     field_path=self.field_path
                     + [str(idx)],  # Propagate path with index
-                    comparison=None,  # List item comparisons handled separately
+                    form_name=self.explicit_form_name,  # Propagate form name
+                    comparison=None,  # Let auto-lookup handle it
+                    comparison_map=self.comparison_map,  # Pass down the comparison map
                 )
                 input_element = simple_renderer.render_input()
                 item_content_elements.append(fh.Div(input_element))
