@@ -381,7 +381,7 @@ def test_excluded_fields_partial_initial_values():
     assert validated_model.excluded_optional == "overridden_optional"
 
 
-def test_all_missing_fields_get_defaults():
+def test_all_missing_fields_get_defaults_except_lists():
     """Test that ALL missing fields get defaults, not just excluded fields."""
 
     class MixedDefaultsModel(BaseModel):
@@ -392,8 +392,11 @@ def test_all_missing_fields_get_defaults():
         missing_with_default: str = "missing_default"
 
         # Field that will be missing from form with factory
-        missing_with_factory: List[str] = Field(
+        missing_list_with_factory: List[str] = Field(
             default_factory=lambda: ["missing1", "missing2"]
+        )
+        excluded_list_with_factory: List[str] = Field(
+            default_factory=lambda: ["excluded1", "excluded2"]
         )
 
         # Optional field that will be missing
@@ -406,6 +409,7 @@ def test_all_missing_fields_get_defaults():
         "test_form",
         MixedDefaultsModel,
         # Note: NOT excluding any fields, they're just missing from form data
+        exclude_fields=["excluded_list_with_factory"],
     )
 
     # Simulate sparse form data - many fields missing
@@ -419,14 +423,16 @@ def test_all_missing_fields_get_defaults():
     # All fields with defaults should be present even though not excluded
     assert parsed_data["visible_field"] == "user provided"
     assert parsed_data["missing_with_default"] == "missing_default"
-    assert parsed_data["missing_with_factory"] == ["missing1", "missing2"]
+    # lists without items should parse to an empty list.
+    assert parsed_data["missing_list_with_factory"] == []
     assert parsed_data["missing_optional"] is None
     assert parsed_data["missing_required"] == "also provided"
 
     # Validation should succeed
     validated_model = MixedDefaultsModel.model_validate(parsed_data)
     assert validated_model.missing_with_default == "missing_default"
-    assert validated_model.missing_with_factory == ["missing1", "missing2"]
+    assert validated_model.missing_list_with_factory == []
+    assert validated_model.excluded_list_with_factory == ["excluded1", "excluded2"]
 
 
 def test_excluded_fields_with_nested_initial_values():

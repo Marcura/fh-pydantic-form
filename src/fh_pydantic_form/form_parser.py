@@ -7,6 +7,8 @@ from typing import (
     Optional,
     Tuple,
     Union,
+    get_origin,
+    get_args,
 )
 
 from fh_pydantic_form.type_helpers import (
@@ -33,17 +35,16 @@ def _identify_list_fields(model_class) -> Dict[str, Dict[str, Any]]:
     list_fields = {}
     for field_name, field_info in model_class.model_fields.items():
         annotation = getattr(field_info, "annotation", None)
-        if (
-            annotation is not None
-            and hasattr(annotation, "__origin__")
-            and annotation.__origin__ is list
-        ):
-            item_type = annotation.__args__[0]
-            list_fields[field_name] = {
-                "item_type": item_type,
-                "is_model_type": hasattr(item_type, "model_fields"),
-                "field_info": field_info,  # Store for later use if needed
-            }
+        if annotation is not None:
+            # Handle Optional[List[...]] by unwrapping the Optional
+            base_ann = _get_underlying_type_if_optional(annotation)
+            if get_origin(base_ann) is list:
+                item_type = get_args(base_ann)[0]
+                list_fields[field_name] = {
+                    "item_type": item_type,
+                    "is_model_type": hasattr(item_type, "model_fields"),
+                    "field_info": field_info,  # Store for later use if needed
+                }
     return list_fields
 
 
@@ -128,9 +129,14 @@ def _parse_non_list_fields(
             # Get the nested model class (unwrap Optional if needed)
             nested_model_class = _get_underlying_type_if_optional(annotation)
 
-            # Parse the nested model - pass the base_prefix
+            # Parse the nested model - pass the base_prefix and exclude_fields
             nested_value = _parse_nested_model_field(
-                field_name, form_data, nested_model_class, field_info, base_prefix
+                field_name,
+                form_data,
+                nested_model_class,
+                field_info,
+                base_prefix,
+                exclude_fields,
             )
 
             # Only assign if we got a non-None value or the field is not optional
@@ -270,6 +276,7 @@ def _parse_nested_model_field(
     nested_model_class,
     field_info,
     parent_prefix: str = "",
+    exclude_fields: Optional[List[str]] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Parse a nested Pydantic model field from form data.
@@ -351,6 +358,7 @@ def _parse_nested_model_field(
                 form_data,
                 nested_list_defs,
                 current_prefix,  # ← prefix for this nested model
+                exclude_fields,  # Pass through exclude_fields
             )
             # Merge without clobbering keys already set in step 1
             for lf_name, lf_val in list_results.items():
@@ -432,6 +440,7 @@ def _parse_list_fields(
     form_data: Dict[str, Any],
     list_field_defs: Dict[str, Dict[str, Any]],
     base_prefix: str = "",
+    exclude_fields: Optional[List[str]] = None,
 ) -> Dict[str, List[Any]]:
     """
     Parse list fields from form data by analyzing keys and reconstructing ordered lists.
@@ -440,10 +449,13 @@ def _parse_list_fields(
         form_data: Dictionary containing form field data
         list_field_defs: Dictionary of list field definitions
         base_prefix: Prefix to use when looking up field names in form_data
+        exclude_fields: Optional list of field names to exclude from parsing
 
     Returns:
         Dictionary with parsed list fields
     """
+    exclude_fields = exclude_fields or []
+
     # Skip if no list fields defined
     if not list_field_defs:
         return {}
@@ -525,9 +537,18 @@ def _parse_list_fields(
         if items:  # Only add if items were found
             final_lists[field_name] = items
 
-    # DON'T set defaults for missing list fields here - let _inject_missing_defaults handle all defaults
-    # This allows the proper default injection mechanism to work for missing list fields
-    # Only keep this section for excluded fields if needed, but don't inject defaults for all missing fields
+    # Ensure every rendered list field appears in final_lists
+    for field_name, field_def in list_field_defs.items():
+        # Skip list fields the UI never showed (those in exclude_fields)
+        if field_name in exclude_fields:
+            continue
+
+        # When user supplied ≥1 item we already captured it
+        if field_name in final_lists:
+            continue
+
+        # User submitted form with zero items → honour intent with empty list
+        final_lists[field_name] = []
 
     return final_lists
 
@@ -560,7 +581,9 @@ def _parse_model_list_item(
     )
     # 2. Parse inner lists
     result.update(
-        _parse_list_fields(form_data, nested_list_defs, base_prefix=item_prefix)
+        _parse_list_fields(
+            form_data, nested_list_defs, base_prefix=item_prefix, exclude_fields=[]
+        )
     )
     return result
 
