@@ -144,7 +144,8 @@ class ComparisonForm(Generic[ModelType]):
         model_class: Type[ModelType],
         left_initial: Optional[Union[ModelType, Dict[str, Any]]] = None,
         right_initial: Optional[Union[ModelType, Dict[str, Any]]] = None,
-        comparison: Optional[ComparisonMap] = None,
+        left_metrics: Optional[ComparisonMap] = None,
+        right_metrics: Optional[ComparisonMap] = None,
         disabled_left: bool = False,
         disabled_right: bool = False,
         left_label: str = "Reference",
@@ -160,7 +161,8 @@ class ComparisonForm(Generic[ModelType]):
             model_class: The Pydantic model class to render
             left_initial: Initial values for left form
             right_initial: Initial values for right form
-            comparison: Mapping of field paths to comparison metrics
+            left_metrics: Mapping of field paths to comparison metrics for left form
+            right_metrics: Mapping of field paths to comparison metrics for right form
             disabled_left: Whether left form should be disabled
             disabled_right: Whether right form should be disabled
             left_label: Label for left column
@@ -170,7 +172,8 @@ class ComparisonForm(Generic[ModelType]):
         """
         self.name = name
         self.model_class = model_class
-        self.comparison = comparison or {}
+        self.left_metrics = left_metrics or {}
+        self.right_metrics = right_metrics or {}
         self.left_label = left_label
         self.right_label = right_label
         self.spacing = _normalize_spacing(spacing)
@@ -222,7 +225,8 @@ class ComparisonForm(Generic[ModelType]):
 
             # Get the path string for comparison lookup
             path_str = field_name
-            comparison_metric = self.comparison.get(path_str)
+            left_comparison_metric = self.left_metrics.get(path_str)
+            right_comparison_metric = self.right_metrics.get(path_str)
 
             # Get renderer class
             renderer_cls = registry.get_renderer(field_name, field_info)
@@ -241,8 +245,8 @@ class ComparisonForm(Generic[ModelType]):
                 spacing=self.spacing,
                 field_path=[field_name],
                 form_name=self.left_form.name,
-                comparison=comparison_metric,
-                comparison_map=self.comparison,  # Pass the full comparison map
+                comparison=left_comparison_metric,
+                comparison_map=self.left_metrics,  # Pass the full comparison map
             )
 
             # Create right renderer
@@ -255,8 +259,8 @@ class ComparisonForm(Generic[ModelType]):
                 spacing=self.spacing,
                 field_path=[field_name],
                 form_name=self.right_form.name,
-                comparison=comparison_metric,
-                comparison_map=self.comparison,  # Pass the full comparison map
+                comparison=right_comparison_metric,
+                comparison_map=self.right_metrics,  # Pass the full comparison map
             )
 
             pairs.append((path_str, left_renderer, right_renderer))
@@ -398,7 +402,8 @@ class ComparisonForm(Generic[ModelType]):
                     model_class=self.model_class,
                     left_initial=left_parsed,
                     right_initial=right_parsed,
-                    comparison=self.comparison,
+                    left_metrics=self.left_metrics,
+                    right_metrics=self.right_metrics,
                     disabled_left=self.left_form.disabled,
                     disabled_right=self.right_form.disabled,
                     left_label=self.left_label,
@@ -492,13 +497,11 @@ def simple_diff_comparison(
 
                 comparison_map[field_name] = ComparisonMetric(
                     metric=round(similarity, 2),
-                    color="orange" if similarity > 0.5 else "red",
                     comment=f"String similarity: {similarity:.0%}",
                 )
             else:
                 comparison_map[field_name] = ComparisonMetric(
                     metric=0.0,
-                    color="red",
                     comment=f"Different values: {left_val} vs {right_val}",
                 )
 
