@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import date, time
 from enum import Enum
 from typing import (
@@ -16,6 +17,7 @@ from fastcore.xml import FT
 from pydantic import ValidationError
 from pydantic.fields import FieldInfo
 
+from fh_pydantic_form.color_utils import robust_color_to_rgba
 from fh_pydantic_form.constants import _UNSET
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import (
@@ -67,33 +69,11 @@ class ComparisonRendererMixin:
             f"Metric value: {metric.metric} {type(metric.metric)} color: {metric.color}"
         )
 
-        # Helper to convert color to rgba with opacity
-        def color_with_opacity(color: str, opacity: float = 0.12) -> str:
-            """Convert any color format to rgba with specified opacity"""
-            if color.startswith("#"):
-                # Convert hex to rgba
-                hex_color = color.lstrip("#")
-                if len(hex_color) == 3:
-                    hex_color = "".join([c * 2 for c in hex_color])
-                r = int(hex_color[0:2], 16)
-                g = int(hex_color[2:4], 16)
-                b = int(hex_color[4:6], 16)
-                return f"rgba({r}, {g}, {b}, {opacity})"
-            elif color.startswith("rgb"):
-                # Extract rgb values and add opacity
-                import re
-
-                nums = re.findall(r"\d+", color)
-                if len(nums) >= 3:
-                    return f"rgba({nums[0]}, {nums[1]}, {nums[2]}, {opacity})"
-            # For named colors or other formats, use as-is with opacity in hex notation
-            return f"{color}20"  # Fallback with hex opacity
-
         # Apply background color with opacity
         if metric.color:
             if hasattr(element, "attrs"):
                 existing_style = element.attrs.get("style", "")
-                bg_color = color_with_opacity(
+                bg_color = robust_color_to_rgba(
                     metric.color, 0.15
                 )  # 15% opacity for background
                 new_style = f"background-color: {bg_color}; {existing_style}"
@@ -108,8 +88,17 @@ class ComparisonRendererMixin:
         if metric.metric is not None:
             # Determine bullet colors based on LangSmith-style system when no color provided
             if metric.color:
-                # Use provided color
-                badge_bg = metric.color
+                # Use provided color - convert to full opacity for badge
+                badge_bg_rgba = robust_color_to_rgba(metric.color, 1.0)
+                # Extract RGB values and use them for badge background
+                rgb_match = re.match(
+                    r"rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)", badge_bg_rgba
+                )
+                if rgb_match:
+                    r, g, b = rgb_match.groups()
+                    badge_bg = f"rgb({r}, {g}, {b})"
+                else:
+                    badge_bg = metric.color
                 text_color = "white"
             else:
                 if isinstance(metric.metric, (float, int)):
@@ -163,6 +152,48 @@ class ComparisonRendererMixin:
             return fh.Div(
                 element, metric_badge, cls="relative inline-flex items-start w-full"
             )
+
+        # Apply highlighting to input fields
+        element = self._highlight_input_fields(element, metric)
+
+        # Return decorated element
+        return element
+
+    def _highlight_input_fields(self, element: FT, metric: ComparisonMetric) -> FT:
+        """
+        Find nested form controls and add a colored box-shadow to them
+        based on the comparison metric color.
+
+        Args:
+            element: The FT element to search within
+            metric: The comparison metric containing color information
+
+        Returns:
+            The element with highlighted input fields
+        """
+        if not metric or not metric.color:
+            return element
+
+        # Create the highlight CSS with appropriate opacity
+        border_rgba = robust_color_to_rgba(metric.color, 0.4)
+        highlight_css = f"box-shadow: 0 0 0 2px {border_rgba};"
+
+        # Recursively find and style input elements
+        def apply_highlight(node):
+            """Recursively apply highlighting to input elements"""
+            if hasattr(node, "tag") and isinstance(node.tag, str):
+                if node.tag.lower() in ("input", "select", "textarea"):
+                    # Add or update the style attribute
+                    existing_style = node.attrs.get("style", "")
+                    node.attrs["style"] = highlight_css + " " + existing_style
+
+            # Process children if they exist
+            if hasattr(node, "children") and node.children:
+                for child in node.children:
+                    apply_highlight(child)
+
+        # Apply highlighting to the element tree
+        apply_highlight(element)
 
         return element
 
@@ -222,6 +253,7 @@ class BaseFieldRenderer(ComparisonRendererMixin):
         self.label_color = label_color
         self.spacing = _normalize_spacing(spacing)
         self.comparison_map = comparison_map
+
         # Initialize comparison attribute
         self.comparison: Optional[ComparisonMetric] = None
 
@@ -957,7 +989,8 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
                     prefix=nested_prefix,
                     disabled=self.disabled,  # Propagate disabled state to nested fields
                     spacing=self.spacing,  # Propagate spacing to nested fields
-                    field_path=self.field_path + [nested_field_name],  # Propagate path
+                    field_path=self.field_path
+                    + [nested_field_name],  # Propagate path with field name
                     form_name=self.explicit_form_name,  # Propagate form name
                     comparison=None,  # Let auto-lookup handle it
                     comparison_map=self.comparison_map,  # Pass down the comparison map
