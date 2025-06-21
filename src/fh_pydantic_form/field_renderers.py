@@ -94,11 +94,6 @@ class ComparisonRendererMixin:
         """
         if not metric:
             return element
-
-        logger.info(
-            f"Metric value: {metric.metric} {type(metric.metric)} color: {metric.color}"
-        )
-
         # Apply background color with opacity
         if metric.color:
             if hasattr(element, "attrs"):

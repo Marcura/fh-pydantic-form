@@ -15,7 +15,6 @@ from typing import (
     Tuple,
     Type,
     TypeVar,
-    Union,
 )
 
 import fasthtml.common as fh
@@ -27,7 +26,6 @@ from fh_pydantic_form.field_renderers import BaseFieldRenderer
 from fh_pydantic_form.form_renderer import PydanticForm
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import ComparisonMap, ComparisonMetric
-from fh_pydantic_form.ui_style import SpacingTheme, SpacingValue, _normalize_spacing
 
 logger = logging.getLogger(__name__)
 
@@ -136,66 +134,55 @@ class ComparisonForm(Generic[ModelType]):
 
     This class creates a two-column layout with synchronized accordions and
     visual comparison feedback (colors, tooltips, metric badges).
+
+    The ComparisonForm is a view-only composition helper; state management
+    lives in the underlying PydanticForm instances.
     """
 
     def __init__(
         self,
         name: str,
-        model_class: Type[ModelType],
-        left_initial: Optional[Union[ModelType, Dict[str, Any]]] = None,
-        right_initial: Optional[Union[ModelType, Dict[str, Any]]] = None,
+        left_form: PydanticForm[ModelType],
+        right_form: PydanticForm[ModelType],
+        *,
         left_metrics: Optional[ComparisonMap] = None,
         right_metrics: Optional[ComparisonMap] = None,
-        disabled_left: bool = False,
-        disabled_right: bool = False,
         left_label: str = "Reference",
         right_label: str = "Generated",
-        spacing: SpacingValue = SpacingTheme.NORMAL,
-        exclude_fields: Optional[List[str]] = None,
     ):
         """
         Initialize the comparison form
 
         Args:
             name: Unique name for this comparison form
-            model_class: The Pydantic model class to render
-            left_initial: Initial values for left form
-            right_initial: Initial values for right form
+            left_form: Pre-constructed PydanticForm for left column
+            right_form: Pre-constructed PydanticForm for right column
             left_metrics: Mapping of field paths to comparison metrics for left form
             right_metrics: Mapping of field paths to comparison metrics for right form
-            disabled_left: Whether left form should be disabled
-            disabled_right: Whether right form should be disabled
             left_label: Label for left column
             right_label: Label for right column
-            spacing: Spacing theme to use
-            exclude_fields: Fields to exclude from rendering
+
+        Raises:
+            ValueError: If the two forms are not based on the same model class
         """
+        # Validate that both forms use the same model
+        if left_form.model_class is not right_form.model_class:
+            raise ValueError(
+                f"Both forms must be based on the same model class. "
+                f"Got {left_form.model_class.__name__} and {right_form.model_class.__name__}"
+            )
+
         self.name = name
-        self.model_class = model_class
+        self.left_form = left_form
+        self.right_form = right_form
+        self.model_class = left_form.model_class  # Convenience reference
         self.left_metrics = left_metrics or {}
         self.right_metrics = right_metrics or {}
         self.left_label = left_label
         self.right_label = right_label
-        self.spacing = _normalize_spacing(spacing)
 
-        # Create the two inner forms
-        self.left_form = PydanticForm(
-            form_name=f"{name}_left",
-            model_class=model_class,
-            initial_values=left_initial,
-            disabled=disabled_left,
-            spacing=spacing,
-            exclude_fields=exclude_fields,
-        )
-
-        self.right_form = PydanticForm(
-            form_name=f"{name}_right",
-            model_class=model_class,
-            initial_values=right_initial,
-            disabled=disabled_right,
-            spacing=spacing,
-            exclude_fields=exclude_fields,
-        )
+        # Use spacing from left form (or could add override parameter if needed)
+        self.spacing = left_form.spacing
 
     def _get_field_path_string(self, field_path: List[str]) -> str:
         """Convert field path list to dot-notation string for comparison lookup"""
@@ -215,8 +202,13 @@ class ComparisonForm(Generic[ModelType]):
 
         # Walk through model fields to create renderer pairs
         for field_name, field_info in self.model_class.model_fields.items():
-            # Skip excluded fields
-            if field_name in (self.left_form.exclude_fields or []):
+            # Skip fields that are excluded in either form
+            if field_name in (self.left_form.exclude_fields or []) or field_name in (
+                self.right_form.exclude_fields or []
+            ):
+                logger.debug(
+                    f"Skipping field '{field_name}' - excluded in one or both forms"
+                )
                 continue
 
             # Get values from each form
@@ -242,7 +234,7 @@ class ComparisonForm(Generic[ModelType]):
                 value=left_value,
                 prefix=self.left_form.base_prefix,
                 disabled=self.left_form.disabled,
-                spacing=self.spacing,
+                spacing=self.left_form.spacing,
                 field_path=[field_name],
                 form_name=self.left_form.name,
                 comparison=left_comparison_metric,
@@ -256,7 +248,7 @@ class ComparisonForm(Generic[ModelType]):
                 value=right_value,
                 prefix=self.right_form.base_prefix,
                 disabled=self.right_form.disabled,
-                spacing=self.spacing,
+                spacing=self.right_form.spacing,
                 field_path=[field_name],
                 form_name=self.right_form.name,
                 comparison=right_comparison_metric,
@@ -310,65 +302,6 @@ class ComparisonForm(Generic[ModelType]):
 
         return fh.Div(grid_container, cls="w-full")
 
-    def refresh_button(self, text: Optional[str] = None, **kwargs) -> FT:
-        """
-        Create a refresh button that updates both forms
-
-        Args:
-            text: Optional button text
-            **kwargs: Additional button attributes
-
-        Returns:
-            A button component that refreshes both forms
-        """
-        button_text = text if text is not None else " Refresh Comparison"
-
-        # Create a wrapper div that will be replaced
-        wrapper_id = f"{self.name}-comparison-wrapper"
-
-        button_attrs = {
-            "type": "button",
-            "hx_post": f"/form/{self.name}/comparison/refresh",
-            "hx_target": f"#{wrapper_id}",
-            "hx_swap": "innerHTML",
-            "hx_include": "closest form",
-            "uk_tooltip": "Update both forms display",
-            "cls": mui.ButtonT.secondary,
-        }
-
-        button_attrs.update(kwargs)
-
-        return mui.Button(mui.UkIcon("refresh-ccw"), button_text, **button_attrs)
-
-    def reset_button(self, text: Optional[str] = None, **kwargs) -> FT:
-        """
-        Create a reset button that resets both forms to initial values
-
-        Args:
-            text: Optional button text
-            **kwargs: Additional button attributes
-
-        Returns:
-            A button component that resets both forms
-        """
-        button_text = text if text is not None else " Reset Both"
-
-        wrapper_id = f"{self.name}-comparison-wrapper"
-
-        button_attrs = {
-            "type": "button",
-            "hx_post": f"/form/{self.name}/comparison/reset",
-            "hx_target": f"#{wrapper_id}",
-            "hx_swap": "innerHTML",
-            "hx_confirm": "Reset both forms to their initial values?",
-            "uk_tooltip": "Reset both forms to original values",
-            "cls": mui.ButtonT.destructive,
-        }
-
-        button_attrs.update(kwargs)
-
-        return mui.Button(mui.UkIcon("history"), button_text, **button_attrs)
-
     def register_routes(self, app):
         """
         Register HTMX routes for the comparison form
@@ -376,54 +309,11 @@ class ComparisonForm(Generic[ModelType]):
         Args:
             app: FastHTML app instance
         """
-        # Register routes for both inner forms
+        # Simply delegate to the individual forms
         self.left_form.register_routes(app)
         self.right_form.register_routes(app)
 
-        # Register comparison-specific routes
-        refresh_route = f"/form/{self.name}/comparison/refresh"
-        reset_route = f"/form/{self.name}/comparison/reset"
-
-        @app.route(refresh_route, methods=["POST"])
-        async def handle_comparison_refresh(req):
-            """Refresh both forms"""
-            # Parse form data
-            form_data = await req.form()
-            form_dict = dict(form_data)
-
-            # Update values in both forms by parsing their respective data
-            try:
-                left_parsed = self.left_form.parse(form_dict)
-                right_parsed = self.right_form.parse(form_dict)
-
-                # Create new comparison form with updated values
-                temp_comparison = ComparisonForm(
-                    name=self.name,
-                    model_class=self.model_class,
-                    left_initial=left_parsed,
-                    right_initial=right_parsed,
-                    left_metrics=self.left_metrics,
-                    right_metrics=self.right_metrics,
-                    disabled_left=self.left_form.disabled,
-                    disabled_right=self.right_form.disabled,
-                    left_label=self.left_label,
-                    right_label=self.right_label,
-                    spacing=self.spacing,
-                    exclude_fields=self.left_form.exclude_fields,
-                )
-
-                return temp_comparison.render_inputs()
-            except Exception as e:
-                logger.error(f"Error refreshing comparison form: {e}")
-                return mui.Alert(
-                    f"Error refreshing form: {str(e)}", cls=mui.AlertT.error
-                )
-
-        @app.route(reset_route, methods=["POST"])
-        async def handle_comparison_reset(req):
-            """Reset both forms to initial values"""
-            # Reset to original values
-            return self.render_inputs()
+        # No comparison-specific routes needed anymore
 
     def form_wrapper(self, content: FT, form_id: Optional[str] = None) -> FT:
         """
@@ -439,6 +329,7 @@ class ComparisonForm(Generic[ModelType]):
         form_id = form_id or f"{self.name}-comparison-form"
         wrapper_id = f"{self.name}-comparison-wrapper"
 
+        # Note: Removed hx_include="closest form" since the wrapper only contains foreign forms
         return mui.Form(
             fh.Div(content, id=wrapper_id),
             id=form_id,
@@ -446,8 +337,8 @@ class ComparisonForm(Generic[ModelType]):
 
 
 def simple_diff_comparison(
-    left_data: Union[BaseModel, Dict[str, Any]],
-    right_data: Union[BaseModel, Dict[str, Any]],
+    left_data: BaseModel | Dict[str, Any],
+    right_data: BaseModel | Dict[str, Any],
     model_class: Type[BaseModel],
 ) -> ComparisonMap:
     """

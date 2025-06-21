@@ -187,6 +187,7 @@ initial_values = ComplexSchema(
     is_active=True,
     description="Demo description",
     customer_type=CustomerTypeEnum.INDIVIDUAL,
+    priority=PriorityIntEnum.HIGH,
     creation_date=datetime.date(2023, 1, 1),
     start_time=datetime.time(12, 0, 0),
     status="PENDING",
@@ -254,7 +255,7 @@ form_renderer_normal = PydanticForm(
         "custom_detail": "violet",
         "more_custom_details": "rose",
     },  # Customize field label colors - see README "Label Colors" section
-    spacing="normal",  # Now supports string values with type safety
+    spacing="normal",
 )
 
 form_renderer_compact = PydanticForm(
@@ -297,7 +298,7 @@ form_renderer_compact = PydanticForm(
         "custom_detail": "violet",
         "more_custom_details": "rose",
     },
-    spacing="compact",  # Clean string-based API with full type safety
+    spacing="compact",
 )
 
 # Register routes for both forms
