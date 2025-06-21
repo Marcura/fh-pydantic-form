@@ -166,7 +166,7 @@ class ComparisonRendererMixin:
 
     def _highlight_input_fields(self, element: FT, metric: ComparisonMetric) -> FT:
         """
-        Find nested form controls and add a colored box-shadow to them
+        Find nested form controls and add a colored box-shadow and background to them
         based on the comparison metric color.
 
         Args:
@@ -190,9 +190,12 @@ class ComparisonRendererMixin:
             # No color or metric available
             return element
 
-        # Create the highlight CSS with appropriate opacity
+        # Create the highlight CSS with appropriate opacity for both border and background
         border_rgba = robust_color_to_rgba(highlight_color, 0.4)
-        highlight_css = f"box-shadow: 0 0 0 2px {border_rgba};"
+        background_rgba = robust_color_to_rgba(highlight_color, 0.1)
+        highlight_css = (
+            f"box-shadow: 0 0 0 2px {border_rgba}; background-color: {background_rgba};"
+        )
 
         # Track how many elements we highlight
         highlight_count = 0

@@ -580,15 +580,12 @@ def get_metric_colors(metric_value: float | int | str) -> Tuple[str, str]:
     if value == 0.0:
         # Bright red bullet/white text for failure values
         return "#D32F2F", "white"  # Crimson
-    elif value < 0.5:
+    elif value > 0.0 and value < 0.5:
         # Dark red bullet/light red text for poor values
         return "#8B0000", "#fca5a5"  # Dark Red, light red
-    elif value >= 0.5 and value < 0.9:
+    elif value >= 0.5 and value < 1.0:
         # Medium green bullet/light green text for moderate values
         return "#2E7D32", "#86efac"  # Forest Green, light green
-    elif value >= 0.9 and value < 1.0:
-        # Medium green bullet/light green text for high values
-        return "#43A047", "#86efac"  # Medium Green, light green
     elif value == 1.0:
         # Bright green bullet/white text for perfect values
         return "#00C853", "white"  # Vivid Green
