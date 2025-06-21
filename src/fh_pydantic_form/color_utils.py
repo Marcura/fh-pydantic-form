@@ -547,3 +547,51 @@ NAMED_COLORS = {
     "lightsteelblue": (176, 196, 222),
     "cornflowerblue": (100, 149, 237),
 }
+
+
+def get_metric_colors(metric_value: float | int | str) -> Tuple[str, str]:
+    """
+    Get background and text colors based on a metric value (0.0 to 1.0).
+
+    Uses a LangSmith-style color system where:
+    - 0.0: Bright red (failure)
+    - 0.0 < x < 0.5: Dark red (poor)
+    - 0.5 <= x < 0.9: Medium/Forest green (moderate to high)
+    - 0.9 <= x < 1.0: Medium green (high)
+    - 1.0: Bright green (perfect)
+
+    Args:
+        metric_value: The metric value as a float, int, or string
+
+    Returns:
+        Tuple of (background_color, text_color) as hex color strings
+    """
+    if not isinstance(metric_value, (float, int, str)):
+        # Fallback for non-numeric values
+        return "#6b7280", "white"  # gray background, white text
+
+    # Try to convert to float if it's a string
+    try:
+        value = float(metric_value)
+    except (ValueError, TypeError):
+        # Fallback for non-convertible strings
+        return "#6b7280", "white"  # gray background, white text
+
+    if value == 0.0:
+        # Bright red bullet/white text for failure values
+        return "#D32F2F", "white"  # Crimson
+    elif value < 0.5:
+        # Dark red bullet/light red text for poor values
+        return "#8B0000", "#fca5a5"  # Dark Red, light red
+    elif value >= 0.5 and value < 0.9:
+        # Medium green bullet/light green text for moderate values
+        return "#2E7D32", "#86efac"  # Forest Green, light green
+    elif value >= 0.9 and value < 1.0:
+        # Medium green bullet/light green text for high values
+        return "#43A047", "#86efac"  # Medium Green, light green
+    elif value == 1.0:
+        # Bright green bullet/white text for perfect values
+        return "#00C853", "white"  # Vivid Green
+    else:
+        # Fallback for edge cases (negative values, > 1.0, etc.)
+        return "#6b7280", "white"  # gray background, white text

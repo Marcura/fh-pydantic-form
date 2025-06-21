@@ -17,7 +17,7 @@ from fastcore.xml import FT
 from pydantic import ValidationError
 from pydantic.fields import FieldInfo
 
-from fh_pydantic_form.color_utils import robust_color_to_rgba
+from fh_pydantic_form.color_utils import get_metric_colors, robust_color_to_rgba
 from fh_pydantic_form.constants import _UNSET
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import (
@@ -35,6 +35,36 @@ from fh_pydantic_form.ui_style import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _is_form_control(node: Any) -> bool:
+    """
+    Returns True if this node is a form control element that should receive highlighting.
+
+    Detects both raw HTML form controls and MonsterUI wrapper components.
+    """
+    if not hasattr(node, "tag"):
+        return False
+
+    tag = str(getattr(node, "tag", "")).lower()
+
+    # Raw HTML controls
+    if tag in ("input", "select", "textarea"):
+        return True
+
+    # Check for MonsterUI wrapper classes
+    if hasattr(node, "attrs"):
+        classes = str(node.attrs.get("cls", "") or node.attrs.get("class", ""))
+        # MonsterUI typically uses uk- prefixed classes
+        if any(
+            c
+            for c in classes.split()
+            if c.startswith("uk-")
+            and any(t in c for t in ["input", "select", "checkbox"])
+        ):
+            return True
+
+    return False
 
 
 def _merge_cls(base: str, extra: str) -> str:
@@ -84,6 +114,9 @@ class ComparisonRendererMixin:
             element.attrs["uk-tooltip"] = metric.comment
             element.attrs["title"] = metric.comment  # Fallback standard tooltip
 
+        # Apply input-level highlighting early, before any wrapping
+        element = self._highlight_input_fields(element, metric)
+
         # Add metric score badge if present
         if metric.metric is not None:
             # Determine bullet colors based on LangSmith-style system when no color provided
@@ -101,32 +134,8 @@ class ComparisonRendererMixin:
                     badge_bg = metric.color
                 text_color = "white"
             else:
-                if isinstance(metric.metric, (float, int)):
-                    metric_value = float(metric.metric)
-                    if metric_value == 0.0:
-                        # Bright red bullet/white text for failure values
-                        badge_bg = "#D32F2F"  # Crimson
-                        text_color = "white"
-                    elif metric_value < 0.5:
-                        # Dark red bullet/light red text for poor values
-                        badge_bg = "#8B0000"  # Dark Red
-                        text_color = "#fca5a5"  # light red
-                    elif metric_value >= 0.5 and metric_value < 0.9:
-                        # Medium green bullet/light green text for moderate values
-                        badge_bg = "#2E7D32"  # Forest Green
-                        text_color = "#86efac"  # light green
-                    elif metric_value >= 0.9 and metric_value < 1.0:
-                        # Medium green bullet/light green text for high values
-                        badge_bg = "#43A047"  # Medium Green
-                        text_color = "#86efac"  # light green
-                    elif metric_value == 1.0:
-                        # Bright green bullet/white text for perfect values
-                        badge_bg = "#00C853"  # Vivid Green
-                        text_color = "white"
-                else:
-                    # Fallback for edge cases
-                    badge_bg = "#6b7280"  # gray
-                    text_color = "white"
+                # Use metric-based color system
+                badge_bg, text_color = get_metric_colors(metric.metric)
 
             # Create custom styled span that looks like a bullet/pill
             metric_badge = fh.Span(
@@ -148,15 +157,11 @@ class ComparisonRendererMixin:
                 cls="uk-text-nowrap",
             )
 
-            # Wrap the element with the badge
+            # Then wrap the now‐highlighted element with the badge
             return fh.Div(
                 element, metric_badge, cls="relative inline-flex items-start w-full"
             )
 
-        # Apply highlighting to input fields
-        element = self._highlight_input_fields(element, metric)
-
-        # Return decorated element
         return element
 
     def _highlight_input_fields(self, element: FT, metric: ComparisonMetric) -> FT:
@@ -171,21 +176,41 @@ class ComparisonRendererMixin:
         Returns:
             The element with highlighted input fields
         """
-        if not metric or not metric.color:
+        if not metric:
+            return element
+
+        # Determine the color to use for highlighting
+        if metric.color:
+            # Use the provided color
+            highlight_color = metric.color
+        elif metric.metric is not None:
+            # Use metric-based color system (background color from the helper)
+            highlight_color, _ = get_metric_colors(metric.metric)
+        else:
+            # No color or metric available
             return element
 
         # Create the highlight CSS with appropriate opacity
-        border_rgba = robust_color_to_rgba(metric.color, 0.4)
+        border_rgba = robust_color_to_rgba(highlight_color, 0.4)
         highlight_css = f"box-shadow: 0 0 0 2px {border_rgba};"
+
+        # Track how many elements we highlight
+        highlight_count = 0
 
         # Recursively find and style input elements
         def apply_highlight(node):
             """Recursively apply highlighting to input elements"""
-            if hasattr(node, "tag") and isinstance(node.tag, str):
-                if node.tag.lower() in ("input", "select", "textarea"):
-                    # Add or update the style attribute
+            nonlocal highlight_count
+
+            if _is_form_control(node):
+                # Add or update the style attribute
+                if hasattr(node, "attrs"):
                     existing_style = node.attrs.get("style", "")
                     node.attrs["style"] = highlight_css + " " + existing_style
+                    highlight_count += 1
+                    logger.debug(
+                        f"Applied highlight to tag={getattr(node, 'tag', 'unknown')}, attrs={list(node.attrs.keys()) if hasattr(node, 'attrs') else []}"
+                    )
 
             # Process children if they exist
             if hasattr(node, "children") and node.children:
@@ -194,6 +219,9 @@ class ComparisonRendererMixin:
 
         # Apply highlighting to the element tree
         apply_highlight(element)
+
+        if highlight_count == 0:
+            logger.debug("No form controls found to highlight in element tree")
 
         return element
 
