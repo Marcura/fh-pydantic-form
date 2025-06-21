@@ -17,6 +17,7 @@ import monsterui.all as mui
 from fastcore.xml import FT
 from pydantic import BaseModel
 
+from fh_pydantic_form.constants import _UNSET
 from fh_pydantic_form.defaults import default_dict_for_model, default_for_annotation
 from fh_pydantic_form.field_renderers import (
     BaseFieldRenderer,
@@ -30,7 +31,7 @@ from fh_pydantic_form.form_parser import (
 )
 from fh_pydantic_form.list_path import walk_path
 from fh_pydantic_form.registry import FieldRendererRegistry
-from fh_pydantic_form.type_helpers import _UNSET, get_default
+from fh_pydantic_form.type_helpers import _is_skip_json_schema_field, get_default
 from fh_pydantic_form.ui_style import (
     SpacingTheme,
     SpacingValue,
@@ -344,6 +345,11 @@ class PydanticForm(Generic[ModelType]):
                 logger.debug(f"Skipping excluded field: {field_name}")
                 continue
 
+            # Skip SkipJsonSchema fields (they should not be rendered in the form)
+            if _is_skip_json_schema_field(field_info):
+                logger.debug(f"Skipping SkipJsonSchema field: {field_name}")
+                continue
+
             # Only use what was explicitly provided in initial values
             initial_value = (
                 self.values_dict.get(field_name) if self.values_dict else None
@@ -579,25 +585,20 @@ class PydanticForm(Generic[ModelType]):
         # Merge list results into the main result
         result.update(list_results)
 
-        # Inject defaults for excluded fields before returning
-        self._inject_default_values_for_excluded(result)
+        # Inject defaults for missing fields before returning
+        self._inject_missing_defaults(result)
 
         return result
 
-    def _inject_default_values_for_excluded(
-        self, data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def _inject_missing_defaults(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Ensures that every field listed in self.exclude_fields is present in data
-        if the model defines a default or default_factory, or if initial_values were provided.
-
-        Also ensures all model fields have appropriate defaults if missing.
+        Ensures all model fields with defaults are present in data if missing.
+        Handles excluded fields, SkipJsonSchema fields, and any other fields
+        not rendered in the form.
 
         Priority order:
         1. initial_values (if provided during form creation)
         2. model defaults/default_factory
-
-        Operates top-level only (exclude_fields spec is top-level names).
 
         Args:
             data: Dictionary to modify in-place
@@ -605,9 +606,9 @@ class PydanticForm(Generic[ModelType]):
         Returns:
             The same dictionary instance for method chaining
         """
-        # Handle excluded fields first
-        for field_name in self.exclude_fields:
-            # Skip if already present (e.g., user provided initial_values)
+        # Process ALL model fields, not just excluded ones
+        for field_name, field_info in self.model_class.model_fields.items():
+            # Skip if already present in parsed data
             if field_name in data:
                 continue
 
@@ -618,17 +619,10 @@ class PydanticForm(Generic[ModelType]):
                 if hasattr(initial_val, "model_dump"):
                     initial_val = initial_val.model_dump()
                 data[field_name] = initial_val
-                logger.debug(
-                    f"Injected initial value for excluded field '{field_name}'"
-                )
+                logger.debug(f"Injected initial value for missing field '{field_name}'")
                 continue
 
             # Second priority: use model defaults
-            field_info = self.model_class.model_fields.get(field_name)
-            if field_info is None:
-                logger.warning(f"exclude_fields contains unknown field '{field_name}'")
-                continue
-
             default_val = get_default(field_info)
             if default_val is not _UNSET:
                 # If the default is a BaseModel, convert to dict for consistency
@@ -636,27 +630,17 @@ class PydanticForm(Generic[ModelType]):
                     default_val = default_val.model_dump()
                 data[field_name] = default_val
                 logger.debug(
-                    f"Injected model default value for excluded field '{field_name}'"
+                    f"Injected model default value for missing field '{field_name}'"
                 )
             else:
-                # No default → leave missing; validation will surface error
-                logger.debug(f"No default found for excluded field '{field_name}'")
-
-        # Also handle any other missing fields that should have defaults
-        for field_name, field_info in self.model_class.model_fields.items():
-            if field_name not in data:
-                # Try to inject defaults for missing fields
-                if field_name in self.initial_values_dict:
-                    initial_val = self.initial_values_dict[field_name]
-                    if hasattr(initial_val, "model_dump"):
-                        initial_val = initial_val.model_dump()
-                    data[field_name] = initial_val
+                # Check if this is a SkipJsonSchema field
+                if _is_skip_json_schema_field(field_info):
+                    logger.debug(
+                        f"No default found for SkipJsonSchema field '{field_name}'"
+                    )
                 else:
-                    default_val = get_default(field_info)
-                    if default_val is not _UNSET:
-                        if hasattr(default_val, "model_dump"):
-                            default_val = default_val.model_dump()
-                        data[field_name] = default_val
+                    # No default → leave missing; validation will surface error
+                    logger.debug(f"No default found for field '{field_name}'")
 
         return data
 

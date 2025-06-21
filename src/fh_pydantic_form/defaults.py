@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import datetime as _dt
 from enum import Enum
-from typing import Any, get_args, get_origin, Literal
+from typing import Any, Literal, get_args, get_origin
 
 from pydantic import BaseModel
 
-from .type_helpers import _UNSET, get_default, _is_optional_type
+from fh_pydantic_form.constants import _UNSET
+from fh_pydantic_form.type_helpers import (
+    _is_optional_type,
+    _is_skip_json_schema_field,
+    get_default,
+)
 
 
 def _today():
@@ -121,6 +126,23 @@ def default_dict_for_model(model_cls: type[BaseModel]) -> dict[str, Any]:
             out[name] = _today()
             continue
         # --------------------------------------------------------------------
+
+        # Check if this is a SkipJsonSchema field - if so, always get its default
+        if _is_skip_json_schema_field(field):
+            default_val = get_default(field)
+            if default_val is not _UNSET:
+                # Handle BaseModel defaults by converting to dict
+                if hasattr(default_val, "model_dump"):
+                    out[name] = default_val.model_dump()
+                # Convert enum instances to their values
+                elif isinstance(default_val, Enum):
+                    out[name] = default_val.value
+                else:
+                    out[name] = default_val
+            else:
+                # No default for SkipJsonSchema field - use smart default
+                out[name] = default_for_annotation(field.annotation)
+            continue
 
         # 1. Check for model-supplied default or factory
         default_val = get_default(field)  # returns _UNSET if no default

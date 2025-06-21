@@ -318,7 +318,7 @@ class TestEnumParserEdgeCases:
         )
 
         expected = {
-            "status": None,  # Required field missing → None
+            # status field is required but missing → omitted entirely (not set to None)
             "priority": None,  # Optional field missing → None
         }
         assert result == expected

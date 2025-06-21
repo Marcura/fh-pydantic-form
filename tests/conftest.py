@@ -6,6 +6,7 @@ import fasthtml.common as fh  # type: ignore
 import monsterui.all as mui  # type: ignore
 import pytest
 from pydantic import BaseModel, Field, ValidationError
+from pydantic.json_schema import SkipJsonSchema
 from starlette.testclient import TestClient
 
 # Remove imports from examples
@@ -1269,6 +1270,61 @@ def add_item(htmx_headers, soup):
         return r, soup(r.text)
 
     return _add
+
+
+def skip_json_schema_model():
+    """Model with various SkipJsonSchema fields for testing."""
+
+    from typing import Any, Dict
+
+    class TestSkipModel(BaseModel):
+        # Regular fields
+        name: str
+        value: int = 42
+
+        # SkipJsonSchema fields
+        metadata: SkipJsonSchema[Dict[str, Any]] = Field(default_factory=dict)
+        internal_id: SkipJsonSchema[str] = Field(default_factory=lambda: "test-id")
+        timestamp: SkipJsonSchema[datetime.datetime] = Field(
+            default_factory=datetime.datetime.now
+        )
+
+    return TestSkipModel
+
+
+@pytest.fixture
+def document_like_model():
+    """Model simulating Document base class pattern."""
+
+    from uuid import uuid4
+
+    class DocumentBase(BaseModel):
+        id: SkipJsonSchema[Optional[str]] = Field(default_factory=lambda: str(uuid4()))
+        created_at: SkipJsonSchema[datetime.datetime] = Field(
+            default_factory=datetime.datetime.now
+        )
+        updated_at: SkipJsonSchema[datetime.datetime] = Field(
+            default_factory=datetime.datetime.now
+        )
+
+    class UserDocument(DocumentBase):
+        name: str
+        email: str
+        age: Optional[int] = None
+
+    return UserDocument
+
+
+@pytest.fixture
+def mock_skip_defaults(mocker):
+    """Mock common defaults for SkipJsonSchema fields."""
+    return {
+        "uuid": mocker.patch("uuid.uuid4", return_value="mock-uuid-12345"),
+        "now": mocker.patch(
+            "datetime.datetime.now", return_value=datetime.datetime(2024, 1, 1, 12, 0)
+        ),
+        "logger": mocker.patch("fh_pydantic_form.form_renderer.logger"),
+    }
 
 
 @pytest.fixture(scope="module")

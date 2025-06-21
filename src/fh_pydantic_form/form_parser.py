@@ -7,6 +7,8 @@ from typing import (
     Optional,
     Tuple,
     Union,
+    get_origin,
+    get_args,
 )
 
 from fh_pydantic_form.type_helpers import (
@@ -14,6 +16,7 @@ from fh_pydantic_form.type_helpers import (
     _is_enum_type,
     _is_literal_type,
     _is_optional_type,
+    _is_skip_json_schema_field,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,17 +35,16 @@ def _identify_list_fields(model_class) -> Dict[str, Dict[str, Any]]:
     list_fields = {}
     for field_name, field_info in model_class.model_fields.items():
         annotation = getattr(field_info, "annotation", None)
-        if (
-            annotation is not None
-            and hasattr(annotation, "__origin__")
-            and annotation.__origin__ is list
-        ):
-            item_type = annotation.__args__[0]
-            list_fields[field_name] = {
-                "item_type": item_type,
-                "is_model_type": hasattr(item_type, "model_fields"),
-                "field_info": field_info,  # Store for later use if needed
-            }
+        if annotation is not None:
+            # Handle Optional[List[...]] by unwrapping the Optional
+            base_ann = _get_underlying_type_if_optional(annotation)
+            if get_origin(base_ann) is list:
+                item_type = get_args(base_ann)[0]
+                list_fields[field_name] = {
+                    "item_type": item_type,
+                    "is_model_type": hasattr(item_type, "model_fields"),
+                    "field_info": field_info,  # Store for later use if needed
+                }
     return list_fields
 
 
@@ -77,6 +79,11 @@ def _parse_non_list_fields(
         if field_name in exclude_fields:
             continue
 
+        # Skip SkipJsonSchema fields - they should not be parsed from form data
+        if _is_skip_json_schema_field(field_info):
+            logger.debug(f"Skipping SkipJsonSchema field during parsing: {field_name}")
+            continue
+
         # Create full key with prefix
         full_key = f"{base_prefix}{field_name}"
 
@@ -91,11 +98,21 @@ def _parse_non_list_fields(
 
         # Handle Literal fields (including Optional[Literal[...]])
         elif _is_literal_type(annotation):
-            result[field_name] = _parse_literal_field(full_key, form_data, field_info)
+            if full_key in form_data:  # User sent it
+                result[field_name] = _parse_literal_field(
+                    full_key, form_data, field_info
+                )
+            elif _is_optional_type(annotation):  # Optional but omitted
+                result[field_name] = None
+            # otherwise leave the key out – defaults will be injected later
 
         # Handle Enum fields (including Optional[Enum])
         elif _is_enum_type(annotation):
-            result[field_name] = _parse_enum_field(full_key, form_data, field_info)
+            if full_key in form_data:  # User sent it
+                result[field_name] = _parse_enum_field(full_key, form_data, field_info)
+            elif _is_optional_type(annotation):  # Optional but omitted
+                result[field_name] = None
+            # otherwise leave the key out – defaults will be injected later
 
         # Handle nested model fields (including Optional[NestedModel])
         elif (
@@ -112,9 +129,14 @@ def _parse_non_list_fields(
             # Get the nested model class (unwrap Optional if needed)
             nested_model_class = _get_underlying_type_if_optional(annotation)
 
-            # Parse the nested model - pass the base_prefix
+            # Parse the nested model - pass the base_prefix and exclude_fields
             nested_value = _parse_nested_model_field(
-                field_name, form_data, nested_model_class, field_info, base_prefix
+                field_name,
+                form_data,
+                nested_model_class,
+                field_info,
+                base_prefix,
+                exclude_fields,
             )
 
             # Only assign if we got a non-None value or the field is not optional
@@ -126,8 +148,13 @@ def _parse_non_list_fields(
 
         # Handle simple fields
         else:
-            # Use updated _parse_simple_field that handles optionality
-            result[field_name] = _parse_simple_field(full_key, form_data, field_info)
+            if full_key in form_data:  # User sent it
+                result[field_name] = _parse_simple_field(
+                    full_key, form_data, field_info
+                )
+            elif _is_optional_type(annotation):  # Optional but omitted
+                result[field_name] = None
+            # otherwise leave the key out – defaults will be injected later
 
     return result
 
@@ -249,6 +276,7 @@ def _parse_nested_model_field(
     nested_model_class,
     field_info,
     parent_prefix: str = "",
+    exclude_fields: Optional[List[str]] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Parse a nested Pydantic model field from form data.
@@ -281,6 +309,13 @@ def _parse_nested_model_field(
         for sub_field_name, sub_field_info in nested_model_class.model_fields.items():
             sub_key = f"{current_prefix}{sub_field_name}"
             annotation = getattr(sub_field_info, "annotation", None)
+
+            # Skip SkipJsonSchema fields - they should not be parsed from form data
+            if _is_skip_json_schema_field(sub_field_info):
+                logger.debug(
+                    f"Skipping SkipJsonSchema field in nested model during parsing: {sub_field_name}"
+                )
+                continue
 
             # Handle based on field type, with Optional unwrapping
             is_optional = _is_optional_type(annotation)
@@ -323,6 +358,7 @@ def _parse_nested_model_field(
                 form_data,
                 nested_list_defs,
                 current_prefix,  # ← prefix for this nested model
+                exclude_fields,  # Pass through exclude_fields
             )
             # Merge without clobbering keys already set in step 1
             for lf_name, lf_val in list_results.items():
@@ -404,6 +440,7 @@ def _parse_list_fields(
     form_data: Dict[str, Any],
     list_field_defs: Dict[str, Dict[str, Any]],
     base_prefix: str = "",
+    exclude_fields: Optional[List[str]] = None,
 ) -> Dict[str, List[Any]]:
     """
     Parse list fields from form data by analyzing keys and reconstructing ordered lists.
@@ -412,10 +449,13 @@ def _parse_list_fields(
         form_data: Dictionary containing form field data
         list_field_defs: Dictionary of list field definitions
         base_prefix: Prefix to use when looking up field names in form_data
+        exclude_fields: Optional list of field names to exclude from parsing
 
     Returns:
         Dictionary with parsed list fields
     """
+    exclude_fields = exclude_fields or []
+
     # Skip if no list fields defined
     if not list_field_defs:
         return {}
@@ -497,20 +537,18 @@ def _parse_list_fields(
         if items:  # Only add if items were found
             final_lists[field_name] = items
 
-    # For any list field that didn't have form data, use its default
+    # Ensure every rendered list field appears in final_lists
     for field_name, field_def in list_field_defs.items():
-        if field_name not in final_lists:
-            field_info = field_def["field_info"]
-            if hasattr(field_info, "default") and field_info.default is not None:
-                final_lists[field_name] = field_info.default
-            elif (
-                hasattr(field_info, "default_factory")
-                and field_info.default_factory is not None
-            ):
-                try:
-                    final_lists[field_name] = field_info.default_factory()
-                except Exception:
-                    pass
+        # Skip list fields the UI never showed (those in exclude_fields)
+        if field_name in exclude_fields:
+            continue
+
+        # When user supplied ≥1 item we already captured it
+        if field_name in final_lists:
+            continue
+
+        # User submitted form with zero items → honour intent with empty list
+        final_lists[field_name] = []
 
     return final_lists
 
@@ -543,7 +581,9 @@ def _parse_model_list_item(
     )
     # 2. Parse inner lists
     result.update(
-        _parse_list_fields(form_data, nested_list_defs, base_prefix=item_prefix)
+        _parse_list_fields(
+            form_data, nested_list_defs, base_prefix=item_prefix, exclude_fields=[]
+        )
     )
     return result
 
