@@ -36,10 +36,10 @@ ModelType = TypeVar("ModelType", bound=BaseModel)
 
 
 def comparison_form_js():
-    """JavaScript for comparison: sync top-level accordions & list toggles."""
+    """JavaScript for comparison: sync top-level and list accordions."""
     return fh.Script("""
 (function initComparisonSync(){
-  // 1) Wait for UIkit
+  // 1) Wait until UIkit and its util are available
   if (!window.UIkit || !UIkit.util) {
     return setTimeout(initComparisonSync, 50);
   }
@@ -47,8 +47,8 @@ def comparison_form_js():
   // 2) Sync top-level accordions (BaseModelFieldRenderer)
   UIkit.util.on(
     document,
-    'show hide',
-    'ul[uk-accordion] > li',
+    'show hide',                  // UIkit fires plain 'show'/'hide'
+    'ul[uk-accordion] > li',      // only the top-level items
     mirrorTopLevel
   );
 
@@ -56,56 +56,77 @@ def comparison_form_js():
     const sourceLi = ev.target.closest('li');
     if (!sourceLi) return;
 
+    // Find our grid-cell wrapper (both left & right share the same data-path)
     const cell = sourceLi.closest('[data-path]');
     if (!cell) return;
     const path = cell.dataset.path;
-    const idx  = Array.prototype.indexOf.call(
-      sourceLi.parentElement.children, sourceLi
+
+    // Determine index of this <li> inside its <ul>
+    const idx     = Array.prototype.indexOf.call(
+      sourceLi.parentElement.children,
+      sourceLi
     );
     const opening = ev.type === 'show';
 
-    document.querySelectorAll(`[data-path="${path}"]`)
+    // Mirror on the other side
+    document
+      .querySelectorAll(`[data-path="${path}"]`)
       .forEach(peerCell => {
         if (peerCell === cell) return;
+
         const peerAcc = peerCell.querySelector('ul[uk-accordion]');
         if (!peerAcc || idx >= peerAcc.children.length) return;
 
-        const peerItem   = peerAcc.children[idx];
-        const peerContent = peerItem.querySelector('.uk-accordion-content');
+        const peerLi      = peerAcc.children[idx];
+        const peerContent = peerLi.querySelector('.uk-accordion-content');
 
         if (opening) {
-          peerItem.classList.add('uk-open');
-          if (peerContent) { peerContent.hidden = false; peerContent.style.height = 'auto'; }
+          peerLi.classList.add('uk-open');
+          if (peerContent) {
+            peerContent.hidden = false;
+            peerContent.style.height = 'auto';
+          }
         } else {
-          peerItem.classList.remove('uk-open');
-          if (peerContent) peerContent.hidden = true;
+          peerLi.classList.remove('uk-open');
+          if (peerContent) {
+            peerContent.hidden = true;
+          }
         }
       });
   }
 
-  // 3) Wrap list toggler so lists sync too (ListFieldRenderer)
-  if (typeof window.toggleListItems === 'function') {
+  // 3) Wrap the list-toggle so ListFieldRenderer accordions sync too
+  if (typeof window.toggleListItems === 'function' && !window.__listSyncWrapped) {
+    // guard to only wrap once
+    window.__listSyncWrapped = true;
     const originalToggle = window.toggleListItems;
+
     window.toggleListItems = function(containerId) {
-      // first perform the normal toggle on this side
+      // a) Toggle this column first
       originalToggle(containerId);
 
-      // then mirror on the other side
-      const cell = document.getElementById(containerId).closest('[data-path]');
+      // b) Find the enclosing data-path
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      const cell = container.closest('[data-path]');
       if (!cell) return;
       const path = cell.dataset.path;
 
-      document.querySelectorAll(`[data-path="${path}"]`)
+      // c) Find the peer's list-container by suffix match
+      document
+        .querySelectorAll(`[data-path="${path}"]`)
         .forEach(peerCell => {
           if (peerCell === cell) return;
-          const peerContainer = peerCell.querySelector(`#${containerId}`);
+
+          // look up any [id$="_items_container"]
+          const peerContainer = peerCell.querySelector('[id$="_items_container"]');
           if (peerContainer) {
             originalToggle(peerContainer.id);
           }
         });
     };
   }
-})();  
+})();
 """)
 
 
