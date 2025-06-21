@@ -307,7 +307,7 @@ comparison_form = ComparisonForm(
 )
 
 
-truth_form.register_routes(app)
+comparison_form.register_routes(app)
 
 
 @rt("/update_annotation")
@@ -420,10 +420,13 @@ def get():
                                     hx_target="#annotation-result",
                                     hx_swap="innerHTML",
                                 ),
-                                # Form controls
+                                # Form controls - use comparison form's button helpers
                                 fh.Div(
-                                    truth_form.reset_button(
+                                    comparison_form.left_reset_button(
                                         "↩️ Reset Annotation",
+                                    ),
+                                    comparison_form.left_refresh_button(
+                                        "🔄 Refresh Display",
                                     ),
                                     cls="inline-flex gap-1",
                                 ),

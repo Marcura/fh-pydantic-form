@@ -12,7 +12,6 @@ from typing import (
     Generic,
     List,
     Optional,
-    Tuple,
     Type,
     TypeVar,
 )
@@ -22,7 +21,6 @@ import monsterui.all as mui
 from fastcore.xml import FT
 from pydantic import BaseModel
 
-from fh_pydantic_form.field_renderers import BaseFieldRenderer
 from fh_pydantic_form.form_renderer import PydanticForm
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import ComparisonMap, ComparisonMetric
@@ -188,37 +186,56 @@ class ComparisonForm(Generic[ModelType]):
         """Convert field path list to dot-notation string for comparison lookup"""
         return ".".join(field_path)
 
-    def _create_field_pairs(
+    def _render_column(
         self,
-    ) -> List[Tuple[str, BaseFieldRenderer, BaseFieldRenderer]]:
+        *,
+        form: PydanticForm[ModelType],
+        header_label: str,
+        start_order: int,
+        wrapper_id: str,
+        comparison_metrics: Optional[ComparisonMap] = None,
+    ) -> FT:
         """
-        Create pairs of renderers (left, right) for each field path
+        Render a single column with CSS order values for grid alignment
+
+        Args:
+            form: The PydanticForm instance for this column
+            header_label: Label for the column header
+            start_order: Starting order value (0 for left, 1 for right)
+            wrapper_id: ID for the wrapper div
+            comparison_metrics: Optional comparison metrics for this column
 
         Returns:
-            List of (path_string, left_renderer, right_renderer) tuples
+            A div with class="contents" containing ordered grid items
         """
-        pairs = []
+        # Header with order
+        cells = [
+            fh.Div(
+                fh.H3(header_label, cls="text-lg font-semibold text-gray-700"),
+                cls="pb-2 border-b",
+                style=f"order:{start_order}",
+            )
+        ]
+
+        # Start at order + 2, increment by 2 for each field
+        order_idx = start_order + 2
+
+        # Create renderers for each field
         registry = FieldRendererRegistry()
 
-        # Walk through model fields to create renderer pairs
         for field_name, field_info in self.model_class.model_fields.items():
-            # Skip fields that are excluded in either form
-            if field_name in (self.left_form.exclude_fields or []) or field_name in (
-                self.right_form.exclude_fields or []
-            ):
-                logger.debug(
-                    f"Skipping field '{field_name}' - excluded in one or both forms"
-                )
+            # Skip excluded fields
+            if field_name in (form.exclude_fields or []):
                 continue
 
-            # Get values from each form
-            left_value = self.left_form.values_dict.get(field_name)
-            right_value = self.right_form.values_dict.get(field_name)
+            # Get value from form
+            value = form.values_dict.get(field_name)
 
-            # Get the path string for comparison lookup
+            # Get comparison metric if provided
             path_str = field_name
-            left_comparison_metric = self.left_metrics.get(path_str)
-            right_comparison_metric = self.right_metrics.get(path_str)
+            comparison_metric = (
+                comparison_metrics.get(path_str) if comparison_metrics else None
+            )
 
             # Get renderer class
             renderer_cls = registry.get_renderer(field_name, field_info)
@@ -227,37 +244,104 @@ class ComparisonForm(Generic[ModelType]):
 
                 renderer_cls = StringFieldRenderer
 
-            # Create left renderer
-            left_renderer = renderer_cls(
+            # Create renderer
+            renderer = renderer_cls(
                 field_name=field_name,
                 field_info=field_info,
-                value=left_value,
-                prefix=self.left_form.base_prefix,
-                disabled=self.left_form.disabled,
-                spacing=self.left_form.spacing,
+                value=value,
+                prefix=form.base_prefix,
+                disabled=form.disabled,
+                spacing=form.spacing,
                 field_path=[field_name],
-                form_name=self.left_form.name,
-                comparison=left_comparison_metric,
-                comparison_map=self.left_metrics,  # Pass the full comparison map
+                form_name=form.name,
+                comparison=comparison_metric,
+                comparison_map=comparison_metrics,
             )
 
-            # Create right renderer
-            right_renderer = renderer_cls(
-                field_name=field_name,
-                field_info=field_info,
-                value=right_value,
-                prefix=self.right_form.base_prefix,
-                disabled=self.right_form.disabled,
-                spacing=self.right_form.spacing,
-                field_path=[field_name],
-                form_name=self.right_form.name,
-                comparison=right_comparison_metric,
-                comparison_map=self.right_metrics,  # Pass the full comparison map
+            # Render with data-path and order
+            cells.append(
+                fh.Div(
+                    renderer.render(),
+                    cls="",
+                    **{"data-path": path_str, "style": f"order:{order_idx}"},
+                )
             )
 
-            pairs.append((path_str, left_renderer, right_renderer))
+            order_idx += 2
 
-        return pairs
+        # Return wrapper with display: contents
+        return fh.Div(*cells, id=wrapper_id, cls="contents")
+
+    # def _create_field_pairs(
+    #     self,
+    # ) -> List[Tuple[str, BaseFieldRenderer, BaseFieldRenderer]]:
+    #     """
+    #     Create pairs of renderers (left, right) for each field path
+
+    #     Returns:
+    #         List of (path_string, left_renderer, right_renderer) tuples
+    #     """
+    #     pairs = []
+    #     registry = FieldRendererRegistry()
+
+    #     # Walk through model fields to create renderer pairs
+    #     for field_name, field_info in self.model_class.model_fields.items():
+    #         # Skip fields that are excluded in either form
+    #         if field_name in (self.left_form.exclude_fields or []) or field_name in (
+    #             self.right_form.exclude_fields or []
+    #         ):
+    #             logger.debug(
+    #                 f"Skipping field '{field_name}' - excluded in one or both forms"
+    #             )
+    #             continue
+
+    #         # Get values from each form
+    #         left_value = self.left_form.values_dict.get(field_name)
+    #         right_value = self.right_form.values_dict.get(field_name)
+
+    #         # Get the path string for comparison lookup
+    #         path_str = field_name
+    #         left_comparison_metric = self.left_metrics.get(path_str)
+    #         right_comparison_metric = self.right_metrics.get(path_str)
+
+    #         # Get renderer class
+    #         renderer_cls = registry.get_renderer(field_name, field_info)
+    #         if not renderer_cls:
+    #             from fh_pydantic_form.field_renderers import StringFieldRenderer
+
+    #             renderer_cls = StringFieldRenderer
+
+    #         # Create left renderer
+    #         left_renderer = renderer_cls(
+    #             field_name=field_name,
+    #             field_info=field_info,
+    #             value=left_value,
+    #             prefix=self.left_form.base_prefix,
+    #             disabled=self.left_form.disabled,
+    #             spacing=self.left_form.spacing,
+    #             field_path=[field_name],
+    #             form_name=self.left_form.name,
+    #             comparison=left_comparison_metric,
+    #             comparison_map=self.left_metrics,  # Pass the full comparison map
+    #         )
+
+    #         # Create right renderer
+    #         right_renderer = renderer_cls(
+    #             field_name=field_name,
+    #             field_info=field_info,
+    #             value=right_value,
+    #             prefix=self.right_form.base_prefix,
+    #             disabled=self.right_form.disabled,
+    #             spacing=self.right_form.spacing,
+    #             field_path=[field_name],
+    #             form_name=self.right_form.name,
+    #             comparison=right_comparison_metric,
+    #             comparison_map=self.right_metrics,  # Pass the full comparison map
+    #         )
+
+    #         pairs.append((path_str, left_renderer, right_renderer))
+
+    #     return pairs
 
     def render_inputs(self) -> FT:
         """
@@ -266,36 +350,28 @@ class ComparisonForm(Generic[ModelType]):
         Returns:
             A FastHTML component with CSS Grid layout
         """
-        # Column headers
-        headers = [
-            fh.Div(
-                fh.H3(self.left_label, cls="text-lg font-semibold text-gray-700"),
-                cls="pb-2 border-b",
-            ),
-            fh.Div(
-                fh.H3(self.right_label, cls="text-lg font-semibold text-gray-700"),
-                cls="pb-2 border-b",
-            ),
-        ]
+        # Render left column with wrapper
+        left_wrapper = self._render_column(
+            form=self.left_form,
+            header_label=self.left_label,
+            start_order=0,
+            wrapper_id=f"{self.left_form.name}-inputs-wrapper",
+            comparison_metrics=self.left_metrics,
+        )
 
-        # Create field pairs and render them
-        rows = headers.copy()
+        # Render right column with wrapper
+        right_wrapper = self._render_column(
+            form=self.right_form,
+            header_label=self.right_label,
+            start_order=1,
+            wrapper_id=f"{self.right_form.name}-inputs-wrapper",
+            comparison_metrics=self.right_metrics,
+        )
 
-        for path_str, left_renderer, right_renderer in self._create_field_pairs():
-            # Render each field and wrap with data-path
-            left_rendered = left_renderer.render()
-            right_rendered = right_renderer.render()
-
-            # Add data-path attribute for accordion sync
-            left_cell = fh.Div(left_rendered, cls="", **{"data-path": path_str})
-
-            right_cell = fh.Div(right_rendered, cls="", **{"data-path": path_str})
-
-            rows.extend([left_cell, right_cell])
-
-        # Create the grid container
+        # Create the grid container with both wrappers
         grid_container = fh.Div(
-            *rows,
+            left_wrapper,
+            right_wrapper,
             cls="fhpf-compare grid grid-cols-2 gap-x-6 gap-y-2 items-start",
             id=f"{self.name}-comparison-grid",
         )
@@ -309,11 +385,80 @@ class ComparisonForm(Generic[ModelType]):
         Args:
             app: FastHTML app instance
         """
-        # Simply delegate to the individual forms
+        # Register individual form routes (for list manipulation)
         self.left_form.register_routes(app)
         self.right_form.register_routes(app)
 
-        # No comparison-specific routes needed anymore
+        # Register comparison-specific reset/refresh routes
+        def create_reset_handler(
+            form: PydanticForm[ModelType],
+            side: str,
+            label: str,
+            metrics: Optional[ComparisonMap],
+        ):
+            """Factory function to create reset handler with proper closure"""
+
+            async def handler(req):
+                """Reset one side of the comparison form"""
+                # Reset the form state
+                await form.handle_reset_request()
+
+                # Render the entire column with proper ordering
+                start_order = 0 if side == "left" else 1
+                wrapper = self._render_column(
+                    form=form,
+                    header_label=label,
+                    start_order=start_order,
+                    wrapper_id=f"{form.name}-inputs-wrapper",
+                    comparison_metrics=metrics,
+                )
+                return wrapper
+
+            return handler
+
+        def create_refresh_handler(
+            form: PydanticForm[ModelType],
+            side: str,
+            label: str,
+            metrics: Optional[ComparisonMap],
+        ):
+            """Factory function to create refresh handler with proper closure"""
+
+            async def handler(req):
+                """Refresh one side of the comparison form"""
+                # Refresh the form state
+                await form.handle_refresh_request(req)
+
+                # Render the entire column with proper ordering
+                start_order = 0 if side == "left" else 1
+                wrapper = self._render_column(
+                    form=form,
+                    header_label=label,
+                    start_order=start_order,
+                    wrapper_id=f"{form.name}-inputs-wrapper",
+                    comparison_metrics=metrics,
+                )
+                return wrapper
+
+            return handler
+
+        for side, form, label, metrics in [
+            ("left", self.left_form, self.left_label, self.left_metrics),
+            ("right", self.right_form, self.right_label, self.right_metrics),
+        ]:
+            assert form is not None
+
+            # Reset route
+            reset_path = f"/compare/{self.name}/{side}/reset"
+            reset_handler = create_reset_handler(form, side, label, metrics)
+            app.route(reset_path, methods=["POST"])(reset_handler)
+            logger.debug(f"Registered comparison reset route: {reset_path}")
+
+            # Refresh route
+            refresh_path = f"/compare/{self.name}/{side}/refresh"
+            refresh_handler = create_refresh_handler(form, side, label, metrics)
+            app.route(refresh_path, methods=["POST"])(refresh_handler)
+            logger.debug(f"Registered comparison refresh route: {refresh_path}")
 
     def form_wrapper(self, content: FT, form_id: Optional[str] = None) -> FT:
         """
@@ -333,6 +478,54 @@ class ComparisonForm(Generic[ModelType]):
         return mui.Form(
             fh.Div(content, id=wrapper_id),
             id=form_id,
+        )
+
+    def _button_helper(self, *, side: str, action: str, text: str, **kwargs) -> FT:
+        """
+        Helper method to create buttons that target comparison-specific routes
+
+        Args:
+            side: "left" or "right"
+            action: "reset" or "refresh"
+            text: Button text
+            **kwargs: Additional button attributes
+
+        Returns:
+            A button component
+        """
+        form = self.left_form if side == "left" else self.right_form
+
+        # Set default attributes
+        kwargs.setdefault("hx_post", f"/compare/{self.name}/{side}/{action}")
+        kwargs.setdefault("hx_target", f"#{form.name}-inputs-wrapper")
+        kwargs.setdefault("hx_swap", "innerHTML")
+
+        # Delegate to the underlying form's button method
+        button_method = getattr(form, f"{action}_button")
+        return button_method(text, **kwargs)
+
+    def left_reset_button(self, text: Optional[str] = None, **kwargs) -> FT:
+        """Create a reset button for the left form"""
+        return self._button_helper(
+            side="left", action="reset", text=text or "↩️ Reset Left", **kwargs
+        )
+
+    def left_refresh_button(self, text: Optional[str] = None, **kwargs) -> FT:
+        """Create a refresh button for the left form"""
+        return self._button_helper(
+            side="left", action="refresh", text=text or "🔄 Refresh Left", **kwargs
+        )
+
+    def right_reset_button(self, text: Optional[str] = None, **kwargs) -> FT:
+        """Create a reset button for the right form"""
+        return self._button_helper(
+            side="right", action="reset", text=text or "↩️ Reset Right", **kwargs
+        )
+
+    def right_refresh_button(self, text: Optional[str] = None, **kwargs) -> FT:
+        """Create a refresh button for the right form"""
+        return self._button_helper(
+            side="right", action="refresh", text=text or "🔄 Refresh Right", **kwargs
         )
 
 
