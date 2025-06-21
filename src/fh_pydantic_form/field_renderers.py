@@ -159,14 +159,14 @@ class ComparisonRendererMixin:
 
             # Then wrap the now‐highlighted element with the badge
             return fh.Div(
-                element, metric_badge, cls="relative inline-flex items-start w-full"
+                element, metric_badge, cls="relative inline-flex items-center w-full"
             )
 
         return element
 
     def _highlight_input_fields(self, element: FT, metric: ComparisonMetric) -> FT:
         """
-        Find nested form controls and add a colored box-shadow and background to them
+        Find nested form controls and add a colored box-shadow to them
         based on the comparison metric color.
 
         Args:
