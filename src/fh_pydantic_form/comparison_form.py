@@ -36,81 +36,76 @@ ModelType = TypeVar("ModelType", bound=BaseModel)
 
 
 def comparison_form_js():
-    """JavaScript for accordion synchronization and comparison interactions"""
+    """JavaScript for comparison: sync top-level accordions & list toggles."""
     return fh.Script("""
-// Comparison form accordion synchronization
-document.addEventListener('DOMContentLoaded', () => {
-    // Listen for UIkit accordion events
-    document.body.addEventListener('show.uk.accordion', syncAccordion);
-    document.body.addEventListener('hide.uk.accordion', syncAccordion);
-    
-    function syncAccordion(event) {
-        // Find the data-path attribute from the closest ancestor
-        const pathElement = event.target.closest('[data-path]');
-        if (!pathElement) return;
-        
-        const path = pathElement.dataset.path;
-        if (!path) return;
-        
-        // Find all elements with the same path (should be exactly 2 - left and right)
-        const samePathElements = document.querySelectorAll(`[data-path="${path}"]`);
-        
-        samePathElements.forEach(element => {
-            if (element === pathElement) return; // Skip the element that triggered the event
-            
-            // Find accordion within this element
-            const accordion = element.querySelector('.uk-accordion');
-            if (!accordion) return;
-            
-            // Get UIkit accordion instance
-            if (window.UIkit && UIkit.accordion) {
-                try {
-                    const accordionInstance = UIkit.accordion(accordion);
-                    if (accordionInstance) {
-                        // Find which item index triggered the event
-                        const triggerItem = event.target.closest('li');
-                        const triggerIndex = Array.from(triggerItem.parentElement.children).indexOf(triggerItem);
-                        
-                        // Toggle the same index in the paired accordion
-                        const targetItem = accordion.children[triggerIndex];
-                        if (targetItem) {
-                            const isOpen = event.type === 'show';
-                            if (isOpen && !targetItem.classList.contains('uk-open')) {
-                                accordionInstance.toggle(triggerIndex, false);
-                            } else if (!isOpen && targetItem.classList.contains('uk-open')) {
-                                accordionInstance.toggle(triggerIndex, false);
-                            }
-                        }
-                    }
-                } catch (e) {
-                    console.warn('Failed to sync accordion:', e);
-                }
-            }
-        });
-    }
-    
-    // Synchronize list toggles
-    window.toggleComparisonListItems = function(containerId) {
-        // Get the path from the container
-        const container = document.getElementById(containerId);
-        if (!container) return;
-        
-        const pathElement = container.closest('[data-path]');
-        if (!pathElement) return;
-        
-        const path = pathElement.dataset.path;
-        
-        // Find all containers with the same path
-        const samePathElements = document.querySelectorAll(`[data-path="${path}"]`);
-        
-        samePathElements.forEach(element => {
-            const listContainer = element.querySelector('[id$="_items_container"]');
-            if (listContainer && typeof toggleListItems === 'function') {
-                toggleListItems(listContainer.id);
-            }
+(function initComparisonSync(){
+  // 1) Wait for UIkit
+  if (!window.UIkit || !UIkit.util) {
+    return setTimeout(initComparisonSync, 50);
+  }
+
+  // 2) Sync top-level accordions (BaseModelFieldRenderer)
+  UIkit.util.on(
+    document,
+    'show hide',
+    'ul[uk-accordion] > li',
+    mirrorTopLevel
+  );
+
+  function mirrorTopLevel(ev) {
+    const sourceLi = ev.target.closest('li');
+    if (!sourceLi) return;
+
+    const cell = sourceLi.closest('[data-path]');
+    if (!cell) return;
+    const path = cell.dataset.path;
+    const idx  = Array.prototype.indexOf.call(
+      sourceLi.parentElement.children, sourceLi
+    );
+    const opening = ev.type === 'show';
+
+    document.querySelectorAll(`[data-path="${path}"]`)
+      .forEach(peerCell => {
+        if (peerCell === cell) return;
+        const peerAcc = peerCell.querySelector('ul[uk-accordion]');
+        if (!peerAcc || idx >= peerAcc.children.length) return;
+
+        const peerItem   = peerAcc.children[idx];
+        const peerContent = peerItem.querySelector('.uk-accordion-content');
+
+        if (opening) {
+          peerItem.classList.add('uk-open');
+          if (peerContent) { peerContent.hidden = false; peerContent.style.height = 'auto'; }
+        } else {
+          peerItem.classList.remove('uk-open');
+          if (peerContent) peerContent.hidden = true;
+        }
+      });
+  }
+
+  // 3) Wrap list toggler so lists sync too (ListFieldRenderer)
+  if (typeof window.toggleListItems === 'function') {
+    const originalToggle = window.toggleListItems;
+    window.toggleListItems = function(containerId) {
+      // first perform the normal toggle on this side
+      originalToggle(containerId);
+
+      // then mirror on the other side
+      const cell = document.getElementById(containerId).closest('[data-path]');
+      if (!cell) return;
+      const path = cell.dataset.path;
+
+      document.querySelectorAll(`[data-path="${path}"]`)
+        .forEach(peerCell => {
+          if (peerCell === cell) return;
+          const peerContainer = peerCell.querySelector(`#${containerId}`);
+          if (peerContainer) {
+            originalToggle(peerContainer.id);
+          }
         });
     };
-});
+  }
+})();  
 """)
 
 
