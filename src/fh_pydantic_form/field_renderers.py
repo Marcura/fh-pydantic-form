@@ -1608,9 +1608,7 @@ class ListFieldRenderer(BaseFieldRenderer):
 
                     if model_for_display is not None:
                         # Use the model's __str__ method
-                        item_summary_text = (
-                            f"{item_type.__name__}: {str(model_for_display)}"
-                        )
+                        item_summary_text = f"{idx}: {str(model_for_display)}"
                     else:
                         # Fallback for None or unexpected types
                         item_summary_text = f"{item_type.__name__}: (Unknown format: {type(item).__name__})"
@@ -1635,7 +1633,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                     )
                     item_summary_text = f"{item_type.__name__}: (Error displaying item)"
             else:
-                item_summary_text = str(item)
+                item_summary_text = f"{idx}: {str(item)}"
 
             # --- Render item content elements ---
             item_content_elements = []
