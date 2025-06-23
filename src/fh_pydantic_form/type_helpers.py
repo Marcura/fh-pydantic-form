@@ -99,7 +99,7 @@ def _is_skip_json_schema_field(annotation_or_field_info: Any) -> bool:
 class MetricEntry(TypedDict, total=False):
     """Metrics for annotating field values with scores, colors, and comments"""
 
-    metric: float  # 0-1 similarity score
+    metric: float | int | str  # Metric value (0-1 score, count, or label)
     color: str  # CSS-compatible color string
     comment: str  # Free-form text for tooltips/hover
 

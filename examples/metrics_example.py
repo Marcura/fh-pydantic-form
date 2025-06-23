@@ -1,7 +1,7 @@
 import datetime
 import logging
 from enum import Enum
-from typing import List, Optional
+from typing import List
 
 import fasthtml.common as fh
 import monsterui.all as mui
@@ -26,214 +26,238 @@ app, rt = fh.fast_app(
 )
 
 
-# ============================================================================
-# Simple Data Model for Metrics Demo
-# ============================================================================
-
-
-class Priority(Enum):
-    LOW = "Low"
-    MEDIUM = "Medium"
-    HIGH = "High"
-    CRITICAL = "Critical"
-
-
-class TaskStatus(Enum):
-    TODO = "Todo"
-    IN_PROGRESS = "In Progress"
+# Enhanced Data Model with Nested Objects
+class Status(Enum):
+    DRAFT = "Draft"
     REVIEW = "Review"
-    DONE = "Done"
+    PUBLISHED = "Published"
 
 
-class ProjectTask(BaseModel):
-    """A simple project task model to demonstrate metrics"""
+class Address(BaseModel):
+    """Address information"""
 
-    title: str = Field(description="Task title")
-    description: str = Field(description="Detailed task description")
-    priority: Priority = Field(description="Task priority level")
-    status: TaskStatus = Field(description="Current task status")
-    assigned_to: Optional[str] = Field(None, description="Assignee name")
+    street: str = Field(description="Street address")
+    city: str = Field(description="City")
+    country: str = Field(description="Country")
+    tags: List[str] = Field(default_factory=list, description="Location tags")
 
-    # Time tracking
-    estimated_hours: float = Field(description="Estimated completion time in hours")
-    actual_hours: Optional[float] = Field(
-        None, description="Actual time spent in hours"
-    )
 
-    # Dates
-    due_date: datetime.date = Field(description="Task due date")
-    completed_date: Optional[datetime.date] = Field(None, description="Completion date")
+class Author(BaseModel):
+    """Author information"""
 
-    # Sub-tasks
-    subtasks: List[str] = Field(default_factory=list, description="List of subtasks")
-
-    # Quality metrics
-    complexity_score: float = Field(description="Task complexity (1-10 scale)")
-    quality_score: Optional[float] = Field(
-        None, description="Quality rating (1-5 scale)"
+    name: str = Field(description="Author name")
+    email: str = Field(description="Email address")
+    addresses: List[Address] = Field(
+        default_factory=list, description="Author addresses"
     )
 
 
-# ============================================================================
-# Sample Data with Realistic Task Information
-# ============================================================================
+class Article(BaseModel):
+    """Enhanced article model with nested objects to demonstrate complex metrics"""
 
-sample_task = ProjectTask(
-    title="Implement User Authentication System",
-    description="Build a secure authentication system with JWT tokens, password hashing, and role-based access control",
-    priority=Priority.HIGH,
-    status=TaskStatus.IN_PROGRESS,
-    assigned_to="Alice Johnson",
-    estimated_hours=24.0,
-    actual_hours=18.5,
-    due_date=datetime.date(2024, 2, 15),
-    completed_date=None,
-    subtasks=[
-        "Design database schema for users",
-        "Implement password hashing",
-        "Create JWT token system",
-        "Build login/logout endpoints",
-        "Add role-based middleware",
-    ],
-    complexity_score=8.5,
-    quality_score=4.2,
+    title: str = Field(description="Article title")
+    author: Author = Field(description="Author information")
+    status: Status = Field(description="Article status")
+    word_count: int = Field(description="Number of words")
+    rating: float = Field(description="Quality rating (0-5)")
+    tags: List[str] = Field(default_factory=list, description="Article tags")
+    is_featured: bool = Field(description="Featured article flag")
+    publish_date: datetime.date = Field(description="Publication date")
+    categories: List[str] = Field(
+        default_factory=list, description="Article categories"
+    )
+
+
+# Sample data with nested structures
+sample_article = Article(
+    title="Getting Started with FastHTML",
+    author=Author(
+        name="John Doe",
+        email="john.doe@example.com",
+        addresses=[
+            Address(
+                street="123 Main St",
+                city="San Francisco",
+                country="USA",
+                tags=["home", "primary"],
+            ),
+            Address(
+                street="456 Oak Ave",
+                city="Portland",
+                country="USA",
+                tags=["work", "secondary"],
+            ),
+        ],
+    ),
+    status=Status.PUBLISHED,
+    word_count=1250,
+    rating=4.2,
+    tags=["python", "web", "tutorial", "beginner"],
+    is_featured=True,
+    publish_date=datetime.date(2024, 1, 15),
+    categories=["programming", "web-development", "python"],
 )
 
 
-# ============================================================================
-# Comprehensive Metrics Dictionary
-# ============================================================================
-
-# This demonstrates various types of metrics you might want to track
-task_metrics = {
-    # Overall task metrics
+# Comprehensive Metrics Dictionary showcasing all capabilities
+metrics_showcase = {
+    # 1. Comment only (shows as tooltip)
     "title": MetricEntry(
-        metric=0.95,
-        comment="Title is clear and descriptive, minor improvement could be made",
+        comment="This title is clear and engaging - hovers to show tooltip"
     ),
-    "description": MetricEntry(
-        metric=0.88,
-        comment="Good detail level, covers main requirements but could specify security standards",
+    # 2. Perfect score (1.0) - gets special bright green
+    "author": MetricEntry(
+        metric=1.0, comment="Perfect author information - metric 1.0 gets bright green"
     ),
-    # Enum field metrics
-    "priority": MetricEntry(
-        metric=1.0,
-        comment="Priority correctly set as HIGH for security-critical feature",
-    ),
+    # 3. Zero score (0.0) - gets special bright red
     "status": MetricEntry(
-        metric=0.75, comment="Status is current but should be updated more frequently"
+        metric=0.0, comment="Critical status issue - metric 0.0 gets bright red"
     ),
-    # Assignment and planning metrics
-    "assigned_to": MetricEntry(
-        metric=1.0, comment="Assigned to experienced developer with security background"
-    ),
-    "estimated_hours": MetricEntry(
-        metric=0.80,
-        comment="Estimation seems reasonable but might be slightly low for security features",
-    ),
-    "actual_hours": MetricEntry(
-        metric=0.92, comment="Good progress, slightly ahead of schedule"
-    ),
-    # Date tracking metrics
-    "due_date": MetricEntry(
-        metric=0.85, comment="Deadline is achievable but tight given complexity"
-    ),
-    "completed_date": MetricEntry(
-        metric=0.0, comment="Task not yet completed - tracking for timeline analysis"
-    ),
-    # List field metrics (subtasks)
-    "subtasks": MetricEntry(
-        metric=0.90, comment="Well-broken down subtasks, covers main components"
-    ),
-    "subtasks[0]": MetricEntry(
-        metric=1.0, comment="Database schema is properly prioritized first"
-    ),
-    "subtasks[1]": MetricEntry(
-        metric=0.95, comment="Password hashing is critical - good inclusion"
-    ),
-    "subtasks[2]": MetricEntry(
+    # 4. High range (0.5-1.0) - gets medium/forest green
+    "word_count": MetricEntry(
         metric=0.85,
-        comment="JWT implementation subtask could be more specific about token refresh",
+        comment="Good word count - metric 0.85 in high range gets medium green",
     ),
-    "subtasks[3]": MetricEntry(
-        metric=0.90, comment="Endpoint creation is well-defined"
+    # 5. Low range (0.0-0.5) - gets dark red
+    "rating": MetricEntry(
+        metric=0.3,
+        comment="Low rating needs attention - metric 0.3 in low range gets dark red",
     ),
-    "subtasks[4]": MetricEntry(
-        metric=0.80,
-        comment="Role-based middleware subtask could specify permission levels",
+    # 6. String metric
+    "tags": MetricEntry(
+        metric="Good", comment="String metrics are supported - shows 'Good' as bullet"
     ),
-    # Quality and complexity metrics
-    "complexity_score": MetricEntry(
-        metric=0.85, comment="Complexity rating aligns with security requirements"
+    # 7. Integer metric
+    "is_featured": MetricEntry(
+        metric=5, comment="Integer metrics work too - shows '5' as bullet"
     ),
-    "quality_score": MetricEntry(
-        metric=0.84,
-        comment="Quality score is good but could be higher with better documentation",
+    # 8. Another perfect score (1.0)
+    "publish_date": MetricEntry(
+        metric=1.0, comment="Perfect publication timing - another 1.0 example"
+    ),
+    # 9. Another zero score (0.0)
+    "categories": MetricEntry(
+        metric=0.0, comment="Missing critical categories - another 0.0 example"
+    ),
+    # NESTED OBJECT FIELDS
+    # 10. Nested field: author.name
+    "author.name": MetricEntry(
+        metric=0.9, comment="Author name is well formatted - nested field example"
+    ),
+    # 11. Nested field: author.email
+    "author.email": MetricEntry(
+        metric=0.6, comment="Email format is acceptable but could be improved"
+    ),
+    # SIMPLE LIST ITEMS
+    # 12. First tag
+    "tags[0]": MetricEntry(
+        metric=1.0,
+        color="blue",
+        comment="First tag 'python' is perfect - custom blue color overrides 1.0 auto-color",
+    ),
+    # 13. Second tag
+    "tags[1]": MetricEntry(
+        metric=0.4, comment="Second tag needs improvement - low range metric"
+    ),
+    # 14. Third tag
+    "tags[2]": MetricEntry(metric=0.7, comment="Third tag is good - high range metric"),
+    # 15. Categories list items
+    "categories[0]": MetricEntry(
+        metric=0.0,
+        color="purple",
+        comment="First category problematic - custom purple overrides 0.0 auto-color",
+    ),
+    "categories[1]": MetricEntry(metric=0.8, comment="Second category is good"),
+    # NESTED LIST ITEMS (Complex paths)
+    # 16. First address overall
+    "author.addresses[0]": MetricEntry(
+        metric=0.95, comment="First address data is excellent"
+    ),
+    # 17. First address street
+    "author.addresses[0].street": MetricEntry(
+        metric=1.0, comment="Perfect street address format - nested list item field"
+    ),
+    # 18. First address city
+    "author.addresses[0].city": MetricEntry(
+        metric=0.2,
+        comment="City information needs verification - low score in nested structure",
+    ),
+    # 19. Second address street
+    "author.addresses[1].street": MetricEntry(
+        metric=0.6, comment="Second address street format is adequate"
+    ),
+    # 20. Nested list within nested object: first address tags
+    "author.addresses[0].tags[0]": MetricEntry(
+        metric=0.0, comment="First address tag has issues - deeply nested path example"
+    ),
+    # 21. Another deeply nested example
+    "author.addresses[0].tags[1]": MetricEntry(
+        metric=1.0,
+        comment="Second tag of first address is perfect - complex nested path",
+    ),
+    # 22. Second address tags
+    "author.addresses[1].tags[0]": MetricEntry(
+        metric=0.75, comment="Work tag is well categorized"
+    ),
+    # Custom color examples with different ranges
+    # 23. High range with custom color
+    "author.addresses[0].country": MetricEntry(
+        metric=0.88,
+        color="orange",
+        comment="Custom orange color overrides high-range auto-color",
+    ),
+    # 24. Low range with custom color
+    "author.addresses[1].city": MetricEntry(
+        metric=0.15,
+        color="teal",
+        comment="Custom teal color overrides low-range auto-color",
     ),
 }
 
-# Alternative metrics showing different scenarios
-alternative_metrics = {
-    "title": MetricEntry(
-        metric=0.40,
-        comment="⚠️ Title is too vague - should specify authentication method",
-    ),
-    "priority": MetricEntry(
-        metric=0.60, comment="⚠️ Priority might be underestimated for security feature"
-    ),
-    "estimated_hours": MetricEntry(
-        metric=0.30,
-        comment="❌ Significantly underestimated - security features typically require 40+ hours",
-    ),
-    "subtasks": MetricEntry(
-        metric=0.50,
-        comment="⚠️ Missing important subtasks: security testing, documentation, error handling",
-    ),
-    "quality_score": MetricEntry(
-        metric=0.95, comment="✅ Excellent quality score - well implemented"
-    ),
-}
-
-
-# ============================================================================
-# Create Forms with Different Metric Scenarios
-# ============================================================================
-
-# Form showing good metrics (high scores)
-good_metrics_form = PydanticForm(
-    form_name="good_metrics_task",
-    model_class=ProjectTask,
-    initial_values=sample_task,
-    disabled=True,  # Read-only for metrics display
-    spacing="normal",
-    metrics_dict=task_metrics,
+# Create the showcase form
+showcase_form = PydanticForm(
+    form_name="metrics_showcase",
+    model_class=Article,
+    initial_values=sample_article,
+    disabled=True,  # Read-only for demonstration
+    metrics_dict=metrics_showcase,
 )
 
-# Form showing areas for improvement (mixed scores)
-improvement_metrics_form = PydanticForm(
-    form_name="improvement_metrics_task",
-    model_class=ProjectTask,
-    initial_values=sample_task,
-    disabled=True,  # Read-only for metrics display
-    spacing="normal",
-    metrics_dict=alternative_metrics,
-)
-
-# Editable form without metrics for comparison
-editable_form = PydanticForm(
-    form_name="editable_task",
-    model_class=ProjectTask,
-    initial_values=sample_task,
-    disabled=False,  # Editable
-    spacing="normal",
-    metrics_dict={},  # No metrics
-)
+# Register routes
+showcase_form.register_routes(app)
 
 
-# Register form routes
-good_metrics_form.register_routes(app)
-improvement_metrics_form.register_routes(app)
-editable_form.register_routes(app)
+def format_metrics_dict() -> str:
+    """Format the metrics dictionary as raw dict for display"""
+    lines = ["metrics_dict = {"]
+
+    for key, entry in metrics_showcase.items():
+        # Build the dictionary representation with only present fields
+        dict_parts = []
+
+        if "metric" in entry:
+            metric_val = entry["metric"]
+            if isinstance(metric_val, str):
+                dict_parts.append(f'"metric": "{metric_val}"')
+            else:
+                dict_parts.append(f'"metric": {metric_val}')
+
+        if "color" in entry:
+            dict_parts.append(f'"color": "{entry["color"]}"')
+
+        if "comment" in entry:
+            comment = entry["comment"].replace('"', '\\"')  # Escape quotes
+            dict_parts.append(f'"comment": "{comment}"')
+
+        # Format the entry
+        if dict_parts:
+            dict_content = ", ".join(dict_parts)
+            lines.append(f'    "{key}": {{{dict_content}}},')
+        else:
+            lines.append(f'    "{key}": {{}},')
+
+    lines.append("}")
+    return "\n".join(lines)
 
 
 @rt("/")
@@ -244,24 +268,31 @@ def get():
             mui.Card(
                 mui.CardHeader(
                     fh.H1(
-                        "📊 Metrics Dictionary Example",
+                        "📊 Comprehensive Metrics Dictionary Showcase",
                         cls="text-2xl font-bold text-blue-600",
                     ),
                     fh.P(
-                        "Demonstrates how to use metrics_dict to add evaluation scores and comments to form fields.",
+                        "Demonstrates all metrics_dict capabilities with nested objects, lists, and complex field paths",
                         cls="text-gray-600 mt-2",
                     ),
                 ),
                 mui.CardBody(
                     mui.Alert(
-                        fh.Strong("💡 Key Features:"),
+                        fh.Strong("✨ Features Demonstrated:"),
                         fh.Ul(
+                            fh.Li("📝 Comments show as tooltips (hover over fields)"),
                             fh.Li(
-                                "Color-coded metrics (red/yellow/green based on score)"
+                                "🎯 Metric values: 1.0 (bright green), 0.0 (bright red), 0.5-1.0 (medium green), 0.0-0.5 (dark red)"
                             ),
-                            fh.Li("Detailed comments explaining each metric"),
-                            fh.Li("Support for nested fields and list items"),
-                            fh.Li("Visual indicators for different score ranges"),
+                            fh.Li(
+                                "🎨 Custom colors override automatic metric-based colors"
+                            ),
+                            fh.Li("🔗 Nested object fields: author.name, author.email"),
+                            fh.Li("📋 List items: tags[0], categories[1]"),
+                            fh.Li(
+                                "🏗️ Complex nested paths: author.addresses[0].street, author.addresses[0].tags[1]"
+                            ),
+                            fh.Li("🔢 String, integer, and float metrics"),
                             cls="list-disc list-inside mt-2 space-y-1",
                         ),
                         type="info",
@@ -269,120 +300,37 @@ def get():
                     ),
                 ),
             ),
-            # Example 1: Good Metrics
+            # Main showcase form
             mui.Card(
                 mui.CardHeader(
-                    fh.H2(
-                        "✅ Example 1: High-Quality Metrics",
-                        cls="text-xl font-bold text-green-600",
-                    ),
+                    fh.H2("🎯 Live Demo", cls="text-xl font-bold"),
                     fh.P(
-                        "This form shows mostly positive metrics with high scores and constructive feedback.",
+                        "Hover over fields to see tooltips. Notice the colored bullets and field highlighting on nested fields.",
                         cls="text-gray-600 mt-1",
                     ),
                 ),
                 mui.CardBody(
-                    mui.Form(good_metrics_form.render_inputs()),
+                    mui.Form(showcase_form.render_inputs()),
                 ),
-                cls="mb-6 border-green-200",
+                cls="mb-6",
             ),
-            # Example 2: Areas for Improvement
+            # Metrics Dictionary Display
             mui.Card(
                 mui.CardHeader(
-                    fh.H2(
-                        "⚠️ Example 2: Areas for Improvement",
-                        cls="text-xl font-bold text-yellow-600",
-                    ),
+                    fh.H2("📋 Raw Metrics Dictionary", cls="text-xl font-bold"),
                     fh.P(
-                        "This form shows lower metrics with specific suggestions for improvement.",
+                        f"Literal dictionary format with all {len(metrics_showcase)} entries (only includes fields that are used):",
                         cls="text-gray-600 mt-1",
                     ),
                 ),
                 mui.CardBody(
-                    mui.Form(improvement_metrics_form.render_inputs()),
-                ),
-                cls="mb-6 border-yellow-200",
-            ),
-            # Example 3: Editable Form (No Metrics)
-            mui.Card(
-                mui.CardHeader(
-                    fh.H2(
-                        "✏️ Example 3: Editable Form (No Metrics)",
-                        cls="text-xl font-bold text-blue-600",
-                    ),
-                    fh.P(
-                        "Same data model but editable and without metrics for comparison.",
-                        cls="text-gray-600 mt-1",
+                    fh.Pre(
+                        format_metrics_dict(),
+                        cls="bg-gray-100 p-4 rounded text-xs overflow-x-auto whitespace-pre",
+                        style="max-height: 400px; overflow-y: auto;",
                     ),
                 ),
-                mui.CardBody(
-                    mui.Form(
-                        fh.Div(
-                            editable_form.render_inputs(),
-                            fh.Div(
-                                mui.Button(
-                                    "💾 Save Changes",
-                                    type="submit",
-                                    cls=mui.ButtonT.primary,
-                                ),
-                                editable_form.reset_button("🔄 Reset Form"),
-                                cls="mt-4 flex gap-2",
-                            ),
-                        )
-                    ),
-                ),
-                cls="mb-6 border-blue-200",
-            ),
-            # Documentation
-            mui.Card(
-                mui.CardHeader(
-                    fh.H2("📖 How to Use Metrics", cls="text-xl font-bold"),
-                ),
-                mui.CardBody(
-                    fh.Div(
-                        fh.H3(
-                            "Creating MetricEntry Objects:", cls="font-semibold mb-2"
-                        ),
-                        fh.Pre(
-                            """MetricEntry(
-    metric=0.85,  # Score from 0.0 to 1.0
-    comment="Descriptive feedback about this field"
-)""",
-                            cls="bg-gray-100 p-3 rounded text-sm mb-4",
-                        ),
-                        fh.H3("Field Path Examples:", cls="font-semibold mb-2"),
-                        fh.Ul(
-                            fh.Li(fh.Code('"title"'), " - Top-level field"),
-                            fh.Li(fh.Code('"subtasks"'), " - List field overall"),
-                            fh.Li(fh.Code('"subtasks[0]"'), " - Specific list item"),
-                            fh.Li(fh.Code('"nested.field"'), " - Nested object field"),
-                            cls="list-disc list-inside space-y-1 mb-4 text-sm",
-                        ),
-                        fh.H3("Metric Score Ranges:", cls="font-semibold mb-2"),
-                        fh.Ul(
-                            fh.Li(
-                                fh.Span(
-                                    "🔴 0.0 - 0.5:", cls="font-medium text-red-600"
-                                ),
-                                " Needs significant improvement",
-                            ),
-                            fh.Li(
-                                fh.Span(
-                                    "🟡 0.5 - 0.8:", cls="font-medium text-yellow-600"
-                                ),
-                                " Good with room for improvement",
-                            ),
-                            fh.Li(
-                                fh.Span(
-                                    "🟢 0.8 - 1.0:", cls="font-medium text-green-600"
-                                ),
-                                " Excellent quality",
-                            ),
-                            cls="list-disc list-inside space-y-1 text-sm",
-                        ),
-                    ),
-                ),
-                cls="bg-gray-50",
+                cls="mb-6",
             ),
         ),
         cls="min-h-screen bg-gray-50 py-8",
