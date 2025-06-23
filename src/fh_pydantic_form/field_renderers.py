@@ -1218,7 +1218,9 @@ class ListFieldRenderer(BaseFieldRenderer):
         )
 
         # Apply metrics decoration if available
-        return self._decorate_metrics(field_element, self.metric_entry)
+        return self._decorate_metrics(
+            field_element, self.metric_entry, propagate_children=False
+        )
 
     def render_input(self) -> FT:
         """
