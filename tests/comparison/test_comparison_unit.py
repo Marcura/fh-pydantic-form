@@ -72,7 +72,7 @@ def test_constructor_model_mismatch():
     with pytest.raises(
         ValueError, match="Both forms must be based on the same model class"
     ):
-        ComparisonForm("bad", left, right)
+        ComparisonForm[SimpleComparisonModel]("bad", left, right)
 
 
 @pytest.mark.unit
