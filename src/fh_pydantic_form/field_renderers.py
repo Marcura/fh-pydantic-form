@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import date, time
 from enum import Enum
 from typing import (
@@ -15,9 +16,17 @@ from fastcore.xml import FT
 from pydantic import ValidationError
 from pydantic.fields import FieldInfo
 
+from fh_pydantic_form.color_utils import (
+    DEFAULT_METRIC_GREY,
+    get_metric_colors,
+    robust_color_to_rgba,
+)
 from fh_pydantic_form.constants import _UNSET
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import (
+    DecorationScope,
+    MetricEntry,
+    MetricsDict,
     _get_underlying_type_if_optional,
     _is_optional_type,
     get_default,
@@ -33,6 +42,51 @@ from fh_pydantic_form.ui_style import (
 logger = logging.getLogger(__name__)
 
 
+def _is_form_control(node: Any) -> bool:
+    """
+    Returns True if this node is a form control element that should receive highlighting.
+
+    Detects both raw HTML form controls and MonsterUI wrapper components.
+    """
+    if not hasattr(node, "tag"):
+        return False
+
+    tag = str(getattr(node, "tag", "")).lower()
+
+    # Raw HTML controls
+    if tag in ("input", "select", "textarea"):
+        return True
+
+    # For MonsterUI components, highlight the outer div container instead of inner elements
+    # This provides better visual feedback since MonsterUI hides the actual select elements
+    if hasattr(node, "attrs") and hasattr(node, "children"):
+        classes = str(node.attrs.get("cls", "") or node.attrs.get("class", ""))
+
+        # Check if this div contains a MonsterUI component
+        if tag == "div" and node.children:
+            for child in node.children:
+                child_tag = str(getattr(child, "tag", "")).lower()
+                if child_tag.startswith("uk-") and any(
+                    control in child_tag for control in ["select", "input", "checkbox"]
+                ):
+                    return True
+
+        # Also check for direct MonsterUI wrapper classes
+        if tag == "div" and "uk-select" in classes:
+            return True
+
+        # MonsterUI typically uses uk- prefixed classes
+        if any(
+            c
+            for c in classes.split()
+            if c.startswith("uk-")
+            and any(t in c for t in ["input", "select", "checkbox"])
+        ):
+            return True
+
+    return False
+
+
 def _merge_cls(base: str, extra: str) -> str:
     """Return base plus extra class(es) separated by a single space (handles blanks)."""
     if extra:
@@ -42,7 +96,265 @@ def _merge_cls(base: str, extra: str) -> str:
     return base
 
 
-class BaseFieldRenderer:
+class MetricsRendererMixin:
+    """Mixin to add metrics highlighting capabilities to field renderers"""
+
+    def _decorate_label(
+        self,
+        label: FT,
+        metric_entry: Optional[MetricEntry],
+    ) -> FT:
+        """
+        Decorate a label element with a metric badge (bullet) if applicable.
+        """
+        return self._decorate_metrics(label, metric_entry, scope=DecorationScope.BULLET)
+
+    def _decorate_metrics(
+        self,
+        element: FT,
+        metric_entry: Optional[MetricEntry],
+        *,
+        scope: DecorationScope = DecorationScope.BOTH,
+    ) -> FT:
+        """
+        Decorate an element with metrics visual feedback.
+
+        Args:
+            element: The FastHTML element to decorate
+            metric_entry: Optional metric entry with color, score, and comment
+            scope: Which decorations to apply (BORDER, BULLET, or BOTH)
+
+        Returns:
+            Decorated element with left color bar, tooltip, and optional metric badge
+        """
+        if not metric_entry:
+            return element
+
+        # Add tooltip with comment if available
+        comment = metric_entry.get("comment")
+        if comment and hasattr(element, "attrs"):
+            element.attrs["uk-tooltip"] = comment
+            element.attrs["title"] = comment  # Fallback standard tooltip
+
+        # Add left color bar if requested
+        if scope in {DecorationScope.BORDER, DecorationScope.BOTH}:
+            border_color = self._metric_border_color(metric_entry)
+            if border_color and hasattr(element, "attrs"):
+                existing_style = element.attrs.get("style", "")
+                element.attrs["style"] = (
+                    f"border-left: 4px solid {border_color}; padding-left: 0.25rem; position: relative; z-index: 0; {existing_style}"
+                )
+
+        # Add metric score badge if requested and present
+        score = metric_entry.get("metric")
+        color = metric_entry.get("color")
+        if (
+            scope in {DecorationScope.BULLET, DecorationScope.BOTH}
+            and score is not None
+        ):
+            # Determine bullet colors based on LangSmith-style system when no color provided
+            if color:
+                # Use provided color - convert to full opacity for badge
+                badge_bg_rgba = robust_color_to_rgba(color, 1.0)
+                # Extract RGB values and use them for badge background
+                rgb_match = re.match(
+                    r"rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)", badge_bg_rgba
+                )
+                if rgb_match:
+                    r, g, b = rgb_match.groups()
+                    badge_bg = f"rgb({r}, {g}, {b})"
+                else:
+                    badge_bg = color
+                text_color = "white"
+            else:
+                # Use metric-based color system
+                badge_bg, text_color = get_metric_colors(score)
+
+            # Create custom styled span that looks like a bullet/pill
+            metric_badge = fh.Span(
+                str(score),
+                style=f"""
+                    background-color: {badge_bg};
+                    color: {text_color};
+                    padding: 0.125rem 0.5rem;
+                    border-radius: 9999px;
+                    font-size: 0.75rem;
+                    font-weight: 500;
+                    display: inline-block;
+                    margin-left: 0.5rem;
+                    vertical-align: top;
+                    line-height: 1.25;
+                    white-space: nowrap;
+                    text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+                """,
+                cls="uk-text-nowrap",
+            )
+
+            # Use helper to attach badge properly
+            return self._attach_metric_badge(element, metric_badge)
+
+        return element
+
+    def _attach_metric_badge(self, element: FT, badge: FT) -> FT:
+        """
+        Attach a metric badge to an element in the most appropriate way.
+
+        Args:
+            element: The element to attach the badge to
+            badge: The badge element to attach
+
+        Returns:
+            Element with badge attached
+        """
+        # Check if element is an inline-capable tag
+        tag = str(getattr(element, "tag", "")).lower()
+        inline_tags = {"span", "a", "h1", "h2", "h3", "h4", "h5", "h6", "label"}
+
+        if tag in inline_tags and hasattr(element, "children"):
+            # For inline elements, append badge directly to children
+            if isinstance(element.children, list):
+                element.children.append(badge)
+            else:
+                # Convert to list if needed
+                element.children = list(element.children) + [badge]
+            return element
+
+        # For other elements, wrap in a flex container
+        return fh.Div(element, badge, cls="relative inline-flex items-center w-full")
+
+    def _highlight_input_fields(self, element: FT, metric_entry: MetricEntry) -> FT:
+        """
+        Find nested form controls and add a colored box-shadow to them
+        based on the metric entry color.
+
+        Args:
+            element: The FT element to search within
+            metric_entry: The metric entry containing color information
+
+        Returns:
+            The element with highlighted input fields
+        """
+        if not metric_entry:
+            return element
+
+        # Determine the color to use for highlighting
+        color = metric_entry.get("color")
+        score = metric_entry.get("metric")
+
+        if color:
+            # Use the provided color
+            highlight_color = color
+        elif score is not None:
+            # Use metric-based color system (background color from the helper)
+            highlight_color, _ = get_metric_colors(score)
+        else:
+            # No color or metric available
+            return element
+
+        # Create the highlight CSS with appropriate opacity for both border and background
+        # Use !important to ensure our styles override MonsterUI defaults
+        # Focus on border highlighting since background might conflict with MonsterUI styling
+        border_rgba = robust_color_to_rgba(highlight_color, 0.8)
+        background_rgba = robust_color_to_rgba(highlight_color, 0.1)
+        highlight_css = f"border: 2px solid {border_rgba} !important; border-radius: 4px !important; box-shadow: 0 0 0 1px {border_rgba} !important; background-color: {background_rgba} !important;"
+
+        # Track how many elements we highlight
+        highlight_count = 0
+
+        # Recursively find and style input elements
+        def apply_highlight(node):
+            """Recursively apply highlighting to input elements"""
+            nonlocal highlight_count
+
+            if _is_form_control(node):
+                # Add or update the style attribute
+                if hasattr(node, "attrs"):
+                    existing_style = node.attrs.get("style", "")
+                    node.attrs["style"] = highlight_css + " " + existing_style
+                    highlight_count += 1
+                    logger.debug(
+                        f"Applied highlight to tag={getattr(node, 'tag', 'unknown')}, attrs={list(node.attrs.keys()) if hasattr(node, 'attrs') else []}"
+                    )
+
+            # Process children if they exist
+            if hasattr(node, "children") and node.children:
+                for child in node.children:
+                    apply_highlight(child)
+
+        # Apply highlighting to the element tree
+        apply_highlight(element)
+
+        if highlight_count == 0:
+            logger.debug("No form controls found to highlight in element tree")
+
+        return element
+
+    def _metric_border_color(
+        self, metric_entry: Optional[MetricEntry]
+    ) -> Optional[str]:
+        """
+        Get an RGBA color string for a metric entry's left border bar.
+
+        Args:
+            metric_entry: The metric entry containing color/score information
+
+        Returns:
+            RGBA color string for left border bar, or None if no metric
+        """
+        if not metric_entry:
+            return None
+
+        # Use provided color if available
+        if metric_entry.get("color"):
+            return robust_color_to_rgba(metric_entry["color"], 0.8)
+
+        # Otherwise derive from metric score
+        metric = metric_entry.get("metric")
+        if metric is not None:
+            color, _ = get_metric_colors(metric)
+            # If get_metric_colors returns the fallback grey, use our unified light grey
+            if color == DEFAULT_METRIC_GREY:
+                return DEFAULT_METRIC_GREY
+            return robust_color_to_rgba(color, 0.8)
+
+        # If only a comment is present, return the unified light grey color
+        if metric_entry.get("comment"):
+            return DEFAULT_METRIC_GREY
+
+        return None
+
+
+def _build_path_string_static(path_segments: List[str]) -> str:
+    """
+    Static version of BaseFieldRenderer._build_path_string for use without instance.
+
+    Convert field_path list to dot/bracket notation string for metric lookup.
+
+    Examples:
+        ['experience', '0', 'company'] -> 'experience[0].company'
+        ['skills', 'programming_languages', '2'] -> 'skills.programming_languages[2]'
+
+    Args:
+        path_segments: List of path segments
+
+    Returns:
+        Path string in dot/bracket notation
+    """
+    parts: List[str] = []
+    for segment in path_segments:
+        # Check if segment is numeric or a list index pattern
+        if segment.isdigit() or segment.startswith("new_"):
+            # Interpret as list index
+            if parts:
+                parts[-1] += f"[{segment}]"
+            else:  # Defensive fallback
+                parts.append(f"[{segment}]")
+        else:
+            parts.append(segment)
+    return ".".join(parts)
+
+
+class BaseFieldRenderer(MetricsRendererMixin):
     """
     Base class for field renderers
 
@@ -50,6 +362,7 @@ class BaseFieldRenderer:
     - Rendering a label for the field
     - Rendering an appropriate input element for the field
     - Combining the label and input with proper spacing
+    - Optionally applying comparison visual feedback
 
     Subclasses must implement render_input()
     """
@@ -65,6 +378,10 @@ class BaseFieldRenderer:
         spacing: SpacingValue = SpacingTheme.NORMAL,
         field_path: Optional[List[str]] = None,
         form_name: Optional[str] = None,
+        metric_entry: Optional[MetricEntry] = None,
+        metrics_dict: Optional[MetricsDict] = None,
+        refresh_endpoint_override: Optional[str] = None,
+        **kwargs,  # Accept additional kwargs for extensibility
     ):
         """
         Initialize the field renderer
@@ -79,6 +396,10 @@ class BaseFieldRenderer:
             spacing: Spacing theme to use for layout ("normal", "compact", or SpacingTheme enum)
             field_path: Path segments from root to this field (for nested list support)
             form_name: Explicit form name (used for nested list URLs)
+            metric_entry: Optional metric entry for visual feedback
+            metrics_dict: Optional full metrics dict for auto-lookup
+            refresh_endpoint_override: Optional override URL for refresh actions (used in ComparisonForm)
+            **kwargs: Additional keyword arguments for extensibility
         """
         self.field_name = f"{prefix}{field_name}" if prefix else field_name
         self.original_field_name = field_name
@@ -91,6 +412,42 @@ class BaseFieldRenderer:
         self.disabled = disabled
         self.label_color = label_color
         self.spacing = _normalize_spacing(spacing)
+        self.metrics_dict = metrics_dict
+        self._refresh_endpoint_override = refresh_endpoint_override
+
+        # Initialize metric entry attribute
+        self.metric_entry: Optional[MetricEntry] = None
+
+        # Auto-resolve metric entry if not explicitly provided
+        if metric_entry is not None:
+            self.metric_entry = metric_entry
+        elif metrics_dict:
+            path_string = self._build_path_string()
+            self.metric_entry = metrics_dict.get(path_string)
+
+    def _build_path_string(self) -> str:
+        """
+        Convert field_path list to dot/bracket notation string for comparison lookup.
+
+        Examples:
+            ['experience', '0', 'company'] -> 'experience[0].company'
+            ['skills', 'programming_languages', '2'] -> 'skills.programming_languages[2]'
+
+        Returns:
+            Path string in dot/bracket notation
+        """
+        parts: List[str] = []
+        for segment in self.field_path:
+            # Check if segment is numeric or a list index pattern
+            if segment.isdigit() or segment.startswith("new_"):
+                # Interpret as list index
+                if parts:
+                    parts[-1] += f"[{segment}]"
+                else:  # Defensive fallback
+                    parts.append(f"[{segment}]")
+            else:
+                parts.append(segment)
+        return ".".join(parts)
 
     def _is_inline_color(self, color: str) -> bool:
         """
@@ -211,7 +568,7 @@ class BaseFieldRenderer:
         # 3. Choose layout based on spacing theme
         if self.spacing == SpacingTheme.COMPACT:
             # Horizontal layout for compact mode
-            return fh.Div(
+            field_element = fh.Div(
                 fh.Div(
                     label_component,
                     input_component,
@@ -221,11 +578,14 @@ class BaseFieldRenderer:
             )
         else:
             # Vertical layout for normal mode (existing behavior)
-            return fh.Div(
+            field_element = fh.Div(
                 label_component,
                 input_component,
                 cls=spacing("outer_margin", self.spacing),
             )
+
+        # 4. Apply metrics decoration if available
+        return self._decorate_metrics(field_element, self.metric_entry)
 
 
 # ---- Specific Field Renderers ----
@@ -233,6 +593,10 @@ class BaseFieldRenderer:
 
 class StringFieldRenderer(BaseFieldRenderer):
     """Renderer for string fields"""
+
+    def __init__(self, *args, **kwargs):
+        """Initialize string field renderer, passing all arguments to parent"""
+        super().__init__(*args, **kwargs)
 
     def render_input(self) -> FT:
         """
@@ -281,6 +645,10 @@ class StringFieldRenderer(BaseFieldRenderer):
 class NumberFieldRenderer(BaseFieldRenderer):
     """Renderer for number fields (int, float)"""
 
+    def __init__(self, *args, **kwargs):
+        """Initialize number field renderer, passing all arguments to parent"""
+        super().__init__(*args, **kwargs)
+
     def render_input(self) -> FT:
         """
         Render input element for the field
@@ -328,6 +696,10 @@ class NumberFieldRenderer(BaseFieldRenderer):
 class BooleanFieldRenderer(BaseFieldRenderer):
     """Renderer for boolean fields"""
 
+    def __init__(self, *args, **kwargs):
+        """Initialize boolean field renderer, passing all arguments to parent"""
+        super().__init__(*args, **kwargs)
+
     def render_input(self) -> FT:
         """
         Render input element for the field
@@ -356,12 +728,14 @@ class BooleanFieldRenderer(BaseFieldRenderer):
         """
         # Get the label component
         label_component = self.render_label()
+        # Decorate the label with the metric badge (bullet)
+        label_component = self._decorate_label(label_component, self.metric_entry)
 
         # Get the checkbox component
         checkbox_component = self.render_input()
 
         # Create a flex container to place label and checkbox side by side
-        return fh.Div(
+        field_element = fh.Div(
             fh.Div(
                 label_component,
                 checkbox_component,
@@ -370,9 +744,18 @@ class BooleanFieldRenderer(BaseFieldRenderer):
             cls=f"{spacing('outer_margin', self.spacing)} w-full",
         )
 
+        # Apply metrics decoration if available (border only, as bullet is in the label)
+        return self._decorate_metrics(
+            field_element, self.metric_entry, scope=DecorationScope.BORDER
+        )
+
 
 class DateFieldRenderer(BaseFieldRenderer):
     """Renderer for date fields"""
+
+    def __init__(self, *args, **kwargs):
+        """Initialize date field renderer, passing all arguments to parent"""
+        super().__init__(*args, **kwargs)
 
     def render_input(self) -> FT:
         """
@@ -425,6 +808,10 @@ class DateFieldRenderer(BaseFieldRenderer):
 class TimeFieldRenderer(BaseFieldRenderer):
     """Renderer for time fields"""
 
+    def __init__(self, *args, **kwargs):
+        """Initialize time field renderer, passing all arguments to parent"""
+        super().__init__(*args, **kwargs)
+
     def render_input(self) -> FT:
         """
         Render input element for the field
@@ -476,6 +863,10 @@ class TimeFieldRenderer(BaseFieldRenderer):
 
 class LiteralFieldRenderer(BaseFieldRenderer):
     """Renderer for Literal fields as dropdown selects"""
+
+    def __init__(self, *args, **kwargs):
+        """Initialize literal field renderer, passing all arguments to parent"""
+        super().__init__(*args, **kwargs)
 
     def render_input(self) -> FT:
         """
@@ -549,6 +940,10 @@ class LiteralFieldRenderer(BaseFieldRenderer):
 
 class EnumFieldRenderer(BaseFieldRenderer):
     """Renderer for Enum fields as dropdown selects"""
+
+    def __init__(self, *args, **kwargs):
+        """Initialize enum field renderer, passing all arguments to parent"""
+        super().__init__(*args, **kwargs)
 
     def render_input(self) -> FT:
         """
@@ -635,6 +1030,10 @@ class EnumFieldRenderer(BaseFieldRenderer):
 class BaseModelFieldRenderer(BaseFieldRenderer):
     """Renderer for nested Pydantic BaseModel fields"""
 
+    def __init__(self, *args, **kwargs):
+        """Initialize base model field renderer, passing all arguments to parent"""
+        super().__init__(*args, **kwargs)
+
     def render(self) -> FT:
         """
         Render the nested BaseModel field as a single-item accordion using mui.Accordion.
@@ -673,6 +1072,19 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
             title_component.attrs["uk-tooltip"] = description
             title_component.attrs["title"] = description
 
+        # Apply metrics decoration to title (bullet only, no border)
+        title_component = self._decorate_metrics(
+            title_component, self.metric_entry, scope=DecorationScope.BULLET
+        )
+
+        # Compute border color for the top-level BaseModel card
+        border_color = self._metric_border_color(self.metric_entry)
+        li_style = {}
+        if border_color:
+            li_style["style"] = (
+                f"border-left: 4px solid {border_color}; padding-left: 0.25rem;"
+            )
+
         # 2. Render the nested input fields that will be the accordion content
         input_component = self.render_input()
 
@@ -685,7 +1097,10 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
             title_component,  # Title component with proper color styling
             input_component,  # Content component (the Card with nested fields)
             open=True,  # Open by default
-            li_kwargs={"id": item_id},  # Pass the specific ID for the <li>
+            li_kwargs={
+                "id": item_id,
+                **li_style,
+            },  # Pass the specific ID and style for the <li>
             cls=spacing(
                 "outer_margin", self.spacing
             ),  # Add bottom margin to the <li> element
@@ -703,6 +1118,8 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
             cls=f"{accordion_cls} w-full".strip(),
         )
 
+        # 6. Apply metrics decoration to the title only (bullet), not the container
+        # The parent list renderer handles the border decoration
         return accordion_container
 
     def render_input(self) -> FT:
@@ -786,8 +1203,12 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
                     prefix=nested_prefix,
                     disabled=self.disabled,  # Propagate disabled state to nested fields
                     spacing=self.spacing,  # Propagate spacing to nested fields
-                    field_path=self.field_path + [nested_field_name],  # Propagate path
+                    field_path=self.field_path
+                    + [nested_field_name],  # Propagate path with field name
                     form_name=self.explicit_form_name,  # Propagate form name
+                    metric_entry=None,  # Let auto-lookup handle it
+                    metrics_dict=self.metrics_dict,  # Pass down the metrics dict
+                    refresh_endpoint_override=self._refresh_endpoint_override,  # Propagate refresh override
                 )
 
                 nested_inputs.append(renderer.render())
@@ -821,6 +1242,56 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
 
 class ListFieldRenderer(BaseFieldRenderer):
     """Renderer for list fields containing any type"""
+
+    def __init__(
+        self,
+        field_name: str,
+        field_info: FieldInfo,
+        value: Any = None,
+        prefix: str = "",
+        disabled: bool = False,
+        label_color: Optional[str] = None,
+        spacing: SpacingValue = SpacingTheme.NORMAL,
+        field_path: Optional[List[str]] = None,
+        form_name: Optional[str] = None,
+        metric_entry: Optional[MetricEntry] = None,
+        metrics_dict: Optional[MetricsDict] = None,
+        show_item_border: bool = True,
+        **kwargs,  # Accept additional kwargs
+    ):
+        """
+        Initialize the list field renderer
+
+        Args:
+            field_name: The name of the field
+            field_info: The FieldInfo for the field
+            value: The current value of the field (optional)
+            prefix: Optional prefix for the field name (used for nested fields)
+            disabled: Whether the field should be rendered as disabled
+            label_color: Optional CSS color value for the field label
+            spacing: Spacing theme to use for layout
+            field_path: Path segments from root to this field
+            form_name: Explicit form name
+            metric_entry: Optional metric entry for visual feedback
+            metrics_dict: Optional full metrics dict for auto-lookup
+            show_item_border: Whether to show colored borders on list items based on metrics
+            **kwargs: Additional keyword arguments passed to parent
+        """
+        super().__init__(
+            field_name=field_name,
+            field_info=field_info,
+            value=value,
+            prefix=prefix,
+            disabled=disabled,
+            label_color=label_color,
+            spacing=spacing,
+            field_path=field_path,
+            form_name=form_name,
+            metric_entry=metric_entry,
+            metrics_dict=metrics_dict,
+            **kwargs,  # Pass kwargs to parent
+        )
+        self.show_item_border = show_item_border
 
     def _container_id(self) -> str:
         """
@@ -913,6 +1384,9 @@ class ListFieldRenderer(BaseFieldRenderer):
             label_span.attrs["uk-tooltip"] = description
             label_span.attrs["title"] = description
 
+        # Decorate the label span with the metric badge (bullet)
+        label_span = self._decorate_label(label_span, self.metric_entry)
+
         # Construct the container ID that will be generated by render_input()
         container_id = self._container_id()
 
@@ -925,13 +1399,23 @@ class ListFieldRenderer(BaseFieldRenderer):
             )
 
             # Create the clickable span wrapper for the icon
+            # Use prefix-based selector to include only fields from this form
+            hx_include_selector = (
+                f"form [name^='{self.prefix}']" if self.prefix else "closest form"
+            )
+
+            # Use override endpoint if provided (for ComparisonForm), otherwise use standard form refresh
+            refresh_url = (
+                self._refresh_endpoint_override or f"/form/{form_name}/refresh"
+            )
+
             refresh_icon_trigger = fh.Span(
                 refresh_icon_component,
                 cls="ml-1 inline-block align-middle cursor-pointer",  # Add margin, ensure inline-like behavior
-                hx_post=f"/form/{form_name}/refresh",
+                hx_post=refresh_url,
                 hx_target=f"#{form_name}-inputs-wrapper",
                 hx_swap="innerHTML",
-                hx_include="closest form",  # ← key change
+                hx_include=hx_include_selector,  # Use prefix-based selector
                 uk_tooltip="Refresh form display to update list summaries",
                 # Prevent 'toggleListItems' on the parent from firing
                 onclick="event.stopPropagation();",
@@ -954,10 +1438,17 @@ class ListFieldRenderer(BaseFieldRenderer):
             )
 
         # Return container with label+icon and input
-        return fh.Div(
+        field_element = fh.Div(
             label_with_icon,
             self.render_input(),
             cls=f"{spacing('outer_margin', self.spacing)} w-full",
+        )
+
+        # Apply metrics decoration if available
+        return self._decorate_metrics(
+            field_element,
+            self.metric_entry,
+            scope=DecorationScope.BORDER,
         )
 
     def render_input(self) -> FT:
@@ -971,6 +1462,7 @@ class ListFieldRenderer(BaseFieldRenderer):
         items = [] if not isinstance(self.value, list) else self.value
 
         annotation = getattr(self.field_info, "annotation", None)
+        item_type = None  # Initialize here to avoid UnboundLocalError
 
         if (
             annotation is not None
@@ -1085,6 +1577,13 @@ class ListFieldRenderer(BaseFieldRenderer):
             item_id = f"{self.field_name}_{idx}"
             item_card_id = f"{item_id}_card"
 
+            # Look up metrics for this list item
+            item_path_segments = self.field_path + [str(idx)]
+            path_string = _build_path_string_static(item_path_segments)
+            item_metric_entry: Optional[MetricEntry] = (
+                self.metrics_dict.get(path_string) if self.metrics_dict else None
+            )
+
             # Check if it's a simple type or BaseModel
             is_model = hasattr(item_type, "model_fields")
 
@@ -1179,6 +1678,13 @@ class ListFieldRenderer(BaseFieldRenderer):
                         value=item,
                         prefix=self.prefix,
                         disabled=self.disabled,  # Propagate disabled state
+                        spacing=self.spacing,  # Propagate spacing
+                        field_path=self.field_path
+                        + [str(idx)],  # Propagate path with index
+                        form_name=self.explicit_form_name,  # Propagate form name
+                        metric_entry=None,  # Let auto-lookup handle it
+                        metrics_dict=self.metrics_dict,  # Pass down the metrics dict
+                        refresh_endpoint_override=self._refresh_endpoint_override,  # Propagate refresh override
                     )
                     # Add the rendered input to content elements
                     item_content_elements.append(item_renderer.render_input())
@@ -1234,6 +1740,10 @@ class ListFieldRenderer(BaseFieldRenderer):
                                     str(idx),
                                     nested_field_name,
                                 ],  # Propagate path with index
+                                form_name=self.explicit_form_name,  # Propagate form name
+                                metric_entry=None,  # Let auto-lookup handle it
+                                metrics_dict=self.metrics_dict,  # Pass down the metrics dict
+                                refresh_endpoint_override=self._refresh_endpoint_override,  # Propagate refresh override
                             )
 
                             # Add rendered field to valid fields
@@ -1271,9 +1781,15 @@ class ListFieldRenderer(BaseFieldRenderer):
                     spacing=self.spacing,  # Propagate spacing
                     field_path=self.field_path
                     + [str(idx)],  # Propagate path with index
+                    form_name=self.explicit_form_name,  # Propagate form name
+                    metric_entry=None,  # Let auto-lookup handle it
+                    metrics_dict=self.metrics_dict,  # Pass down the metrics dict
+                    refresh_endpoint_override=self._refresh_endpoint_override,  # Propagate refresh override
                 )
                 input_element = simple_renderer.render_input()
-                item_content_elements.append(fh.Div(input_element))
+                wrapper = fh.Div(input_element)
+                # Don't apply metrics decoration here - the card border handles it
+                item_content_elements.append(wrapper)
 
             # --- Create action buttons with form-specific URLs ---
             # Generate HTMX endpoints using hierarchical paths
@@ -1373,7 +1889,22 @@ class ListFieldRenderer(BaseFieldRenderer):
             title_component = fh.Span(
                 item_summary_text, cls="text-gray-700 font-medium pl-3"
             )
+
+            # Apply metrics decoration to the title (bullet only)
+            title_component = self._decorate_metrics(
+                title_component, item_metric_entry, scope=DecorationScope.BULLET
+            )
+
+            # Prepare li attributes with optional border styling
             li_attrs = {"id": full_card_id}
+
+            # Add colored border based on metrics if enabled
+            if self.show_item_border and item_metric_entry:
+                border_color = self._metric_border_color(item_metric_entry)
+                if border_color:
+                    li_attrs["style"] = (
+                        f"border-left: 4px solid {border_color}; padding-left: 0.25rem;"
+                    )
 
             # Build card classes using spacing tokens
             card_cls_parts = ["uk-card"]
@@ -1400,11 +1931,33 @@ class ListFieldRenderer(BaseFieldRenderer):
 
         except Exception as e:
             # Return error representation
-            title_component = f"Error in item {idx}"
+
+            # Still try to get metrics for error items
+            item_path_segments = self.field_path + [str(idx)]
+            path_string = _build_path_string_static(item_path_segments)
+
+            title_component = fh.Span(
+                f"Error in item {idx}", cls="text-red-600 font-medium pl-3"
+            )
+
+            # Apply metrics decoration even to error items (bullet only)
+            title_component = self._decorate_metrics(
+                title_component, item_metric_entry, scope=DecorationScope.BULLET
+            )
+
             content_component = mui.Alert(
                 f"Error rendering item {idx}: {str(e)}", cls=mui.AlertT.error
             )
+
             li_attrs = {"id": f"{self.field_name}_{idx}_error_card"}
+
+            # Add colored border for error items too if metrics present
+            if self.show_item_border and item_metric_entry:
+                border_color = self._metric_border_color(item_metric_entry)
+                if border_color:
+                    li_attrs["style"] = (
+                        f"border-left: 4px solid {border_color}; padding-left: 0.25rem;"
+                    )
 
             # Wrap error component in a div with consistent padding
             t = self.spacing

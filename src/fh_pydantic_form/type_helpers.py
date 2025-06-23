@@ -5,17 +5,37 @@ __all__ = [
     "_is_literal_type",
     "_is_enum_type",
     "_is_skip_json_schema_field",
-    "default_for_annotation",
+    "MetricEntry",
+    "MetricsDict",
+    "DecorationScope",
 ]
+
 
 import logging
 from enum import Enum
 from types import UnionType
-from typing import Annotated, Any, Literal, Union, get_args, get_origin
+from typing import (
+    Annotated,
+    Any,
+    Dict,
+    Literal,
+    TypedDict,
+    Union,
+    get_args,
+    get_origin,
+)
 
 from fh_pydantic_form.constants import _UNSET
 
 logger = logging.getLogger(__name__)
+
+
+class DecorationScope(str, Enum):
+    """Controls which metric decorations are applied to an element"""
+
+    BORDER = "border"
+    BULLET = "bullet"
+    BOTH = "both"
 
 
 def _is_skip_json_schema_field(annotation_or_field_info: Any) -> bool:
@@ -83,6 +103,21 @@ def _is_skip_json_schema_field(annotation_or_field_info: Any) -> bool:
 
     # 3. Fallback – cheap but effective
     return "SkipJsonSchema" in repr(annotation)
+
+
+# Metrics types for field-level annotations
+class MetricEntry(TypedDict, total=False):
+    """Metrics for annotating field values with scores, colors, and comments"""
+
+    metric: float | int | str  # Metric value (0-1 score, count, or label)
+    color: str  # CSS-compatible color string
+    comment: str  # Free-form text for tooltips/hover
+
+
+# Type alias for metrics mapping
+MetricsDict = Dict[
+    str, MetricEntry
+]  # Keys are dot-paths like "address.street" or "tags[0]"
 
 
 def _is_optional_type(annotation: Any) -> bool:
@@ -209,7 +244,3 @@ def _is_pydantic_undefined(value: Any) -> bool:
         pass
 
     return False
-
-
-# Local import placed after _UNSET is defined to avoid circular-import problems
-from .defaults import default_for_annotation  # noqa: E402

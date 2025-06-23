@@ -31,7 +31,10 @@ from fh_pydantic_form.form_parser import (
 )
 from fh_pydantic_form.list_path import walk_path
 from fh_pydantic_form.registry import FieldRendererRegistry
-from fh_pydantic_form.type_helpers import _is_skip_json_schema_field, get_default
+from fh_pydantic_form.type_helpers import (
+    _is_skip_json_schema_field,
+    get_default,
+)
 from fh_pydantic_form.ui_style import (
     SpacingTheme,
     SpacingValue,
@@ -211,46 +214,6 @@ class PydanticForm(Generic[ModelType]):
 
     # --- module-level flag (add near top of file) ---
 
-    def _compact_wrapper(self, inner: FT) -> FT:
-        """
-        Wrap inner markup in a wrapper div.
-        """
-        wrapper_cls = "fhpf-wrapper w-full flex-1"
-        return fh.Div(inner, cls=wrapper_cls)
-
-    def _clone_with_values(self, values: Dict[str, Any]) -> "PydanticForm":
-        """
-        Create a copy of this renderer with the same configuration but different values.
-
-        This preserves all constructor arguments (label_colors, custom_renderers, etc.)
-        to avoid configuration drift during refresh operations.
-
-        Args:
-            values: New values dictionary to use in the cloned renderer
-
-        Returns:
-            A new PydanticForm instance with identical configuration but updated values
-        """
-        # Get custom renderers if they were registered (not stored directly on instance)
-        # We'll rely on global registry state being preserved
-
-        clone = PydanticForm(
-            form_name=self.name,
-            model_class=self.model_class,
-            initial_values=None,  # Will be set via values_dict below
-            custom_renderers=None,  # Registry is global, no need to re-register
-            disabled=self.disabled,
-            disabled_fields=self.disabled_fields,
-            label_colors=self.label_colors,
-            exclude_fields=self.exclude_fields,
-            spacing=self.spacing,
-        )
-
-        # Set the values directly
-        clone.values_dict = values
-
-        return clone
-
     def __init__(
         self,
         form_name: str,
@@ -262,6 +225,7 @@ class PydanticForm(Generic[ModelType]):
         label_colors: Optional[Dict[str, str]] = None,
         exclude_fields: Optional[List[str]] = None,
         spacing: SpacingValue = SpacingTheme.NORMAL,
+        metrics_dict: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize the form renderer
@@ -278,6 +242,7 @@ class PydanticForm(Generic[ModelType]):
             label_colors: Optional dictionary mapping field names to label colors (CSS color values)
             exclude_fields: Optional list of top-level field names to exclude from the form
             spacing: Spacing theme to use for form layout ("normal", "compact", or SpacingTheme enum)
+            metrics_dict: Optional metrics dictionary for field-level visual feedback
         """
         self.name = form_name
         self.model_class = model_class
@@ -319,12 +284,61 @@ class PydanticForm(Generic[ModelType]):
         self.label_colors = label_colors or {}  # Store label colors mapping
         self.exclude_fields = exclude_fields or []  # Store excluded fields list
         self.spacing = _normalize_spacing(spacing)  # Store normalized spacing
+        self.metrics_dict = metrics_dict or {}  # Store metrics dictionary
 
         # Register custom renderers with the global registry if provided
         if custom_renderers:
             registry = FieldRendererRegistry()  # Get singleton instance
             for field_type, renderer_cls in custom_renderers:
                 registry.register_type_renderer(field_type, renderer_cls)
+
+    def _compact_wrapper(self, inner: FT) -> FT:
+        """
+        Wrap inner markup in a wrapper div.
+        """
+        wrapper_cls = "fhpf-wrapper w-full flex-1"
+        return fh.Div(inner, cls=wrapper_cls)
+
+    def reset_state(self) -> None:
+        """
+        Restore the live state of the form to its immutable baseline.
+        Call this *before* rendering if you truly want a factory-fresh view.
+        """
+        self.values_dict = self.initial_values_dict.copy()
+
+    def _clone_with_values(self, values: Dict[str, Any]) -> "PydanticForm":
+        """
+        Create a copy of this renderer with the same configuration but different values.
+
+        This preserves all constructor arguments (label_colors, custom_renderers, etc.)
+        to avoid configuration drift during refresh operations.
+
+        Args:
+            values: New values dictionary to use in the cloned renderer
+
+        Returns:
+            A new PydanticForm instance with identical configuration but updated values
+        """
+        # Get custom renderers if they were registered (not stored directly on instance)
+        # We'll rely on global registry state being preserved
+
+        clone = PydanticForm(
+            form_name=self.name,
+            model_class=self.model_class,
+            initial_values=None,  # Will be set via values_dict below
+            custom_renderers=None,  # Registry is global, no need to re-register
+            disabled=self.disabled,
+            disabled_fields=self.disabled_fields,
+            label_colors=self.label_colors,
+            exclude_fields=self.exclude_fields,
+            spacing=self.spacing,
+            metrics_dict=self.metrics_dict,
+        )
+
+        # Set the values directly
+        clone.values_dict = values
+
+        return clone
 
     def render_inputs(self) -> FT:
         """
@@ -431,6 +445,8 @@ class PydanticForm(Generic[ModelType]):
                 label_color=label_color,  # Pass the label color if specified
                 spacing=self.spacing,  # Pass the spacing
                 field_path=[field_name],  # Set top-level field path
+                form_name=self.name,  # Pass form name
+                metrics_dict=self.metrics_dict,  # Pass the metrics dict
             )
 
             rendered_field = renderer.render()
@@ -453,6 +469,34 @@ class PydanticForm(Generic[ModelType]):
 
         return wrapped
 
+    def _filter_by_prefix(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Filter form data to include only keys that start with this form's base_prefix.
+
+        This prevents cross-contamination when multiple forms share the same HTML form element.
+
+        Args:
+            data: Raw form data dictionary
+
+        Returns:
+            Filtered dictionary containing only keys with matching prefix
+        """
+        if not self.base_prefix:
+            return data  # No prefix = no filtering needed
+
+        filtered = {
+            key: value
+            for key, value in data.items()
+            if key.startswith(self.base_prefix)
+        }
+
+        logger.debug(
+            f"Filtered form data for '{self.name}': "
+            f"{len(data)} keys -> {len(filtered)} keys"
+        )
+
+        return filtered
+
     # ---- Form Renderer Methods (continued) ----
 
     async def handle_refresh_request(self, req):
@@ -467,6 +511,10 @@ class PydanticForm(Generic[ModelType]):
         """
         form_data = await req.form()
         form_dict = dict(form_data)
+
+        # Filter to only this form's fields
+        form_dict = self._filter_by_prefix(form_dict)
+
         logger.info(f"Refresh request for form '{self.name}'")
 
         parsed_data = {}
@@ -481,14 +529,26 @@ class PydanticForm(Generic[ModelType]):
                 f"Error parsing form data for refresh on form '{self.name}': {e}",
                 exc_info=True,
             )
-            # Fallback: Use original initial values dict if available, otherwise empty dict
-            parsed_data = (
-                self.initial_values_dict.copy() if self.initial_values_dict else {}
-            )
+
+            # Merge strategy - preserve existing values for unparseable fields
+            # Start with current values
+            parsed_data = self.values_dict.copy() if self.values_dict else {}
+
+            # Try to extract any simple fields that don't require complex parsing
+            for key, value in form_dict.items():
+                if key.startswith(self.base_prefix):
+                    field_name = key[len(self.base_prefix) :]
+                    # Only update simple fields to avoid corruption
+                    if "_" not in field_name:  # Not a nested field
+                        parsed_data[field_name] = value
+
             alert_ft = mui.Alert(
-                f"Warning: Could not fully process current form values for refresh. Display might not be fully updated. Error: {str(e)}",
+                f"Warning: Some fields could not be refreshed. Preserved previous values. Error: {str(e)}",
                 cls=mui.AlertT.warning + " mb-4",  # Add margin bottom
             )
+
+        # Parsed successfully (or merged best effort) – make it the new truth
+        self.values_dict = parsed_data.copy()
 
         # Create temporary renderer with same configuration but updated values
         temp_renderer = self._clone_with_values(parsed_data)
@@ -519,6 +579,9 @@ class PydanticForm(Generic[ModelType]):
         Returns:
             HTML response with reset form inputs
         """
+        # Rewind internal state to the immutable baseline
+        self.reset_state()
+
         logger.info(f"Resetting form '{self.name}' to initial values")
 
         # Create temporary renderer with original initial dict
@@ -532,6 +595,7 @@ class PydanticForm(Generic[ModelType]):
             label_colors=self.label_colors,
             exclude_fields=self.exclude_fields,
             spacing=self.spacing,
+            metrics_dict=self.metrics_dict,
         )
 
         reset_inputs_component = temp_renderer.render_inputs()
@@ -739,6 +803,7 @@ class PydanticForm(Generic[ModelType]):
                 disabled=self.disabled,
                 field_path=segments,  # Pass the full path segments
                 form_name=self.name,  # Pass the explicit form name
+                metrics_dict=self.metrics_dict,  # Pass the metrics dict
             )
 
             # Generate a unique placeholder index

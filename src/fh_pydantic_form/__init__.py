@@ -4,6 +4,15 @@ from typing import Literal, get_origin
 
 from pydantic import BaseModel
 
+from fh_pydantic_form.comparison_form import (
+    ComparisonForm,
+    comparison_form_js,
+    simple_diff_metrics,
+)
+from fh_pydantic_form.defaults import (
+    default_dict_for_model,
+    default_for_annotation,
+)
 from fh_pydantic_form.field_renderers import (
     BaseModelFieldRenderer,
     BooleanFieldRenderer,
@@ -18,6 +27,8 @@ from fh_pydantic_form.field_renderers import (
 from fh_pydantic_form.form_renderer import PydanticForm, list_manipulation_js
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import (
+    MetricEntry,
+    MetricsDict,
     _get_underlying_type_if_optional,
 )
 from fh_pydantic_form.ui_style import (
@@ -25,10 +36,6 @@ from fh_pydantic_form.ui_style import (
     SpacingValue,
     spacing,
     spacing_many,
-)
-from fh_pydantic_form.defaults import (
-    default_dict_for_model,
-    default_for_annotation,
 )
 
 
@@ -122,4 +129,9 @@ __all__ = [
     "spacing_many",
     "default_dict_for_model",
     "default_for_annotation",
+    "ComparisonForm",
+    "MetricEntry",
+    "MetricsDict",
+    "comparison_form_js",
+    "simple_diff_metrics",
 ]

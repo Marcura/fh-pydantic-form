@@ -7,9 +7,10 @@ from hypothesis import strategies as st
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
+from fh_pydantic_form.defaults import default_for_annotation
 from fh_pydantic_form.field_renderers import EnumFieldRenderer
 from fh_pydantic_form.form_parser import _parse_enum_field
-from fh_pydantic_form.type_helpers import _is_enum_type, default_for_annotation
+from fh_pydantic_form.type_helpers import _is_enum_type
 
 
 # Test enum with various value types for property testing
