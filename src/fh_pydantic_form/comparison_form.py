@@ -34,7 +34,7 @@ ModelType = TypeVar("ModelType", bound=BaseModel)
 def comparison_form_js():
     """JavaScript for comparison: sync top-level and list accordions."""
     return fh.Script("""
-(function initComparisonSync(){
+window.fhpfInitComparisonSync = function initComparisonSync(){
   // 1) Wait until UIkit and its util are available
   if (!window.UIkit || !UIkit.util) {
     return setTimeout(initComparisonSync, 50);
@@ -122,7 +122,16 @@ def comparison_form_js():
         });
     };
   }
-})();
+};
+
+// Initial run
+window.fhpfInitComparisonSync();
+
+// Re-run after HTMX swaps to maintain sync
+document.addEventListener('htmx:afterSwap', function(event) {
+  // Re-initialize the comparison sync
+  window.fhpfInitComparisonSync();
+});
 """)
 
 
@@ -233,6 +242,9 @@ class ComparisonForm(Generic[ModelType]):
 
                 renderer_cls = StringFieldRenderer
 
+            # Determine comparison-specific refresh endpoint
+            comparison_refresh = f"/compare/{self.name}/{'left' if form is self.left_form else 'right'}/refresh"
+
             # Create renderer
             renderer = renderer_cls(
                 field_name=field_name,
@@ -244,6 +256,7 @@ class ComparisonForm(Generic[ModelType]):
                 field_path=[field_name],
                 form_name=form.name,
                 metrics_dict=form.metrics_dict,  # Use form's own metrics
+                refresh_endpoint_override=comparison_refresh,  # Pass comparison-specific refresh endpoint
             )
 
             # Render with data-path and order
@@ -410,7 +423,7 @@ class ComparisonForm(Generic[ModelType]):
             async def handler(req):
                 """Refresh one side of the comparison form"""
                 # Refresh the form state
-                await form.handle_refresh_request(req)
+                _ = await form.handle_refresh_request(req)
 
                 # Render the entire column with proper ordering
                 start_order = 0 if side == "left" else 1
@@ -477,10 +490,14 @@ class ComparisonForm(Generic[ModelType]):
         """
         form = self.left_form if side == "left" else self.right_form
 
+        # Create prefix-based selector
+        prefix_selector = f"form [name^='{form.base_prefix}']"
+
         # Set default attributes
         kwargs.setdefault("hx_post", f"/compare/{self.name}/{side}/{action}")
         kwargs.setdefault("hx_target", f"#{form.name}-inputs-wrapper")
         kwargs.setdefault("hx_swap", "innerHTML")
+        kwargs.setdefault("hx_include", prefix_selector)
 
         # Delegate to the underlying form's button method
         button_method = getattr(form, f"{action}_button")

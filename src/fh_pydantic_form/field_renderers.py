@@ -380,6 +380,8 @@ class BaseFieldRenderer(MetricsRendererMixin):
         form_name: Optional[str] = None,
         metric_entry: Optional[MetricEntry] = None,
         metrics_dict: Optional[MetricsDict] = None,
+        refresh_endpoint_override: Optional[str] = None,
+        **kwargs,  # Accept additional kwargs for extensibility
     ):
         """
         Initialize the field renderer
@@ -396,6 +398,8 @@ class BaseFieldRenderer(MetricsRendererMixin):
             form_name: Explicit form name (used for nested list URLs)
             metric_entry: Optional metric entry for visual feedback
             metrics_dict: Optional full metrics dict for auto-lookup
+            refresh_endpoint_override: Optional override URL for refresh actions (used in ComparisonForm)
+            **kwargs: Additional keyword arguments for extensibility
         """
         self.field_name = f"{prefix}{field_name}" if prefix else field_name
         self.original_field_name = field_name
@@ -409,6 +413,7 @@ class BaseFieldRenderer(MetricsRendererMixin):
         self.label_color = label_color
         self.spacing = _normalize_spacing(spacing)
         self.metrics_dict = metrics_dict
+        self._refresh_endpoint_override = refresh_endpoint_override
 
         # Initialize metric entry attribute
         self.metric_entry: Optional[MetricEntry] = None
@@ -589,6 +594,10 @@ class BaseFieldRenderer(MetricsRendererMixin):
 class StringFieldRenderer(BaseFieldRenderer):
     """Renderer for string fields"""
 
+    def __init__(self, *args, **kwargs):
+        """Initialize string field renderer, passing all arguments to parent"""
+        super().__init__(*args, **kwargs)
+
     def render_input(self) -> FT:
         """
         Render input element for the field
@@ -636,6 +645,10 @@ class StringFieldRenderer(BaseFieldRenderer):
 class NumberFieldRenderer(BaseFieldRenderer):
     """Renderer for number fields (int, float)"""
 
+    def __init__(self, *args, **kwargs):
+        """Initialize number field renderer, passing all arguments to parent"""
+        super().__init__(*args, **kwargs)
+
     def render_input(self) -> FT:
         """
         Render input element for the field
@@ -682,6 +695,10 @@ class NumberFieldRenderer(BaseFieldRenderer):
 
 class BooleanFieldRenderer(BaseFieldRenderer):
     """Renderer for boolean fields"""
+
+    def __init__(self, *args, **kwargs):
+        """Initialize boolean field renderer, passing all arguments to parent"""
+        super().__init__(*args, **kwargs)
 
     def render_input(self) -> FT:
         """
@@ -736,6 +753,10 @@ class BooleanFieldRenderer(BaseFieldRenderer):
 class DateFieldRenderer(BaseFieldRenderer):
     """Renderer for date fields"""
 
+    def __init__(self, *args, **kwargs):
+        """Initialize date field renderer, passing all arguments to parent"""
+        super().__init__(*args, **kwargs)
+
     def render_input(self) -> FT:
         """
         Render input element for the field
@@ -786,6 +807,10 @@ class DateFieldRenderer(BaseFieldRenderer):
 
 class TimeFieldRenderer(BaseFieldRenderer):
     """Renderer for time fields"""
+
+    def __init__(self, *args, **kwargs):
+        """Initialize time field renderer, passing all arguments to parent"""
+        super().__init__(*args, **kwargs)
 
     def render_input(self) -> FT:
         """
@@ -838,6 +863,10 @@ class TimeFieldRenderer(BaseFieldRenderer):
 
 class LiteralFieldRenderer(BaseFieldRenderer):
     """Renderer for Literal fields as dropdown selects"""
+
+    def __init__(self, *args, **kwargs):
+        """Initialize literal field renderer, passing all arguments to parent"""
+        super().__init__(*args, **kwargs)
 
     def render_input(self) -> FT:
         """
@@ -911,6 +940,10 @@ class LiteralFieldRenderer(BaseFieldRenderer):
 
 class EnumFieldRenderer(BaseFieldRenderer):
     """Renderer for Enum fields as dropdown selects"""
+
+    def __init__(self, *args, **kwargs):
+        """Initialize enum field renderer, passing all arguments to parent"""
+        super().__init__(*args, **kwargs)
 
     def render_input(self) -> FT:
         """
@@ -996,6 +1029,10 @@ class EnumFieldRenderer(BaseFieldRenderer):
 
 class BaseModelFieldRenderer(BaseFieldRenderer):
     """Renderer for nested Pydantic BaseModel fields"""
+
+    def __init__(self, *args, **kwargs):
+        """Initialize base model field renderer, passing all arguments to parent"""
+        super().__init__(*args, **kwargs)
 
     def render(self) -> FT:
         """
@@ -1171,6 +1208,7 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
                     form_name=self.explicit_form_name,  # Propagate form name
                     metric_entry=None,  # Let auto-lookup handle it
                     metrics_dict=self.metrics_dict,  # Pass down the metrics dict
+                    refresh_endpoint_override=self._refresh_endpoint_override,  # Propagate refresh override
                 )
 
                 nested_inputs.append(renderer.render())
@@ -1219,6 +1257,7 @@ class ListFieldRenderer(BaseFieldRenderer):
         metric_entry: Optional[MetricEntry] = None,
         metrics_dict: Optional[MetricsDict] = None,
         show_item_border: bool = True,
+        **kwargs,  # Accept additional kwargs
     ):
         """
         Initialize the list field renderer
@@ -1236,6 +1275,7 @@ class ListFieldRenderer(BaseFieldRenderer):
             metric_entry: Optional metric entry for visual feedback
             metrics_dict: Optional full metrics dict for auto-lookup
             show_item_border: Whether to show colored borders on list items based on metrics
+            **kwargs: Additional keyword arguments passed to parent
         """
         super().__init__(
             field_name=field_name,
@@ -1249,6 +1289,7 @@ class ListFieldRenderer(BaseFieldRenderer):
             form_name=form_name,
             metric_entry=metric_entry,
             metrics_dict=metrics_dict,
+            **kwargs,  # Pass kwargs to parent
         )
         self.show_item_border = show_item_border
 
@@ -1358,13 +1399,23 @@ class ListFieldRenderer(BaseFieldRenderer):
             )
 
             # Create the clickable span wrapper for the icon
+            # Use prefix-based selector to include only fields from this form
+            hx_include_selector = (
+                f"form [name^='{self.prefix}']" if self.prefix else "closest form"
+            )
+
+            # Use override endpoint if provided (for ComparisonForm), otherwise use standard form refresh
+            refresh_url = (
+                self._refresh_endpoint_override or f"/form/{form_name}/refresh"
+            )
+
             refresh_icon_trigger = fh.Span(
                 refresh_icon_component,
                 cls="ml-1 inline-block align-middle cursor-pointer",  # Add margin, ensure inline-like behavior
-                hx_post=f"/form/{form_name}/refresh",
+                hx_post=refresh_url,
                 hx_target=f"#{form_name}-inputs-wrapper",
                 hx_swap="innerHTML",
-                hx_include="closest form",  # ← key change
+                hx_include=hx_include_selector,  # Use prefix-based selector
                 uk_tooltip="Refresh form display to update list summaries",
                 # Prevent 'toggleListItems' on the parent from firing
                 onclick="event.stopPropagation();",
@@ -1633,6 +1684,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                         form_name=self.explicit_form_name,  # Propagate form name
                         metric_entry=None,  # Let auto-lookup handle it
                         metrics_dict=self.metrics_dict,  # Pass down the metrics dict
+                        refresh_endpoint_override=self._refresh_endpoint_override,  # Propagate refresh override
                     )
                     # Add the rendered input to content elements
                     item_content_elements.append(item_renderer.render_input())
@@ -1691,6 +1743,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                                 form_name=self.explicit_form_name,  # Propagate form name
                                 metric_entry=None,  # Let auto-lookup handle it
                                 metrics_dict=self.metrics_dict,  # Pass down the metrics dict
+                                refresh_endpoint_override=self._refresh_endpoint_override,  # Propagate refresh override
                             )
 
                             # Add rendered field to valid fields
@@ -1731,6 +1784,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                     form_name=self.explicit_form_name,  # Propagate form name
                     metric_entry=None,  # Let auto-lookup handle it
                     metrics_dict=self.metrics_dict,  # Pass down the metrics dict
+                    refresh_endpoint_override=self._refresh_endpoint_override,  # Propagate refresh override
                 )
                 input_element = simple_renderer.render_input()
                 wrapper = fh.Div(input_element)
