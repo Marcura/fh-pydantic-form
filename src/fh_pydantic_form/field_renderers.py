@@ -1353,8 +1353,10 @@ class ListFieldRenderer(BaseFieldRenderer):
         # form_name = self.prefix.rstrip("_") if self.prefix else None
         form_name = self._form_name or None
 
-        # Create the label text with proper color styling
-        label_text = self.original_field_name.replace("_", " ").title()
+        # Create the label text with proper color styling and item count
+        items = [] if not isinstance(self.value, list) else self.value
+        item_count = len(items)
+        label_text = f"{self.original_field_name.replace('_', ' ').title()} ({item_count} item{'s' if item_count != 1 else ''})"
 
         # Create the styled label span
         if self.label_color:
