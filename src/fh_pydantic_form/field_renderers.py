@@ -244,6 +244,63 @@ class MetricsRendererMixin:
 
         return element
 
+    def _metric_border_color(
+        self, metric_entry: Optional[MetricEntry]
+    ) -> Optional[str]:
+        """
+        Get an RGBA color string for a metric entry's border.
+
+        Args:
+            metric_entry: The metric entry containing color/score information
+
+        Returns:
+            RGBA color string for border, or None if no metric
+        """
+        if not metric_entry:
+            return None
+
+        # Use provided color if available
+        if metric_entry.get("color"):
+            return robust_color_to_rgba(metric_entry["color"], 0.8)
+
+        # Otherwise derive from metric score
+        metric = metric_entry.get("metric")
+        if metric is None:
+            return None
+
+        color, _ = get_metric_colors(metric)
+        return robust_color_to_rgba(color, 0.8)
+
+
+def _build_path_string_static(path_segments: List[str]) -> str:
+    """
+    Static version of BaseFieldRenderer._build_path_string for use without instance.
+
+    Convert field_path list to dot/bracket notation string for metric lookup.
+
+    Examples:
+        ['experience', '0', 'company'] -> 'experience[0].company'
+        ['skills', 'programming_languages', '2'] -> 'skills.programming_languages[2]'
+
+    Args:
+        path_segments: List of path segments
+
+    Returns:
+        Path string in dot/bracket notation
+    """
+    parts: List[str] = []
+    for segment in path_segments:
+        # Check if segment is numeric or a list index pattern
+        if segment.isdigit() or segment.startswith("new_"):
+            # Interpret as list index
+            if parts:
+                parts[-1] += f"[{segment}]"
+            else:  # Defensive fallback
+                parts.append(f"[{segment}]")
+        else:
+            parts.append(segment)
+    return ".".join(parts)
+
 
 class BaseFieldRenderer(MetricsRendererMixin):
     """
@@ -1079,6 +1136,53 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
 class ListFieldRenderer(BaseFieldRenderer):
     """Renderer for list fields containing any type"""
 
+    def __init__(
+        self,
+        field_name: str,
+        field_info: FieldInfo,
+        value: Any = None,
+        prefix: str = "",
+        disabled: bool = False,
+        label_color: Optional[str] = None,
+        spacing: SpacingValue = SpacingTheme.NORMAL,
+        field_path: Optional[List[str]] = None,
+        form_name: Optional[str] = None,
+        metric_entry: Optional[MetricEntry] = None,
+        metrics_dict: Optional[MetricsDict] = None,
+        show_item_border: bool = True,
+    ):
+        """
+        Initialize the list field renderer
+
+        Args:
+            field_name: The name of the field
+            field_info: The FieldInfo for the field
+            value: The current value of the field (optional)
+            prefix: Optional prefix for the field name (used for nested fields)
+            disabled: Whether the field should be rendered as disabled
+            label_color: Optional CSS color value for the field label
+            spacing: Spacing theme to use for layout
+            field_path: Path segments from root to this field
+            form_name: Explicit form name
+            metric_entry: Optional metric entry for visual feedback
+            metrics_dict: Optional full metrics dict for auto-lookup
+            show_item_border: Whether to show colored borders on list items based on metrics
+        """
+        super().__init__(
+            field_name=field_name,
+            field_info=field_info,
+            value=value,
+            prefix=prefix,
+            disabled=disabled,
+            label_color=label_color,
+            spacing=spacing,
+            field_path=field_path,
+            form_name=form_name,
+            metric_entry=metric_entry,
+            metrics_dict=metrics_dict,
+        )
+        self.show_item_border = show_item_border
+
     def _container_id(self) -> str:
         """
         Return a DOM-unique ID for the list's <ul> / <div> wrapper.
@@ -1346,6 +1450,13 @@ class ListFieldRenderer(BaseFieldRenderer):
             # Create a unique ID for this item
             item_id = f"{self.field_name}_{idx}"
             item_card_id = f"{item_id}_card"
+
+            # Look up metrics for this list item
+            item_path_segments = self.field_path + [str(idx)]
+            path_string = _build_path_string_static(item_path_segments)
+            item_metric_entry: Optional[MetricEntry] = (
+                self.metrics_dict.get(path_string) if self.metrics_dict else None
+            )
 
             # Check if it's a simple type or BaseModel
             is_model = hasattr(item_type, "model_fields")
@@ -1652,7 +1763,22 @@ class ListFieldRenderer(BaseFieldRenderer):
             title_component = fh.Span(
                 item_summary_text, cls="text-gray-700 font-medium pl-3"
             )
+
+            # Apply metrics decoration to the title
+            title_component = self._decorate_metrics(
+                title_component, item_metric_entry, propagate_children=False
+            )
+
+            # Prepare li attributes with optional border styling
             li_attrs = {"id": full_card_id}
+
+            # Add colored border based on metrics if enabled
+            if self.show_item_border and item_metric_entry:
+                border_color = self._metric_border_color(item_metric_entry)
+                if border_color:
+                    li_attrs["style"] = (
+                        f"border-left: 4px solid {border_color}; padding-left: 0.25rem;"
+                    )
 
             # Build card classes using spacing tokens
             card_cls_parts = ["uk-card"]
@@ -1679,11 +1805,33 @@ class ListFieldRenderer(BaseFieldRenderer):
 
         except Exception as e:
             # Return error representation
-            title_component = f"Error in item {idx}"
+
+            # Still try to get metrics for error items
+            item_path_segments = self.field_path + [str(idx)]
+            path_string = _build_path_string_static(item_path_segments)
+
+            title_component = fh.Span(
+                f"Error in item {idx}", cls="text-red-600 font-medium pl-3"
+            )
+
+            # Apply metrics decoration even to error items
+            title_component = self._decorate_metrics(
+                title_component, item_metric_entry, propagate_children=False
+            )
+
             content_component = mui.Alert(
                 f"Error rendering item {idx}: {str(e)}", cls=mui.AlertT.error
             )
+
             li_attrs = {"id": f"{self.field_name}_{idx}_error_card"}
+
+            # Add colored border for error items too if metrics present
+            if self.show_item_border and item_metric_entry:
+                border_color = self._metric_border_color(item_metric_entry)
+                if border_color:
+                    li_attrs["style"] = (
+                        f"border-left: 4px solid {border_color}; padding-left: 0.25rem;"
+                    )
 
             # Wrap error component in a div with consistent padding
             t = self.spacing
