@@ -33,6 +33,13 @@ class Status(Enum):
     PUBLISHED = "Published"
 
 
+class Priority(Enum):
+    LOW = "Low"
+    MEDIUM = "Medium"
+    HIGH = "High"
+    CRITICAL = "Critical"
+
+
 class Address(BaseModel):
     """Address information"""
 
@@ -58,6 +65,7 @@ class Article(BaseModel):
     title: str = Field(description="Article title")
     author: Author = Field(description="Author information")
     status: Status = Field(description="Article status")
+    priority: Priority = Field(description="Article priority level")
     word_count: int = Field(description="Number of words")
     rating: float = Field(description="Quality rating (0-5)")
     tags: List[str] = Field(default_factory=list, description="Article tags")
@@ -90,6 +98,7 @@ sample_article = Article(
         ],
     ),
     status=Status.PUBLISHED,
+    priority=Priority.HIGH,
     word_count=1250,
     rating=4.2,
     tags=["python", "web", "tutorial", "beginner"],
@@ -112,6 +121,12 @@ metrics_showcase = {
     # 3. Zero score (0.0) - gets special bright red
     "status": MetricEntry(
         metric=0.0, comment="Critical status issue - metric 0.0 gets bright red"
+    ),
+    # 3.5. Enum field with custom color
+    "priority": MetricEntry(
+        metric=0.9,
+        color="indigo",
+        comment="Priority enum field - HIGH priority with custom indigo color",
     ),
     # 4. High range (0.5-1.0) - gets medium/forest green
     "word_count": MetricEntry(
@@ -219,7 +234,7 @@ showcase_form = PydanticForm(
     form_name="metrics_showcase",
     model_class=Article,
     initial_values=sample_article,
-    disabled=True,  # Read-only for demonstration
+    # disabled=True,  # Read-only for demonstration
     metrics_dict=metrics_showcase,
 )
 
@@ -292,7 +307,7 @@ def get():
                             fh.Li(
                                 "🏗️ Complex nested paths: author.addresses[0].street, author.addresses[0].tags[1]"
                             ),
-                            fh.Li("🔢 String, integer, and float metrics"),
+                            fh.Li("🔢 String, integer, float metrics, and enum fields"),
                             cls="list-disc list-inside mt-2 space-y-1",
                         ),
                         type="info",

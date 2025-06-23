@@ -93,16 +93,8 @@ class MetricsRendererMixin:
         if not metric_entry:
             return element
 
-        # Apply background color with opacity
-        color = metric_entry.get("color")
-        if color:
-            if hasattr(element, "attrs"):
-                existing_style = element.attrs.get("style", "")
-                bg_color = robust_color_to_rgba(
-                    color, 0.15
-                )  # 15% opacity for background
-                new_style = f"background-color: {bg_color}; {existing_style}"
-                element.attrs["style"] = new_style
+        # Remove wrapper-level background color - only highlight input fields
+        # This ensures consistent behavior whether color is provided or inferred
 
         # Add tooltip with comment if available
         comment = metric_entry.get("comment")
@@ -115,6 +107,7 @@ class MetricsRendererMixin:
 
         # Add metric score badge if present
         metric = metric_entry.get("metric")
+        color = metric_entry.get("color")
         if metric is not None:
             # Determine bullet colors based on LangSmith-style system when no color provided
             if color:
@@ -1525,7 +1518,12 @@ class ListFieldRenderer(BaseFieldRenderer):
                     metrics_dict=self.metrics_dict,  # Pass down the metrics dict
                 )
                 input_element = simple_renderer.render_input()
-                item_content_elements.append(fh.Div(input_element))
+                wrapper = fh.Div(input_element)
+                # Apply metrics decoration to the wrapper for primitive items
+                decorated = simple_renderer._decorate_metrics(
+                    wrapper, simple_renderer.metric_entry
+                )
+                item_content_elements.append(decorated)
 
             # --- Create action buttons with form-specific URLs ---
             # Generate HTMX endpoints using hierarchical paths
