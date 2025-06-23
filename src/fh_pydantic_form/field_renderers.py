@@ -1353,8 +1353,10 @@ class ListFieldRenderer(BaseFieldRenderer):
         # form_name = self.prefix.rstrip("_") if self.prefix else None
         form_name = self._form_name or None
 
-        # Create the label text with proper color styling
-        label_text = self.original_field_name.replace("_", " ").title()
+        # Create the label text with proper color styling and item count
+        items = [] if not isinstance(self.value, list) else self.value
+        item_count = len(items)
+        label_text = f"{self.original_field_name.replace('_', ' ').title()} ({item_count} item{'s' if item_count != 1 else ''})"
 
         # Create the styled label span
         if self.label_color:
@@ -1608,9 +1610,7 @@ class ListFieldRenderer(BaseFieldRenderer):
 
                     if model_for_display is not None:
                         # Use the model's __str__ method
-                        item_summary_text = (
-                            f"{item_type.__name__}: {str(model_for_display)}"
-                        )
+                        item_summary_text = f"{idx}: {str(model_for_display)}"
                     else:
                         # Fallback for None or unexpected types
                         item_summary_text = f"{item_type.__name__}: (Unknown format: {type(item).__name__})"
@@ -1635,7 +1635,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                     )
                     item_summary_text = f"{item_type.__name__}: (Error displaying item)"
             else:
-                item_summary_text = str(item)
+                item_summary_text = f"{idx}: {str(item)}"
 
             # --- Render item content elements ---
             item_content_elements = []
