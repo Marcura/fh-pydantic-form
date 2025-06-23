@@ -7,7 +7,9 @@ __all__ = [
     "_is_skip_json_schema_field",
     "MetricEntry",
     "MetricsDict",
+    "DecorationScope",
 ]
+
 
 import logging
 from enum import Enum
@@ -26,6 +28,14 @@ from typing import (
 from fh_pydantic_form.constants import _UNSET
 
 logger = logging.getLogger(__name__)
+
+
+class DecorationScope(str, Enum):
+    """Controls which metric decorations are applied to an element"""
+
+    BORDER = "border"
+    BULLET = "bullet"
+    BOTH = "both"
 
 
 def _is_skip_json_schema_field(annotation_or_field_info: Any) -> bool:

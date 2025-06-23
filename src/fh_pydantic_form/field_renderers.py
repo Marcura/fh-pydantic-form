@@ -5,7 +5,6 @@ from enum import Enum
 from typing import (
     Any,
     List,
-    Literal,
     Optional,
     get_args,
     get_origin,
@@ -21,6 +20,7 @@ from fh_pydantic_form.color_utils import get_metric_colors, robust_color_to_rgba
 from fh_pydantic_form.constants import _UNSET
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import (
+    DecorationScope,
     MetricEntry,
     MetricsDict,
     _get_underlying_type_if_optional,
@@ -100,7 +100,7 @@ class MetricsRendererMixin:
         element: FT,
         metric_entry: Optional[MetricEntry],
         *,
-        level: Literal["container", "leaf"] = "leaf",
+        scope: DecorationScope = DecorationScope.BOTH,
     ) -> FT:
         """
         Decorate an element with metrics visual feedback.
@@ -108,7 +108,7 @@ class MetricsRendererMixin:
         Args:
             element: The FastHTML element to decorate
             metric_entry: Optional metric entry with color, score, and comment
-            level: Reserved for future use (previously distinguished input highlighting)
+            scope: Which decorations to apply (BORDER, BULLET, or BOTH)
 
         Returns:
             Decorated element with left color bar, tooltip, and optional metric badge
@@ -122,18 +122,22 @@ class MetricsRendererMixin:
             element.attrs["uk-tooltip"] = comment
             element.attrs["title"] = comment  # Fallback standard tooltip
 
-        # Add left color bar
-        border_color = self._metric_border_color(metric_entry)
-        if border_color and hasattr(element, "attrs"):
-            existing_style = element.attrs.get("style", "")
-            element.attrs["style"] = (
-                f"border-left: 4px solid {border_color}; padding-left: 0.25rem; {existing_style}"
-            )
+        # Add left color bar if requested
+        if scope in {DecorationScope.BORDER, DecorationScope.BOTH}:
+            border_color = self._metric_border_color(metric_entry)
+            if border_color and hasattr(element, "attrs"):
+                existing_style = element.attrs.get("style", "")
+                element.attrs["style"] = (
+                    f"border-left: 4px solid {border_color}; padding-left: 0.25rem; position: relative; z-index: 0; {existing_style}"
+                )
 
-        # Add metric score badge if present
+        # Add metric score badge if requested and present
         score = metric_entry.get("metric")
         color = metric_entry.get("color")
-        if score is not None:
+        if (
+            scope in {DecorationScope.BULLET, DecorationScope.BOTH}
+            and score is not None
+        ):
             # Determine bullet colors based on LangSmith-style system when no color provided
             if color:
                 # Use provided color - convert to full opacity for badge
@@ -172,28 +176,37 @@ class MetricsRendererMixin:
                 cls="uk-text-nowrap",
             )
 
-            # Try to insert badge into first child element instead of wrapping
-            # This works better for accordion headers and labels
-            if hasattr(element, "children") and element.children:
-                # Find the first child that can accept the badge
-                first_child = element.children[0]
-                if hasattr(first_child, "children"):
-                    # Insert badge as second child (after the text)
-                    if isinstance(first_child.children, list):
-                        first_child.children.append(metric_badge)
-                    else:
-                        # Convert to list if needed
-                        first_child.children = list(first_child.children) + [
-                            metric_badge
-                        ]
-                    return element
-
-            # Fallback: wrap the element with the badge (original behavior)
-            return fh.Div(
-                element, metric_badge, cls="relative inline-flex items-center w-full"
-            )
+            # Use helper to attach badge properly
+            return self._attach_metric_badge(element, metric_badge)
 
         return element
+
+    def _attach_metric_badge(self, element: FT, badge: FT) -> FT:
+        """
+        Attach a metric badge to an element in the most appropriate way.
+
+        Args:
+            element: The element to attach the badge to
+            badge: The badge element to attach
+
+        Returns:
+            Element with badge attached
+        """
+        # Check if element is an inline-capable tag
+        tag = str(getattr(element, "tag", "")).lower()
+        inline_tags = {"span", "a", "h1", "h2", "h3", "h4", "h5", "h6", "label"}
+
+        if tag in inline_tags and hasattr(element, "children"):
+            # For inline elements, append badge directly to children
+            if isinstance(element.children, list):
+                element.children.append(badge)
+            else:
+                # Convert to list if needed
+                element.children = list(element.children) + [badge]
+            return element
+
+        # For other elements, wrap in a flex container
+        return fh.Div(element, badge, cls="relative inline-flex items-center w-full")
 
     def _highlight_input_fields(self, element: FT, metric_entry: MetricEntry) -> FT:
         """
@@ -691,9 +704,9 @@ class BooleanFieldRenderer(BaseFieldRenderer):
             cls=f"{spacing('outer_margin', self.spacing)} w-full",
         )
 
-        # Apply metrics decoration if available
+        # Apply metrics decoration if available (border only, as bullet is in the label)
         return self._decorate_metrics(
-            field_element, self.metric_entry, level="container"
+            field_element, self.metric_entry, scope=DecorationScope.BORDER
         )
 
 
@@ -999,6 +1012,11 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
             title_component.attrs["uk-tooltip"] = description
             title_component.attrs["title"] = description
 
+        # Apply metrics decoration to title (bullet only, no border)
+        title_component = self._decorate_metrics(
+            title_component, self.metric_entry, scope=DecorationScope.BULLET
+        )
+
         # 2. Render the nested input fields that will be the accordion content
         input_component = self.render_input()
 
@@ -1029,10 +1047,9 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
             cls=f"{accordion_cls} w-full".strip(),
         )
 
-        # 6. Apply metrics decoration if available
-        return self._decorate_metrics(
-            accordion_container, self.metric_entry, level="container"
-        )
+        # 6. Apply metrics decoration to the title only (bullet), not the container
+        # The parent list renderer handles the border decoration
+        return accordion_container
 
     def render_input(self) -> FT:
         """
@@ -1341,7 +1358,9 @@ class ListFieldRenderer(BaseFieldRenderer):
 
         # Apply metrics decoration if available
         return self._decorate_metrics(
-            field_element, self.metric_entry, level="container"
+            field_element,
+            self.metric_entry,
+            scope=DecorationScope.BOTH,
         )
 
     def render_input(self) -> FT:
@@ -1677,11 +1696,8 @@ class ListFieldRenderer(BaseFieldRenderer):
                 )
                 input_element = simple_renderer.render_input()
                 wrapper = fh.Div(input_element)
-                # Apply metrics decoration to the wrapper for primitive items
-                decorated = simple_renderer._decorate_metrics(
-                    wrapper, simple_renderer.metric_entry
-                )
-                item_content_elements.append(decorated)
+                # Don't apply metrics decoration here - the card border handles it
+                item_content_elements.append(wrapper)
 
             # --- Create action buttons with form-specific URLs ---
             # Generate HTMX endpoints using hierarchical paths
@@ -1782,9 +1798,9 @@ class ListFieldRenderer(BaseFieldRenderer):
                 item_summary_text, cls="text-gray-700 font-medium pl-3"
             )
 
-            # Apply metrics decoration to the title
+            # Apply metrics decoration to the title (bullet only)
             title_component = self._decorate_metrics(
-                title_component, item_metric_entry, level="container"
+                title_component, item_metric_entry, scope=DecorationScope.BULLET
             )
 
             # Prepare li attributes with optional border styling
@@ -1832,9 +1848,9 @@ class ListFieldRenderer(BaseFieldRenderer):
                 f"Error in item {idx}", cls="text-red-600 font-medium pl-3"
             )
 
-            # Apply metrics decoration even to error items
+            # Apply metrics decoration even to error items (bullet only)
             title_component = self._decorate_metrics(
-                title_component, item_metric_entry, level="container"
+                title_component, item_metric_entry, scope=DecorationScope.BULLET
             )
 
             content_component = mui.Alert(
