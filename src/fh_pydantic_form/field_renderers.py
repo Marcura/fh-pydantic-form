@@ -1411,6 +1411,7 @@ class ListFieldRenderer(BaseFieldRenderer):
         items = [] if not isinstance(self.value, list) else self.value
 
         annotation = getattr(self.field_info, "annotation", None)
+        item_type = None  # Initialize here to avoid UnboundLocalError
 
         if (
             annotation is not None

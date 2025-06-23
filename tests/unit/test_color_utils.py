@@ -5,6 +5,28 @@ Unit tests for color utility functions.
 import pytest
 
 from fh_pydantic_form.color_utils import robust_color_to_rgba
+from fh_pydantic_form.color_utils import get_metric_colors, DEFAULT_METRIC_GREY
+
+
+class TestGetMetricColors:
+    @pytest.mark.parametrize(
+        "metric,expected_bg,expected_text",
+        [
+            (0.0, "#D32F2F", "white"),
+            (0.25, "#8B0000", "#fca5a5"),
+            (0.75, "#2E7D32", "#86efac"),
+            (1.0, "#00C853", "white"),
+            ("invalid", DEFAULT_METRIC_GREY, "white"),
+            (None, DEFAULT_METRIC_GREY, "white"),
+            (-1, DEFAULT_METRIC_GREY, "white"),
+            (2.0, DEFAULT_METRIC_GREY, "white"),
+        ],
+    )
+    def test_metric_colors(self, metric, expected_bg, expected_text):
+        """Test metric-based color determination."""
+        bg, text = get_metric_colors(metric)
+        assert bg == expected_bg
+        assert text == expected_text
 
 
 class TestRobustColorToRgba:
