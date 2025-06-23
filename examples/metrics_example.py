@@ -8,7 +8,6 @@ import monsterui.all as mui
 from pydantic import BaseModel, Field
 
 from fh_pydantic_form import (
-    MetricEntry,
     PydanticForm,
     list_manipulation_js,
 )
@@ -108,151 +107,134 @@ sample_article = Article(
 )
 
 
-# Comprehensive Metrics Dictionary showcasing all capabilities with internal consistency
 metrics_showcase = {
-    # TOP-LEVEL FIELDS - Mixed quality to show variety
-    # 1. Comment only (shows as tooltip)
-    "title": MetricEntry(
-        comment="This title is clear and engaging - hovers to show tooltip"
-    ),
-    # 2. Perfect score (1.0) - gets special bright green
-    "author": MetricEntry(
-        metric=1.0,
-        comment="Excellent author information - metric 1.0 gets bright green",
-    ),
-    # 3. Zero score (0.0) - gets special bright red
-    "status": MetricEntry(
-        metric=0.0, comment="Critical status issue - metric 0.0 gets bright red"
-    ),
-    # 4. Enum field with custom color
-    "priority": MetricEntry(
-        metric=0.9,
-        color="indigo",
-        comment="Priority enum field - HIGH priority with custom indigo color",
-    ),
-    # 5. High range (0.5-1.0) - gets medium/forest green
-    "word_count": MetricEntry(
-        metric=0.85,
-        comment="Good word count - metric 0.85 in high range gets medium green",
-    ),
-    # 6. Low range (0.0-0.5) - gets dark red
-    "rating": MetricEntry(
-        metric=0.3,
-        comment="Low rating needs attention - metric 0.3 in low range gets dark red",
-    ),
-    # 7. String metric - good overall tags
-    "tags": MetricEntry(
-        metric="Good", comment="String metrics are supported - shows 'Good' as bullet"
-    ),
-    # 8. Boolean field with string metric
-    "is_featured": MetricEntry(
-        metric="excellent",
-        comment="Featured status is excellent - string metric example",
-    ),
-    # 9. Date field with perfect score and custom color
-    "publish_date": MetricEntry(
-        metric=1.0,
-        color="green",
-        comment="Perfect publication timing - 1.0 with custom green color",
-    ),
-    # 10. Categories with zero score - consistent with low quality
-    "categories": MetricEntry(
-        metric=0.0, comment="Missing critical categories - another 0.0 example"
-    ),
-    # NESTED AUTHOR FIELDS - High quality (consistent with author=1.0)
-    "author.name": MetricEntry(
-        metric=0.95,
-        comment="Author name is perfectly formatted - consistent with high-quality author",
-    ),
-    "author.email": MetricEntry(
-        metric=0.9,
-        comment="Email format is excellent - consistent with high-quality author",
-    ),
-    # SIMPLE LIST ITEMS - Mixed quality to show variety
-    "tags[0]": MetricEntry(
-        metric=1.0,
-        color="blue",
-        comment="First tag 'python' is perfect - custom blue color overrides 1.0 auto-color",
-    ),
-    "tags[1]": MetricEntry(
-        metric=0.8,
-        comment="Second tag 'web' is very good - consistent with good tags overall",
-    ),
-    "tags[2]": MetricEntry(
-        metric=0.7,
-        comment="Third tag 'tutorial' is good - consistent with good tags overall",
-    ),
-    "tags[3]": MetricEntry(
-        metric=0.75,
-        comment="Fourth tag 'beginner' is good - rounding out the good tags",
-    ),
-    # CATEGORIES - Consistently low (consistent with categories=0.0)
-    "categories[0]": MetricEntry(
-        metric=0.0,
-        color="purple",
-        comment="First category 'programming' is problematic - custom purple overrides 0.0 auto-color",
-    ),
-    "categories[1]": MetricEntry(
-        metric=0.1,
-        comment="Second category 'web-development' has major issues - consistent with low categories",
-    ),
-    "categories[2]": MetricEntry(
-        metric=0.05,
-        comment="Third category 'python' barely acceptable - consistent with low categories",
-    ),
-    # FIRST ADDRESS (HIGH QUALITY) - All subfields consistently high
-    "author.addresses[0]": MetricEntry(
-        metric=0.95, comment="First address data is excellent - high-quality address"
-    ),
-    "author.addresses[0].street": MetricEntry(
-        metric=1.0,
-        comment="Perfect street address '123 Main St' - excellent formatting",
-    ),
-    "author.addresses[0].city": MetricEntry(
-        metric=0.9,
-        comment="City 'San Francisco' is well-formatted - consistent with high-quality address",
-    ),
-    "author.addresses[0].country": MetricEntry(
-        metric=0.88,
-        color="orange",
-        comment="Country 'USA' is properly formatted - custom orange with high quality",
-    ),
-    # First address tags - consistently high quality
-    "author.addresses[0].tags[0]": MetricEntry(
-        metric=0.85,
-        comment="First address tag 'home' is well categorized - consistent with high-quality address",
-    ),
-    "author.addresses[0].tags[1]": MetricEntry(
-        metric=0.9,
-        comment="Second address tag 'primary' is excellent - consistent with high-quality address",
-    ),
-    # SECOND ADDRESS (LOW QUALITY) - All subfields consistently low
-    "author.addresses[1]": MetricEntry(
-        metric=0.2,
-        comment="Second address data has significant issues - low-quality address",
-    ),
-    "author.addresses[1].street": MetricEntry(
-        metric=0.15,
-        comment="Street address '456 Oak Ave' has formatting issues - consistent with low-quality address",
-    ),
-    "author.addresses[1].city": MetricEntry(
-        metric=0.1,
-        color="teal",
-        comment="City 'Portland' has verification problems - custom teal with low quality",
-    ),
-    "author.addresses[1].country": MetricEntry(
-        metric=0.25,
-        comment="Country format needs improvement - consistent with low-quality address",
-    ),
-    # Second address tags - consistently low quality
-    "author.addresses[1].tags[0]": MetricEntry(
-        metric=0.0,
-        comment="First address tag 'work' has serious issues - consistent with low-quality address",
-    ),
-    "author.addresses[1].tags[1]": MetricEntry(
-        metric=0.3,
-        comment="Second address tag 'secondary' needs major improvement - consistent with low-quality address",
-    ),
+    "title": {"comment": "This title is clear and engaging - hovers to show tooltip"},
+    "author": {
+        "metric": 1.0,
+        "comment": "Excellent author information - metric 1.0 gets bright green",
+    },
+    "status": {
+        "metric": 0.0,
+        "comment": "Critical status issue - metric 0.0 gets bright red",
+    },
+    "priority": {
+        "metric": 0.9,
+        "color": "indigo",
+        "comment": "Priority enum field - HIGH priority with custom indigo color",
+    },
+    "word_count": {
+        "metric": 0.85,
+        "comment": "Good word count - metric 0.85 in high range gets medium green",
+    },
+    "rating": {
+        "metric": 0.3,
+        "comment": "Low rating needs attention - metric 0.3 in low range gets dark red",
+    },
+    "tags": {
+        "metric": "Good",
+        "comment": "String metrics are supported - shows 'Good' as bullet",
+    },
+    "is_featured": {
+        "metric": "excellent",
+        "comment": "Featured status is excellent - string metric example",
+    },
+    "publish_date": {
+        "metric": 1.0,
+        "color": "green",
+        "comment": "Perfect publication timing - 1.0 with custom green color",
+    },
+    "categories": {
+        "metric": 0.0,
+        "comment": "Missing critical categories - another 0.0 example",
+    },
+    "author.name": {
+        "metric": 0.95,
+        "comment": "Author name is perfectly formatted - consistent with high-quality author",
+    },
+    "author.email": {
+        "metric": 0.9,
+        "comment": "Email format is excellent - consistent with high-quality author",
+    },
+    "tags[0]": {
+        "metric": 1.0,
+        "color": "blue",
+        "comment": "First tag 'python' is perfect - custom blue color overrides 1.0 auto-color",
+    },
+    "tags[1]": {
+        "metric": 0.8,
+        "comment": "Second tag 'web' is very good - consistent with good tags overall",
+    },
+    "tags[2]": {
+        "metric": 0.7,
+        "comment": "Third tag 'tutorial' is good - consistent with good tags overall",
+    },
+    "tags[3]": {
+        "metric": 0.75,
+        "comment": "Fourth tag 'beginner' is good - rounding out the good tags",
+    },
+    "categories[0]": {
+        "metric": 0.0,
+        "color": "purple",
+        "comment": "First category 'programming' is problematic - custom purple overrides 0.0 auto-color",
+    },
+    "categories[1]": {
+        "metric": 0.1,
+        "comment": "Second category 'web-development' has major issues - consistent with low categories",
+    },
+    "categories[2]": {
+        "metric": 0.05,
+        "comment": "Third category 'python' barely acceptable - consistent with low categories",
+    },
+    "author.addresses[0]": {
+        "metric": 0.95,
+        "comment": "First address data is excellent - high-quality address",
+    },
+    "author.addresses[0].street": {
+        "metric": 1.0,
+        "comment": "Perfect street address '123 Main St' - excellent formatting",
+    },
+    "author.addresses[0].city": {
+        "metric": 0.9,
+        "comment": "City 'San Francisco' is well-formatted - consistent with high-quality address",
+    },
+    "author.addresses[0].country": {
+        "metric": 0.88,
+        "color": "orange",
+        "comment": "Country 'USA' is properly formatted - custom orange with high quality",
+    },
+    "author.addresses[0].tags[0]": {
+        "metric": 0.85,
+        "comment": "First address tag 'home' is well categorized - consistent with high-quality address",
+    },
+    "author.addresses[0].tags[1]": {
+        "metric": 0.9,
+        "comment": "Second address tag 'primary' is excellent - consistent with high-quality address",
+    },
+    "author.addresses[1]": {
+        "metric": 0.2,
+        "comment": "Second address data has significant issues - low-quality address",
+    },
+    "author.addresses[1].street": {
+        "metric": 0.15,
+        "comment": "Street address '456 Oak Ave' has formatting issues - consistent with low-quality address",
+    },
+    "author.addresses[1].city": {
+        "metric": 0.1,
+        "color": "teal",
+        "comment": "City 'Portland' has verification problems - custom teal with low quality",
+    },
+    "author.addresses[1].country": {
+        "metric": 0.25,
+        "comment": "Country format needs improvement - consistent with low-quality address",
+    },
+    "author.addresses[1].tags[0]": {
+        "metric": 0.0,
+        "comment": "First address tag 'work' has serious issues - consistent with low-quality address",
+    },
+    "author.addresses[1].tags[1]": {
+        "metric": 0.3,
+        "comment": "Second address tag 'secondary' needs major improvement - consistent with low-quality address",
+    },
 }
 
 # Create two showcase forms with different spacing
@@ -285,18 +267,20 @@ def format_metrics_dict() -> str:
         # Build the dictionary representation with only present fields
         dict_parts = []
 
-        if "metric" in entry:
-            metric_val = entry["metric"]
+        if "metric" in entry:  # type: ignore
+            metric_val = entry["metric"]  # type: ignore
             if isinstance(metric_val, str):
                 dict_parts.append(f'"metric": "{metric_val}"')
             else:
                 dict_parts.append(f'"metric": {metric_val}')
 
-        if "color" in entry:
-            dict_parts.append(f'"color": "{entry["color"]}"')
+        if "color" in entry:  # type: ignore
+            dict_parts.append(f'"color": "{entry["color"]}"')  # type: ignore
 
-        if "comment" in entry:
-            comment = entry["comment"].replace('"', '\\"')  # Escape quotes
+        if "comment" in entry:  # type: ignore
+            comment = entry["comment"].replace(  # type: ignore
+                '"', '\\"'
+            )  # Escape quotes
             dict_parts.append(f'"comment": "{comment}"')
 
         # Format the entry

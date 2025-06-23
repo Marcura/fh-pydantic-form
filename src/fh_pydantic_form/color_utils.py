@@ -5,8 +5,12 @@ This module provides robust color parsing and conversion utilities that support
 various color formats including hex, RGB, HSL, named colors, and Tailwind CSS classes.
 """
 
+__all__ = ["robust_color_to_rgba", "get_metric_colors", "DEFAULT_METRIC_GREY"]
+
 import re
 from typing import Tuple
+
+DEFAULT_METRIC_GREY = "rgba(200, 200, 200, 0.5)"
 
 
 def robust_color_to_rgba(color: str, opacity: float = 1.0) -> str:
@@ -568,14 +572,14 @@ def get_metric_colors(metric_value: float | int | str) -> Tuple[str, str]:
     """
     if not isinstance(metric_value, (float, int, str)):
         # Fallback for non-numeric values
-        return "#6b7280", "white"  # gray background, white text
+        return DEFAULT_METRIC_GREY, "white"  # unified fallback
 
     # Try to convert to float if it's a string
     try:
         value = float(metric_value)
     except (ValueError, TypeError):
         # Fallback for non-convertible strings
-        return "#6b7280", "white"  # gray background, white text
+        return DEFAULT_METRIC_GREY, "white"  # unified fallback
 
     if value == 0.0:
         # Bright red bullet/white text for failure values
@@ -591,4 +595,4 @@ def get_metric_colors(metric_value: float | int | str) -> Tuple[str, str]:
         return "#00C853", "white"  # Vivid Green
     else:
         # Fallback for edge cases (negative values, > 1.0, etc.)
-        return "#6b7280", "white"  # gray background, white text
+        return DEFAULT_METRIC_GREY, "white"  # unified fallback

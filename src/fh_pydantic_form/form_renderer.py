@@ -32,7 +32,6 @@ from fh_pydantic_form.form_parser import (
 from fh_pydantic_form.list_path import walk_path
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import (
-    MetricsDict,
     _is_skip_json_schema_field,
     get_default,
 )
@@ -267,7 +266,7 @@ class PydanticForm(Generic[ModelType]):
         label_colors: Optional[Dict[str, str]] = None,
         exclude_fields: Optional[List[str]] = None,
         spacing: SpacingValue = SpacingTheme.NORMAL,
-        metrics_dict: Optional[MetricsDict] = None,
+        metrics_dict: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize the form renderer
@@ -542,6 +541,7 @@ class PydanticForm(Generic[ModelType]):
             label_colors=self.label_colors,
             exclude_fields=self.exclude_fields,
             spacing=self.spacing,
+            metrics_dict=self.metrics_dict,
         )
 
         reset_inputs_component = temp_renderer.render_inputs()
