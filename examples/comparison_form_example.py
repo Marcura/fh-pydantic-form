@@ -91,6 +91,13 @@ class ExtractedProduct(BaseModel):
         default_factory=datetime.datetime.now, description="Extraction timestamp"
     )
 
+    # Additional fields to showcase string metrics
+    validation_status: str = Field(
+        "PENDING", description="Validation status of extraction"
+    )
+    data_quality: str = Field("UNKNOWN", description="Overall data quality assessment")
+    extraction_method: str = Field("AUTO", description="Method used for extraction")
+
 
 # ============================================================================
 # Sample Data: Annotated Truth vs Generated Output
@@ -128,6 +135,9 @@ annotated_truth = ExtractedProduct(
     target_audience="Athletes and fitness enthusiasts aged 18-45",
     extraction_confidence=1.0,
     source_url="https://example.com/products/fittech-tracker-pro-max",
+    validation_status="VERIFIED",
+    data_quality="HIGH",
+    extraction_method="MANUAL",
 )
 
 # LLM-generated extraction (with typical errors)
@@ -162,93 +172,112 @@ generated_output = ExtractedProduct(
     target_audience=None,  # Failed to extract
     extraction_confidence=0.73,
     source_url="https://example.com/products/fittech-tracker-pro-max",
+    validation_status="NEEDS_REVIEW",
+    data_quality="MEDIUM",
+    extraction_method="AUTO",
 )
 
 
 # ============================================================================
-# Evaluation Metrics for Error Analysis
+# Production-Ready Evaluation Metrics for Product Extraction Quality Assessment
 # ============================================================================
 
 eval_metrics = {
-    # Product info metrics
+    # Product info metrics - realistic evaluation scores
     "product": {
         "metric": 0.75,
-        "comment": "FIELD_AGGREGATE: 4/5 subfields correct, 1 categorical error detected",
+        "comment": "Overall accuracy: 4/5 fields correct. Category classification error detected.",
     },
     "product.name": {
         "metric": 0.90,
-        "comment": "STRING_SIMILARITY: Minor spacing difference detected: 'Pro Max' vs 'ProMax'",
+        "comment": "Name extracted with minor formatting issue: missing space in compound word",
     },
     "product.brand": {
         "metric": 1.0,
-        "comment": "EXACT_MATCH: Brand name extracted correctly",
+        "comment": "Brand name perfectly extracted - exact match with source",
     },
     "product.category": {
         "metric": 0.0,
-        "comment": "CATEGORY_ERROR: Predicted 'Electronics', expected 'Sports & Outdoors'",
+        "comment": "Critical error: Miscategorized as Electronics instead of Sports & Outdoors",
     },
     "product.price": {
         "metric": 0.95,
-        "comment": "NUMERIC_PRECISION: Price extracted but precision loss: 299.0 vs 299.99",
+        "comment": "Price extracted correctly but lost decimal precision (299.00 vs 299.99)",
     },
     "product.in_stock": {
         "metric": 1.0,
-        "comment": "BOOLEAN_MATCH: Stock status correctly identified as True",
+        "comment": "Stock status correctly identified as available",
     },
-    # Features metrics
+    # Features extraction quality
     "key_features": {
         "metric": 0.60,
-        "comment": "LIST_COVERAGE: 3/5 expected features extracted, 2 missing items detected",
+        "comment": "Feature extraction incomplete: 3/5 key features captured, 2 critical features missed",
     },
     "key_features[0]": {
         "metric": 1.0,
-        "comment": "FEATURE_MATCH: Waterproof specification correctly extracted",
+        "comment": "Waterproof specification perfectly extracted with correct technical details",
     },
     "key_features[1]": {
         "metric": 0.80,
-        "comment": "NUMERIC_APPROXIMATION: Battery life rounded down: 10.0 vs 10.5 hours",
+        "comment": "Battery life captured but rounded down (10.0h vs 10.5h) - minor precision loss",
     },
     "key_features.missing_items": {
         "metric": 0.0,
-        "comment": "MISSING_FEATURES: 'Built-in GPS tracking', 'Sleep quality analysis' not extracted",
+        "comment": "Critical features not extracted: GPS tracking, sleep analysis - major content gaps",
     },
-    # Specifications metrics
+    # Technical specifications quality
     "specifications": {
         "metric": 0.70,
-        "comment": "FIELD_AGGREGATE: 4/5 subfields extracted correctly, 1 null value detected",
+        "comment": "Specification extraction: 4/5 fields captured successfully",
     },
     "specifications.weight": {
         "metric": 0.0,
-        "comment": "NULL_VALUE: Weight field not extracted from source",
+        "comment": "Weight specification not found in source content - extraction failed",
     },
     "specifications.dimensions": {
         "metric": 0.85,
-        "comment": "FORMAT_NORMALIZATION: Separator difference: 'x' vs '×' symbols",
+        "comment": "Dimensions extracted but formatting normalized (× symbol → x)",
     },
     "specifications.material": {
         "metric": 1.0,
-        "comment": "EXACT_MATCH: Material description correctly extracted",
+        "comment": "Material description captured perfectly - complete and accurate",
     },
     "specifications.color": {
         "metric": 1.0,
-        "comment": "EXACT_MATCH: Color options correctly extracted",
+        "comment": "Color options extracted completely and accurately",
     },
     "specifications.warranty": {
         "metric": 0.67,
-        "comment": "PARTIAL_MATCH: Duration correct but qualifier missing: '1 year' vs '1 year limited'",
+        "comment": "Warranty period captured but missing 'limited' qualifier - partial extraction",
     },
-    # Other fields
+    # Content quality assessment
     "description": {
         "metric": 0.78,
-        "comment": "SEMANTIC_SIMILARITY: Content preserved but marketing language simplified",
+        "comment": "Product description adequately captured but simplified - marketing tone lost",
     },
     "target_audience": {
         "metric": 0.0,
-        "comment": "NULL_VALUE: Target audience field not extracted from source",
+        "comment": "Target audience not identified - field extraction failed",
     },
     "extraction_confidence": {
         "metric": 1.0,
-        "comment": "CONFIDENCE_SCORE: Self-reported confidence matches actual performance: 0.73",
+        "comment": "Model confidence score (0.73) accurately reflects actual performance",
+    },
+    # Quality control metrics - string-based assessments where appropriate
+    "validation_status": {
+        "metric": "NEEDS_REVIEW",  # Status requiring human attention
+        "color": "#F59E0B",  # Amber for review-required status (custom color makes sense here)
+        "comment": "Extraction requires human review due to category classification error",
+    },
+    "data_quality": {
+        "metric": "ACCEPTABLE",  # Quality assessment for production readiness
+        "color": "#10B981",  # Green for acceptable quality (semantic meaning beyond good/bad)
+        "comment": "Data quality sufficient for publication with minor corrections needed",
+    },
+    "extraction_method": {
+        "metric": "AUTOMATED",  # Method type for audit trail
+        "color": "#6B7280",  # Gray for neutral system info (not a quality judgment)
+        "comment": "Fully automated extraction - consider manual verification for critical errors",
     },
 }
 
@@ -375,7 +404,7 @@ def get():
                         cls="text-2xl font-bold text-blue-600",
                     ),
                     fh.P(
-                        "Compare LLM-generated output with annotated truth. Update annotations when the generated output is actually correct.",
+                        "Production-ready ML evaluation interface comparing LLM output with ground truth. Uses automatic red/green color coding based on 0.0-1.0 scores with custom colors for specific status indicators.",
                         cls="text-gray-600 mt-2",
                     ),
                 ),
