@@ -148,7 +148,9 @@ metrics_showcase = {
     ),
     # 8. Another perfect score (1.0)
     "publish_date": MetricEntry(
-        metric=1.0, comment="Perfect publication timing - another 1.0 example"
+        metric="correct",
+        color="green",
+        comment="Perfect publication timing - another 1.0 example",
     ),
     # 9. Another zero score (0.0)
     "categories": MetricEntry(
