@@ -422,8 +422,8 @@ class ComparisonForm(Generic[ModelType]):
 
             async def handler(req):
                 """Refresh one side of the comparison form"""
-                # Refresh the form state
-                _ = await form.handle_refresh_request(req)
+                # Refresh the form state and capture any warnings
+                refresh_result = await form.handle_refresh_request(req)
 
                 # Render the entire column with proper ordering
                 start_order = 0 if side == "left" else 1
@@ -433,7 +433,15 @@ class ComparisonForm(Generic[ModelType]):
                     start_order=start_order,
                     wrapper_id=f"{form.name}-inputs-wrapper",
                 )
-                return wrapper
+
+                # If refresh returned a warning, include it in the response
+                if isinstance(refresh_result, tuple) and len(refresh_result) == 2:
+                    alert, _ = refresh_result
+                    # Return both the alert and the wrapper
+                    return fh.Div(alert, wrapper)
+                else:
+                    # No warning, just return the wrapper
+                    return wrapper
 
             return handler
 

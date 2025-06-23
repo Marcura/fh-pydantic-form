@@ -13,6 +13,37 @@ from starlette.testclient import TestClient
 from fh_pydantic_form import PydanticForm, list_manipulation_js
 
 
+# --- E2E ComparisonForm fixture ---
+@pytest.fixture(scope="module")
+def comparison_app_client():
+    """
+    Returns (client, comp) where client is a TestClient running a
+    minimal FastHTML app with a ComparisonForm already registered.
+    """
+    from fh_pydantic_form.comparison_form import ComparisonForm
+
+    class RenderTestModel(BaseModel):
+        title: str = "Default Title"
+        count: int = 10
+        tags: List[str] = Field(default_factory=list)
+        notes: Optional[str] = None
+
+    left = PydanticForm("left_form", RenderTestModel, initial_values=RenderTestModel())
+    right = PydanticForm(
+        "right_form", RenderTestModel, initial_values=RenderTestModel()
+    )
+    comp = ComparisonForm("e2e_test", left, right)
+
+    app, rt = fh.fast_app(hdrs=[mui.Theme.blue.headers()], pico=False, live=False)
+    comp.register_routes(app)  # comparison + underlying forms
+
+    @rt("/")  # landing page so TestClient can fetch HTML if wanted
+    def _root():
+        return comp.form_wrapper(comp.render_inputs())
+
+    return TestClient(app), comp
+
+
 # Define test Enum classes
 class OrderStatus(Enum):
     NEW = "NEW"
