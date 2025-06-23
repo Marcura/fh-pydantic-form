@@ -52,9 +52,24 @@ def _is_form_control(node: Any) -> bool:
     if tag in ("input", "select", "textarea"):
         return True
 
-    # Check for MonsterUI wrapper classes
-    if hasattr(node, "attrs"):
+    # For MonsterUI components, highlight the outer div container instead of inner elements
+    # This provides better visual feedback since MonsterUI hides the actual select elements
+    if hasattr(node, "attrs") and hasattr(node, "children"):
         classes = str(node.attrs.get("cls", "") or node.attrs.get("class", ""))
+
+        # Check if this div contains a MonsterUI component
+        if tag == "div" and node.children:
+            for child in node.children:
+                child_tag = str(getattr(child, "tag", "")).lower()
+                if child_tag.startswith("uk-") and any(
+                    control in child_tag for control in ["select", "input", "checkbox"]
+                ):
+                    return True
+
+        # Also check for direct MonsterUI wrapper classes
+        if tag == "div" and "uk-select" in classes:
+            return True
+
         # MonsterUI typically uses uk- prefixed classes
         if any(
             c
@@ -106,9 +121,9 @@ class MetricsRendererMixin:
         element = self._highlight_input_fields(element, metric_entry)
 
         # Add metric score badge if present
-        metric = metric_entry.get("metric")
+        score = metric_entry.get("metric")
         color = metric_entry.get("color")
-        if metric is not None:
+        if score is not None:
             # Determine bullet colors based on LangSmith-style system when no color provided
             if color:
                 # Use provided color - convert to full opacity for badge
@@ -125,11 +140,11 @@ class MetricsRendererMixin:
                 text_color = "white"
             else:
                 # Use metric-based color system
-                badge_bg, text_color = get_metric_colors(metric)
+                badge_bg, text_color = get_metric_colors(score)
 
             # Create custom styled span that looks like a bullet/pill
             metric_badge = fh.Span(
-                str(metric),
+                str(score),
                 style=f"""
                     background-color: {badge_bg};
                     color: {text_color};
@@ -171,24 +186,24 @@ class MetricsRendererMixin:
 
         # Determine the color to use for highlighting
         color = metric_entry.get("color")
-        metric = metric_entry.get("metric")
+        score = metric_entry.get("metric")
 
         if color:
             # Use the provided color
             highlight_color = color
-        elif metric is not None:
+        elif score is not None:
             # Use metric-based color system (background color from the helper)
-            highlight_color, _ = get_metric_colors(metric)
+            highlight_color, _ = get_metric_colors(score)
         else:
             # No color or metric available
             return element
 
         # Create the highlight CSS with appropriate opacity for both border and background
-        border_rgba = robust_color_to_rgba(highlight_color, 0.4)
+        # Use !important to ensure our styles override MonsterUI defaults
+        # Focus on border highlighting since background might conflict with MonsterUI styling
+        border_rgba = robust_color_to_rgba(highlight_color, 0.8)
         background_rgba = robust_color_to_rgba(highlight_color, 0.1)
-        highlight_css = (
-            f"box-shadow: 0 0 0 2px {border_rgba}; background-color: {background_rgba};"
-        )
+        highlight_css = f"border: 2px solid {border_rgba} !important; border-radius: 4px !important; box-shadow: 0 0 0 1px {border_rgba} !important; background-color: {background_rgba} !important;"
 
         # Track how many elements we highlight
         highlight_count = 0
