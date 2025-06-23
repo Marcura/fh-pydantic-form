@@ -108,136 +108,173 @@ sample_article = Article(
 )
 
 
-# Comprehensive Metrics Dictionary showcasing all capabilities
+# Comprehensive Metrics Dictionary showcasing all capabilities with internal consistency
 metrics_showcase = {
+    # TOP-LEVEL FIELDS - Mixed quality to show variety
     # 1. Comment only (shows as tooltip)
     "title": MetricEntry(
         comment="This title is clear and engaging - hovers to show tooltip"
     ),
     # 2. Perfect score (1.0) - gets special bright green
     "author": MetricEntry(
-        metric=1.0, comment="Perfect author information - metric 1.0 gets bright green"
+        metric=1.0,
+        comment="Excellent author information - metric 1.0 gets bright green",
     ),
     # 3. Zero score (0.0) - gets special bright red
     "status": MetricEntry(
         metric=0.0, comment="Critical status issue - metric 0.0 gets bright red"
     ),
-    # 3.5. Enum field with custom color
+    # 4. Enum field with custom color
     "priority": MetricEntry(
         metric=0.9,
         color="indigo",
         comment="Priority enum field - HIGH priority with custom indigo color",
     ),
-    # 4. High range (0.5-1.0) - gets medium/forest green
+    # 5. High range (0.5-1.0) - gets medium/forest green
     "word_count": MetricEntry(
         metric=0.85,
         comment="Good word count - metric 0.85 in high range gets medium green",
     ),
-    # 5. Low range (0.0-0.5) - gets dark red
+    # 6. Low range (0.0-0.5) - gets dark red
     "rating": MetricEntry(
         metric=0.3,
         comment="Low rating needs attention - metric 0.3 in low range gets dark red",
     ),
-    # 6. String metric
+    # 7. String metric - good overall tags
     "tags": MetricEntry(
         metric="Good", comment="String metrics are supported - shows 'Good' as bullet"
     ),
-    # 7. Integer metric
+    # 8. Boolean field with string metric
     "is_featured": MetricEntry(
-        metric=5, comment="Integer metrics work too - shows '5' as bullet"
+        metric="excellent",
+        comment="Featured status is excellent - string metric example",
     ),
-    # 8. Another perfect score (1.0)
+    # 9. Date field with perfect score and custom color
     "publish_date": MetricEntry(
-        metric="correct",
+        metric=1.0,
         color="green",
-        comment="Perfect publication timing - another 1.0 example",
+        comment="Perfect publication timing - 1.0 with custom green color",
     ),
-    # 9. Another zero score (0.0)
+    # 10. Categories with zero score - consistent with low quality
     "categories": MetricEntry(
         metric=0.0, comment="Missing critical categories - another 0.0 example"
     ),
-    # NESTED OBJECT FIELDS
-    # 10. Nested field: author.name
+    # NESTED AUTHOR FIELDS - High quality (consistent with author=1.0)
     "author.name": MetricEntry(
-        metric=0.9, comment="Author name is well formatted - nested field example"
+        metric=0.95,
+        comment="Author name is perfectly formatted - consistent with high-quality author",
     ),
-    # # 11. Nested field: author.email
     "author.email": MetricEntry(
-        metric=0.6, comment="Email format is acceptable but could be improved"
+        metric=0.9,
+        comment="Email format is excellent - consistent with high-quality author",
     ),
-    # SIMPLE LIST ITEMS
-    # 12. First tag
+    # SIMPLE LIST ITEMS - Mixed quality to show variety
     "tags[0]": MetricEntry(
         metric=1.0,
         color="blue",
         comment="First tag 'python' is perfect - custom blue color overrides 1.0 auto-color",
     ),
-    # 13. Second tag
     "tags[1]": MetricEntry(
-        metric=0.4, comment="Second tag needs improvement - low range metric"
+        metric=0.8,
+        comment="Second tag 'web' is very good - consistent with good tags overall",
     ),
-    # 14. Third tag
-    "tags[2]": MetricEntry(metric=0.7, comment="Third tag is good - high range metric"),
-    # 15. Categories list items
+    "tags[2]": MetricEntry(
+        metric=0.7,
+        comment="Third tag 'tutorial' is good - consistent with good tags overall",
+    ),
+    "tags[3]": MetricEntry(
+        metric=0.75,
+        comment="Fourth tag 'beginner' is good - rounding out the good tags",
+    ),
+    # CATEGORIES - Consistently low (consistent with categories=0.0)
     "categories[0]": MetricEntry(
         metric=0.0,
         color="purple",
-        comment="First category problematic - custom purple overrides 0.0 auto-color",
+        comment="First category 'programming' is problematic - custom purple overrides 0.0 auto-color",
     ),
-    "categories[1]": MetricEntry(metric=0.8, comment="Second category is good"),
-    # NESTED LIST ITEMS (Complex paths)
-    # 16. First address overall
+    "categories[1]": MetricEntry(
+        metric=0.1,
+        comment="Second category 'web-development' has major issues - consistent with low categories",
+    ),
+    "categories[2]": MetricEntry(
+        metric=0.05,
+        comment="Third category 'python' barely acceptable - consistent with low categories",
+    ),
+    # FIRST ADDRESS (HIGH QUALITY) - All subfields consistently high
     "author.addresses[0]": MetricEntry(
-        metric=0.95, comment="First address data is excellent"
+        metric=0.95, comment="First address data is excellent - high-quality address"
     ),
-    # 17. First address street
     "author.addresses[0].street": MetricEntry(
-        metric=1.0, comment="Perfect street address format - nested list item field"
+        metric=1.0,
+        comment="Perfect street address '123 Main St' - excellent formatting",
     ),
-    # 18. First address city
     "author.addresses[0].city": MetricEntry(
-        metric=0.2,
-        comment="City information needs verification - low score in nested structure",
+        metric=0.9,
+        comment="City 'San Francisco' is well-formatted - consistent with high-quality address",
     ),
-    # 19. Second address street
-    "author.addresses[1].street": MetricEntry(
-        metric=0.6, comment="Second address street format is adequate"
-    ),
-    # 20. Nested list within nested object: first address tags
-    "author.addresses[0].tags[0]": MetricEntry(
-        metric=0.0, comment="First address tag has issues - deeply nested path example"
-    ),
-    # 21. Another deeply nested example
-    # 22. Second address tags
-    "author.addresses[1].tags[0]": MetricEntry(
-        metric=0.75, comment="Work tag is well categorized"
-    ),
-    # Custom color examples with different ranges
-    # 23. High range with custom color
     "author.addresses[0].country": MetricEntry(
         metric=0.88,
         color="orange",
-        comment="Custom orange color overrides high-range auto-color",
+        comment="Country 'USA' is properly formatted - custom orange with high quality",
     ),
-    # 24. Low range with custom color
-    "author.addresses[1].city": MetricEntry(
+    # First address tags - consistently high quality
+    "author.addresses[0].tags[0]": MetricEntry(
+        metric=0.85,
+        comment="First address tag 'home' is well categorized - consistent with high-quality address",
+    ),
+    "author.addresses[0].tags[1]": MetricEntry(
+        metric=0.9,
+        comment="Second address tag 'primary' is excellent - consistent with high-quality address",
+    ),
+    # SECOND ADDRESS (LOW QUALITY) - All subfields consistently low
+    "author.addresses[1]": MetricEntry(
+        metric=0.2,
+        comment="Second address data has significant issues - low-quality address",
+    ),
+    "author.addresses[1].street": MetricEntry(
         metric=0.15,
+        comment="Street address '456 Oak Ave' has formatting issues - consistent with low-quality address",
+    ),
+    "author.addresses[1].city": MetricEntry(
+        metric=0.1,
         color="teal",
-        comment="Custom teal color overrides low-range auto-color",
+        comment="City 'Portland' has verification problems - custom teal with low quality",
+    ),
+    "author.addresses[1].country": MetricEntry(
+        metric=0.25,
+        comment="Country format needs improvement - consistent with low-quality address",
+    ),
+    # Second address tags - consistently low quality
+    "author.addresses[1].tags[0]": MetricEntry(
+        metric=0.0,
+        comment="First address tag 'work' has serious issues - consistent with low-quality address",
+    ),
+    "author.addresses[1].tags[1]": MetricEntry(
+        metric=0.3,
+        comment="Second address tag 'secondary' needs major improvement - consistent with low-quality address",
     ),
 }
 
-# Create the showcase form
-showcase_form = PydanticForm(
-    form_name="metrics_showcase",
+# Create two showcase forms with different spacing
+showcase_form_normal = PydanticForm(
+    form_name="metrics_showcase_normal",
     model_class=Article,
     initial_values=sample_article,
-    # disabled=True,  # Read-only for demonstration
     metrics_dict=metrics_showcase,
+    spacing="normal",
 )
 
-# Register routes
-showcase_form.register_routes(app)
+showcase_form_compact = PydanticForm(
+    form_name="metrics_showcase_compact",
+    model_class=Article,
+    initial_values=sample_article,
+    metrics_dict=metrics_showcase,
+    spacing="compact",
+)
+
+# Register routes for both forms
+showcase_form_normal.register_routes(app)
+showcase_form_compact.register_routes(app)
 
 
 def format_metrics_dict() -> str:
@@ -313,17 +350,72 @@ def get():
                     ),
                 ),
             ),
-            # Main showcase form
+            # Side-by-side form comparison
             mui.Card(
                 mui.CardHeader(
-                    fh.H2("🎯 Live Demo", cls="text-xl font-bold"),
+                    fh.H2("🎯 Spacing Theme Comparison", cls="text-xl font-bold"),
                     fh.P(
-                        "Hover over fields to see tooltips. Notice the colored bullets and field highlighting on nested fields.",
+                        "Compare Normal vs Compact spacing themes side by side. Hover over fields to see tooltips.",
                         cls="text-gray-600 mt-1",
                     ),
                 ),
                 mui.CardBody(
-                    mui.Form(showcase_form.render_inputs()),
+                    # Two-column layout for forms
+                    fh.Div(
+                        # Normal spacing form (left column)
+                        fh.Div(
+                            fh.H3("📏 Normal Spacing", cls="text-blue-600 mb-3"),
+                            fh.P(
+                                "Standard spacing with comfortable margins",
+                                cls="text-sm text-gray-600 mb-4",
+                            ),
+                            mui.Form(
+                                showcase_form_normal.render_inputs(),
+                                fh.Div(
+                                    mui.Button(
+                                        "🔍 Submit Normal",
+                                        cls=mui.ButtonT.primary,
+                                    ),
+                                    showcase_form_normal.refresh_button("🔄"),
+                                    showcase_form_normal.reset_button("↩️"),
+                                    cls="mt-4 flex items-center gap-2 flex-wrap",
+                                ),
+                                hx_post="/submit_normal",
+                                hx_target="#result-normal",
+                                hx_swap="innerHTML",
+                                id=f"{showcase_form_normal.name}-form",
+                            ),
+                            fh.Div(id="result-normal", cls="mt-4"),
+                            cls="w-full",
+                        ),
+                        # Compact spacing form (right column)
+                        fh.Div(
+                            fh.H3("📐 Compact Spacing", cls="text-green-600 mb-3"),
+                            fh.P(
+                                "Minimal spacing for dense layouts",
+                                cls="text-sm text-gray-600 mb-4",
+                            ),
+                            mui.Form(
+                                showcase_form_compact.render_inputs(),
+                                fh.Div(
+                                    mui.Button(
+                                        "🔍 Submit Compact",
+                                        cls=mui.ButtonT.primary,
+                                    ),
+                                    showcase_form_compact.refresh_button("🔄"),
+                                    showcase_form_compact.reset_button("↩️"),
+                                    cls="mt-4 flex items-center gap-2 flex-wrap",
+                                ),
+                                hx_post="/submit_compact",
+                                hx_target="#result-compact",
+                                hx_swap="innerHTML",
+                                id=f"{showcase_form_compact.name}-form",
+                            ),
+                            fh.Div(id="result-compact", cls="mt-4"),
+                            cls="w-full",
+                        ),
+                        cls="grid grid-cols-1 lg:grid-cols-2 gap-6",
+                    ),
                 ),
                 cls="mb-6",
             ),
@@ -348,6 +440,56 @@ def get():
         ),
         cls="min-h-screen bg-gray-50 py-8",
     )
+
+
+@rt("/submit_normal")
+async def post_normal_form(req):
+    try:
+        validated = await showcase_form_normal.model_validate_request(req)
+        return mui.Card(
+            mui.CardHeader(
+                fh.H4("✅ Normal Form - Validation Successful", cls="text-green-600")
+            ),
+            mui.CardBody(
+                mui.H5("Validated Model:"),
+                fh.Pre(
+                    validated.model_dump_json(indent=2),
+                    cls="bg-gray-100 p-3 rounded text-xs overflow-auto max-h-64",
+                ),
+            ),
+        )
+    except Exception as e:
+        return mui.Card(
+            mui.CardHeader(
+                fh.H4("❌ Normal Form - Validation Error", cls="text-red-500")
+            ),
+            mui.CardBody(fh.Pre(str(e), cls="bg-red-50 p-2 rounded text-xs")),
+        )
+
+
+@rt("/submit_compact")
+async def post_compact_form(req):
+    try:
+        validated = await showcase_form_compact.model_validate_request(req)
+        return mui.Card(
+            mui.CardHeader(
+                fh.H4("✅ Compact Form - Validation Successful", cls="text-green-600")
+            ),
+            mui.CardBody(
+                mui.H5("Validated Model:"),
+                fh.Pre(
+                    validated.model_dump_json(indent=2),
+                    cls="bg-gray-100 p-2 rounded text-xs overflow-auto max-h-64",
+                ),
+            ),
+        )
+    except Exception as e:
+        return mui.Card(
+            mui.CardHeader(
+                fh.H4("❌ Compact Form - Validation Error", cls="text-red-500")
+            ),
+            mui.CardBody(fh.Pre(str(e), cls="bg-red-50 p-1 rounded text-xs")),
+        )
 
 
 if __name__ == "__main__":

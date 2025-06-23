@@ -5,6 +5,7 @@ from enum import Enum
 from typing import (
     Any,
     List,
+    Literal,
     Optional,
     get_args,
     get_origin,
@@ -99,7 +100,7 @@ class MetricsRendererMixin:
         element: FT,
         metric_entry: Optional[MetricEntry],
         *,
-        propagate_children: bool = True,
+        level: Literal["container", "leaf"] = "leaf",
     ) -> FT:
         """
         Decorate an element with metrics visual feedback.
@@ -107,16 +108,13 @@ class MetricsRendererMixin:
         Args:
             element: The FastHTML element to decorate
             metric_entry: Optional metric entry with color, score, and comment
-            propagate_children: Whether to propagate highlighting to nested input fields
+            level: Reserved for future use (previously distinguished input highlighting)
 
         Returns:
-            Decorated element with background color, tooltip, and optional metric badge
+            Decorated element with left color bar, tooltip, and optional metric badge
         """
         if not metric_entry:
             return element
-
-        # Remove wrapper-level background color - only highlight input fields
-        # This ensures consistent behavior whether color is provided or inferred
 
         # Add tooltip with comment if available
         comment = metric_entry.get("comment")
@@ -124,9 +122,13 @@ class MetricsRendererMixin:
             element.attrs["uk-tooltip"] = comment
             element.attrs["title"] = comment  # Fallback standard tooltip
 
-        # Apply input-level highlighting early, before any wrapping
-        if propagate_children:
-            element = self._highlight_input_fields(element, metric_entry)
+        # Add left color bar
+        border_color = self._metric_border_color(metric_entry)
+        if border_color and hasattr(element, "attrs"):
+            existing_style = element.attrs.get("style", "")
+            element.attrs["style"] = (
+                f"border-left: 4px solid {border_color}; padding-left: 0.25rem; {existing_style}"
+            )
 
         # Add metric score badge if present
         score = metric_entry.get("metric")
@@ -170,7 +172,23 @@ class MetricsRendererMixin:
                 cls="uk-text-nowrap",
             )
 
-            # Then wrap the now‐highlighted element with the badge
+            # Try to insert badge into first child element instead of wrapping
+            # This works better for accordion headers and labels
+            if hasattr(element, "children") and element.children:
+                # Find the first child that can accept the badge
+                first_child = element.children[0]
+                if hasattr(first_child, "children"):
+                    # Insert badge as second child (after the text)
+                    if isinstance(first_child.children, list):
+                        first_child.children.append(metric_badge)
+                    else:
+                        # Convert to list if needed
+                        first_child.children = list(first_child.children) + [
+                            metric_badge
+                        ]
+                    return element
+
+            # Fallback: wrap the element with the badge (original behavior)
             return fh.Div(
                 element, metric_badge, cls="relative inline-flex items-center w-full"
             )
@@ -248,13 +266,13 @@ class MetricsRendererMixin:
         self, metric_entry: Optional[MetricEntry]
     ) -> Optional[str]:
         """
-        Get an RGBA color string for a metric entry's border.
+        Get an RGBA color string for a metric entry's left border bar.
 
         Args:
             metric_entry: The metric entry containing color/score information
 
         Returns:
-            RGBA color string for border, or None if no metric
+            RGBA color string for left border bar, or None if no metric
         """
         if not metric_entry:
             return None
@@ -675,7 +693,7 @@ class BooleanFieldRenderer(BaseFieldRenderer):
 
         # Apply metrics decoration if available
         return self._decorate_metrics(
-            field_element, self.metric_entry, propagate_children=False
+            field_element, self.metric_entry, level="container"
         )
 
 
@@ -1013,7 +1031,7 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
 
         # 6. Apply metrics decoration if available
         return self._decorate_metrics(
-            accordion_container, self.metric_entry, propagate_children=False
+            accordion_container, self.metric_entry, level="container"
         )
 
     def render_input(self) -> FT:
@@ -1323,7 +1341,7 @@ class ListFieldRenderer(BaseFieldRenderer):
 
         # Apply metrics decoration if available
         return self._decorate_metrics(
-            field_element, self.metric_entry, propagate_children=False
+            field_element, self.metric_entry, level="container"
         )
 
     def render_input(self) -> FT:
@@ -1766,7 +1784,7 @@ class ListFieldRenderer(BaseFieldRenderer):
 
             # Apply metrics decoration to the title
             title_component = self._decorate_metrics(
-                title_component, item_metric_entry, propagate_children=False
+                title_component, item_metric_entry, level="container"
             )
 
             # Prepare li attributes with optional border styling
@@ -1816,7 +1834,7 @@ class ListFieldRenderer(BaseFieldRenderer):
 
             # Apply metrics decoration even to error items
             title_component = self._decorate_metrics(
-                title_component, item_metric_entry, propagate_children=False
+                title_component, item_metric_entry, level="container"
             )
 
             content_component = mui.Alert(
