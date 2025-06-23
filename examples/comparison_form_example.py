@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from fh_pydantic_form import (
     ComparisonForm,
-    ComparisonMetric,
+    MetricEntry,
     PydanticForm,
     comparison_form_js,
     list_manipulation_js,
@@ -99,78 +99,78 @@ class ExtractedProduct(BaseModel):
 
 eval_metrics = {
     # Product info metrics
-    "product": ComparisonMetric(
+    "product": MetricEntry(
         metric=0.75,
         comment="Product section: Most fields correct with minor issues",
     ),
-    "product.name": ComparisonMetric(
+    "product.name": MetricEntry(
         metric=0.90,
         comment="Minor difference: 'Pro Max' vs 'ProMax'",
     ),
-    "product.brand": ComparisonMetric(
+    "product.brand": MetricEntry(
         metric=1.0,
         comment="Brand correctly extracted",
     ),
-    "product.category": ComparisonMetric(
+    "product.category": MetricEntry(
         metric=0.0,
         comment="Wrong category: 'Electronics' should be 'Sports & Outdoors'",
     ),
-    "product.price": ComparisonMetric(
+    "product.price": MetricEntry(
         metric=0.95,
         comment="Price extracted but missing cents: 299 vs 299.99",
     ),
-    "product.in_stock": ComparisonMetric(
+    "product.in_stock": MetricEntry(
         metric=1.0,
         comment="Stock status correct",
     ),
     # Features metrics
-    "key_features": ComparisonMetric(
+    "key_features": MetricEntry(
         metric=0.60,
         comment="3 of 5 key features extracted, some paraphrasing",
     ),
-    "key_features[0]": ComparisonMetric(
+    "key_features[0]": MetricEntry(
         metric=1.0,
         comment="Waterproof feature correctly identified",
     ),
-    "key_features[1]": ComparisonMetric(
+    "key_features[1]": MetricEntry(
         metric=0.8,
         comment="Battery life rounded: '10 hours' vs '10.5 hours'",
     ),
-    "key_features[2]": ComparisonMetric(
+    "key_features[2]": MetricEntry(
         metric=0.0,
         comment="Missed GPS tracking feature",
     ),
     # Specifications metrics
-    "specifications": ComparisonMetric(
+    "specifications": MetricEntry(
         metric=0.70,
         comment="Specifications partially extracted",
     ),
-    "specifications.weight": ComparisonMetric(
+    "specifications.weight": MetricEntry(
         metric=0.0,
         comment="Weight not found in extraction",
     ),
-    "specifications.dimensions": ComparisonMetric(
+    "specifications.dimensions": MetricEntry(
         metric=0.85,
         comment="Dimensions normalized: used 'x' instead of '×'",
     ),
-    "specifications.material": ComparisonMetric(
+    "specifications.material": MetricEntry(
         metric=1.0,
         comment="Material correctly identified",
     ),
-    "specifications.warranty": ComparisonMetric(
+    "specifications.warranty": MetricEntry(
         metric=0.5,
         comment="Warranty period incomplete: '1 year' vs '1 year limited'",
     ),
     # Other fields
-    "description": ComparisonMetric(
+    "description": MetricEntry(
         metric=0.75,
         comment="Description paraphrased, lost some marketing language",
     ),
-    "target_audience": ComparisonMetric(
+    "target_audience": MetricEntry(
         metric=0.0,
         comment="Target audience not extracted from listing",
     ),
-    "extraction_confidence": ComparisonMetric(
+    "extraction_confidence": MetricEntry(
         metric=0.73,
         comment="Overall confidence: 73%",
     ),
@@ -283,6 +283,7 @@ truth_form = PydanticForm(
     disabled=False,  # Can be edited
     spacing="compact",
     exclude_fields=["extracted_at", "source_url"],
+    metrics_dict={},  # No metrics on left side
 )
 
 # Right form: Generated output (read-only)
@@ -293,6 +294,7 @@ generated_form = PydanticForm(
     disabled=True,  # Cannot be edited
     spacing="compact",
     exclude_fields=["extracted_at", "source_url"],
+    metrics_dict=eval_metrics,  # Metrics show on generated side
 )
 
 # Create comparison form
@@ -300,8 +302,6 @@ comparison_form = ComparisonForm(
     name="product_extraction_comparison",
     left_form=truth_form,
     right_form=generated_form,
-    left_metrics={},  # putting the metrics on right side only, but could be on the left as well
-    right_metrics=eval_metrics,  # Metrics show on generated side
     left_label="📝 Annotated Truth (Ground Truth)",
     right_label="🤖 LLM Generated Output",
 )

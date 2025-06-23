@@ -5,7 +5,8 @@ __all__ = [
     "_is_literal_type",
     "_is_enum_type",
     "_is_skip_json_schema_field",
-    "default_for_annotation",
+    "MetricEntry",
+    "MetricsDict",
 ]
 
 import logging
@@ -16,8 +17,7 @@ from typing import (
     Any,
     Dict,
     Literal,
-    NamedTuple,
-    Optional,
+    TypedDict,
     Union,
     get_args,
     get_origin,
@@ -95,18 +95,18 @@ def _is_skip_json_schema_field(annotation_or_field_info: Any) -> bool:
     return "SkipJsonSchema" in repr(annotation)
 
 
-# Comparison types for ComparisonForm feature
-class ComparisonMetric(NamedTuple):
-    """Metrics for comparing two field values"""
+# Metrics types for field-level annotations
+class MetricEntry(TypedDict, total=False):
+    """Metrics for annotating field values with scores, colors, and comments"""
 
-    metric: Optional[Union[float, str]] = None  # Arbitrary score or label
-    color: Optional[str] = None  # CSS color or Tailwind class
-    comment: Optional[str] = None  # Tooltip/hover text explaining the difference
+    metric: float  # 0-1 similarity score
+    color: str  # CSS-compatible color string
+    comment: str  # Free-form text for tooltips/hover
 
 
-# Type alias for comparison mapping
-ComparisonMap = Dict[
-    str, ComparisonMetric
+# Type alias for metrics mapping
+MetricsDict = Dict[
+    str, MetricEntry
 ]  # Keys are dot-paths like "address.street" or "tags[0]"
 
 
@@ -234,7 +234,3 @@ def _is_pydantic_undefined(value: Any) -> bool:
         pass
 
     return False
-
-
-# Local import placed after _UNSET is defined to avoid circular-import problems
-from .defaults import default_for_annotation  # noqa: E402

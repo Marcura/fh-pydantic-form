@@ -31,7 +31,11 @@ from fh_pydantic_form.form_parser import (
 )
 from fh_pydantic_form.list_path import walk_path
 from fh_pydantic_form.registry import FieldRendererRegistry
-from fh_pydantic_form.type_helpers import _is_skip_json_schema_field, get_default
+from fh_pydantic_form.type_helpers import (
+    MetricsDict,
+    _is_skip_json_schema_field,
+    get_default,
+)
 from fh_pydantic_form.ui_style import (
     SpacingTheme,
     SpacingValue,
@@ -244,6 +248,7 @@ class PydanticForm(Generic[ModelType]):
             label_colors=self.label_colors,
             exclude_fields=self.exclude_fields,
             spacing=self.spacing,
+            metrics_dict=self.metrics_dict,
         )
 
         # Set the values directly
@@ -262,6 +267,7 @@ class PydanticForm(Generic[ModelType]):
         label_colors: Optional[Dict[str, str]] = None,
         exclude_fields: Optional[List[str]] = None,
         spacing: SpacingValue = SpacingTheme.NORMAL,
+        metrics_dict: Optional[MetricsDict] = None,
     ):
         """
         Initialize the form renderer
@@ -278,6 +284,7 @@ class PydanticForm(Generic[ModelType]):
             label_colors: Optional dictionary mapping field names to label colors (CSS color values)
             exclude_fields: Optional list of top-level field names to exclude from the form
             spacing: Spacing theme to use for form layout ("normal", "compact", or SpacingTheme enum)
+            metrics_dict: Optional metrics dictionary for field-level visual feedback
         """
         self.name = form_name
         self.model_class = model_class
@@ -319,6 +326,7 @@ class PydanticForm(Generic[ModelType]):
         self.label_colors = label_colors or {}  # Store label colors mapping
         self.exclude_fields = exclude_fields or []  # Store excluded fields list
         self.spacing = _normalize_spacing(spacing)  # Store normalized spacing
+        self.metrics_dict = metrics_dict or {}  # Store metrics dictionary
 
         # Register custom renderers with the global registry if provided
         if custom_renderers:
@@ -431,7 +439,8 @@ class PydanticForm(Generic[ModelType]):
                 label_color=label_color,  # Pass the label color if specified
                 spacing=self.spacing,  # Pass the spacing
                 field_path=[field_name],  # Set top-level field path
-                comparison=None,  # No comparison for regular forms
+                form_name=self.name,  # Pass form name
+                metrics_dict=self.metrics_dict,  # Pass the metrics dict
             )
 
             rendered_field = renderer.render()
@@ -740,6 +749,7 @@ class PydanticForm(Generic[ModelType]):
                 disabled=self.disabled,
                 field_path=segments,  # Pass the full path segments
                 form_name=self.name,  # Pass the explicit form name
+                metrics_dict=self.metrics_dict,  # Pass the metrics dict
             )
 
             # Generate a unique placeholder index

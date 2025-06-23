@@ -4,7 +4,6 @@ from datetime import date, time
 from enum import Enum
 from typing import (
     Any,
-    Dict,
     List,
     Optional,
     get_args,
@@ -21,7 +20,8 @@ from fh_pydantic_form.color_utils import get_metric_colors, robust_color_to_rgba
 from fh_pydantic_form.constants import _UNSET
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import (
-    ComparisonMetric,
+    MetricEntry,
+    MetricsDict,
     _get_underlying_type_if_optional,
     _is_optional_type,
     get_default,
@@ -76,48 +76,50 @@ def _merge_cls(base: str, extra: str) -> str:
     return base
 
 
-class ComparisonRendererMixin:
-    """Mixin to add comparison highlighting capabilities to field renderers"""
+class MetricsRendererMixin:
+    """Mixin to add metrics highlighting capabilities to field renderers"""
 
-    def _decorate_comparison(
-        self, element: FT, metric: Optional[ComparisonMetric]
-    ) -> FT:
+    def _decorate_metrics(self, element: FT, metric_entry: Optional[MetricEntry]) -> FT:
         """
-        Decorate an element with comparison visual feedback.
+        Decorate an element with metrics visual feedback.
 
         Args:
             element: The FastHTML element to decorate
-            metric: Optional comparison metric with color, score, and comment
+            metric_entry: Optional metric entry with color, score, and comment
 
         Returns:
             Decorated element with background color, tooltip, and optional metric badge
         """
-        if not metric:
+        if not metric_entry:
             return element
+
         # Apply background color with opacity
-        if metric.color:
+        color = metric_entry.get("color")
+        if color:
             if hasattr(element, "attrs"):
                 existing_style = element.attrs.get("style", "")
                 bg_color = robust_color_to_rgba(
-                    metric.color, 0.15
+                    color, 0.15
                 )  # 15% opacity for background
                 new_style = f"background-color: {bg_color}; {existing_style}"
                 element.attrs["style"] = new_style
 
         # Add tooltip with comment if available
-        if metric.comment and hasattr(element, "attrs"):
-            element.attrs["uk-tooltip"] = metric.comment
-            element.attrs["title"] = metric.comment  # Fallback standard tooltip
+        comment = metric_entry.get("comment")
+        if comment and hasattr(element, "attrs"):
+            element.attrs["uk-tooltip"] = comment
+            element.attrs["title"] = comment  # Fallback standard tooltip
 
         # Apply input-level highlighting early, before any wrapping
-        element = self._highlight_input_fields(element, metric)
+        element = self._highlight_input_fields(element, metric_entry)
 
         # Add metric score badge if present
-        if metric.metric is not None:
+        metric = metric_entry.get("metric")
+        if metric is not None:
             # Determine bullet colors based on LangSmith-style system when no color provided
-            if metric.color:
+            if color:
                 # Use provided color - convert to full opacity for badge
-                badge_bg_rgba = robust_color_to_rgba(metric.color, 1.0)
+                badge_bg_rgba = robust_color_to_rgba(color, 1.0)
                 # Extract RGB values and use them for badge background
                 rgb_match = re.match(
                     r"rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)", badge_bg_rgba
@@ -126,15 +128,15 @@ class ComparisonRendererMixin:
                     r, g, b = rgb_match.groups()
                     badge_bg = f"rgb({r}, {g}, {b})"
                 else:
-                    badge_bg = metric.color
+                    badge_bg = color
                 text_color = "white"
             else:
                 # Use metric-based color system
-                badge_bg, text_color = get_metric_colors(metric.metric)
+                badge_bg, text_color = get_metric_colors(metric)
 
             # Create custom styled span that looks like a bullet/pill
             metric_badge = fh.Span(
-                str(metric.metric),
+                str(metric),
                 style=f"""
                     background-color: {badge_bg};
                     color: {text_color};
@@ -159,28 +161,31 @@ class ComparisonRendererMixin:
 
         return element
 
-    def _highlight_input_fields(self, element: FT, metric: ComparisonMetric) -> FT:
+    def _highlight_input_fields(self, element: FT, metric_entry: MetricEntry) -> FT:
         """
         Find nested form controls and add a colored box-shadow to them
-        based on the comparison metric color.
+        based on the metric entry color.
 
         Args:
             element: The FT element to search within
-            metric: The comparison metric containing color information
+            metric_entry: The metric entry containing color information
 
         Returns:
             The element with highlighted input fields
         """
-        if not metric:
+        if not metric_entry:
             return element
 
         # Determine the color to use for highlighting
-        if metric.color:
+        color = metric_entry.get("color")
+        metric = metric_entry.get("metric")
+
+        if color:
             # Use the provided color
-            highlight_color = metric.color
-        elif metric.metric is not None:
+            highlight_color = color
+        elif metric is not None:
             # Use metric-based color system (background color from the helper)
-            highlight_color, _ = get_metric_colors(metric.metric)
+            highlight_color, _ = get_metric_colors(metric)
         else:
             # No color or metric available
             return element
@@ -224,7 +229,7 @@ class ComparisonRendererMixin:
         return element
 
 
-class BaseFieldRenderer(ComparisonRendererMixin):
+class BaseFieldRenderer(MetricsRendererMixin):
     """
     Base class for field renderers
 
@@ -248,8 +253,8 @@ class BaseFieldRenderer(ComparisonRendererMixin):
         spacing: SpacingValue = SpacingTheme.NORMAL,
         field_path: Optional[List[str]] = None,
         form_name: Optional[str] = None,
-        comparison: Optional[ComparisonMetric] = None,
-        comparison_map: Optional[Dict[str, ComparisonMetric]] = None,
+        metric_entry: Optional[MetricEntry] = None,
+        metrics_dict: Optional[MetricsDict] = None,
     ):
         """
         Initialize the field renderer
@@ -264,8 +269,8 @@ class BaseFieldRenderer(ComparisonRendererMixin):
             spacing: Spacing theme to use for layout ("normal", "compact", or SpacingTheme enum)
             field_path: Path segments from root to this field (for nested list support)
             form_name: Explicit form name (used for nested list URLs)
-            comparison: Optional comparison metric for visual feedback
-            comparison_map: Optional full comparison map for auto-lookup
+            metric_entry: Optional metric entry for visual feedback
+            metrics_dict: Optional full metrics dict for auto-lookup
         """
         self.field_name = f"{prefix}{field_name}" if prefix else field_name
         self.original_field_name = field_name
@@ -278,17 +283,17 @@ class BaseFieldRenderer(ComparisonRendererMixin):
         self.disabled = disabled
         self.label_color = label_color
         self.spacing = _normalize_spacing(spacing)
-        self.comparison_map = comparison_map
+        self.metrics_dict = metrics_dict
 
-        # Initialize comparison attribute
-        self.comparison: Optional[ComparisonMetric] = None
+        # Initialize metric entry attribute
+        self.metric_entry: Optional[MetricEntry] = None
 
-        # Auto-resolve comparison metric if not explicitly provided
-        if comparison is not None:
-            self.comparison = comparison
-        elif comparison_map:
+        # Auto-resolve metric entry if not explicitly provided
+        if metric_entry is not None:
+            self.metric_entry = metric_entry
+        elif metrics_dict:
             path_string = self._build_path_string()
-            self.comparison = comparison_map.get(path_string)
+            self.metric_entry = metrics_dict.get(path_string)
 
     def _build_path_string(self) -> str:
         """
@@ -449,8 +454,8 @@ class BaseFieldRenderer(ComparisonRendererMixin):
                 cls=spacing("outer_margin", self.spacing),
             )
 
-        # 4. Apply comparison decoration if available
-        return self._decorate_comparison(field_element, self.comparison)
+        # 4. Apply metrics decoration if available
+        return self._decorate_metrics(field_element, self.metric_entry)
 
 
 # ---- Specific Field Renderers ----
@@ -595,8 +600,8 @@ class BooleanFieldRenderer(BaseFieldRenderer):
             cls=f"{spacing('outer_margin', self.spacing)} w-full",
         )
 
-        # Apply comparison decoration if available
-        return self._decorate_comparison(field_element, self.comparison)
+        # Apply metrics decoration if available
+        return self._decorate_metrics(field_element, self.metric_entry)
 
 
 class DateFieldRenderer(BaseFieldRenderer):
@@ -931,8 +936,8 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
             cls=f"{accordion_cls} w-full".strip(),
         )
 
-        # 6. Apply comparison decoration if available
-        return self._decorate_comparison(accordion_container, self.comparison)
+        # 6. Apply metrics decoration if available
+        return self._decorate_metrics(accordion_container, self.metric_entry)
 
     def render_input(self) -> FT:
         """
@@ -1018,8 +1023,8 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
                     field_path=self.field_path
                     + [nested_field_name],  # Propagate path with field name
                     form_name=self.explicit_form_name,  # Propagate form name
-                    comparison=None,  # Let auto-lookup handle it
-                    comparison_map=self.comparison_map,  # Pass down the comparison map
+                    metric_entry=None,  # Let auto-lookup handle it
+                    metrics_dict=self.metrics_dict,  # Pass down the metrics dict
                 )
 
                 nested_inputs.append(renderer.render())
@@ -1192,8 +1197,8 @@ class ListFieldRenderer(BaseFieldRenderer):
             cls=f"{spacing('outer_margin', self.spacing)} w-full",
         )
 
-        # Apply comparison decoration if available
-        return self._decorate_comparison(field_element, self.comparison)
+        # Apply metrics decoration if available
+        return self._decorate_metrics(field_element, self.metric_entry)
 
     def render_input(self) -> FT:
         """
@@ -1418,8 +1423,8 @@ class ListFieldRenderer(BaseFieldRenderer):
                         field_path=self.field_path
                         + [str(idx)],  # Propagate path with index
                         form_name=self.explicit_form_name,  # Propagate form name
-                        comparison=None,  # Let auto-lookup handle it
-                        comparison_map=self.comparison_map,  # Pass down the comparison map
+                        metric_entry=None,  # Let auto-lookup handle it
+                        metrics_dict=self.metrics_dict,  # Pass down the metrics dict
                     )
                     # Add the rendered input to content elements
                     item_content_elements.append(item_renderer.render_input())
@@ -1476,8 +1481,8 @@ class ListFieldRenderer(BaseFieldRenderer):
                                     nested_field_name,
                                 ],  # Propagate path with index
                                 form_name=self.explicit_form_name,  # Propagate form name
-                                comparison=None,  # Let auto-lookup handle it
-                                comparison_map=self.comparison_map,  # Pass down the comparison map
+                                metric_entry=None,  # Let auto-lookup handle it
+                                metrics_dict=self.metrics_dict,  # Pass down the metrics dict
                             )
 
                             # Add rendered field to valid fields
@@ -1516,8 +1521,8 @@ class ListFieldRenderer(BaseFieldRenderer):
                     field_path=self.field_path
                     + [str(idx)],  # Propagate path with index
                     form_name=self.explicit_form_name,  # Propagate form name
-                    comparison=None,  # Let auto-lookup handle it
-                    comparison_map=self.comparison_map,  # Pass down the comparison map
+                    metric_entry=None,  # Let auto-lookup handle it
+                    metrics_dict=self.metrics_dict,  # Pass down the metrics dict
                 )
                 input_element = simple_renderer.render_input()
                 item_content_elements.append(fh.Div(input_element))

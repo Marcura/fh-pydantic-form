@@ -23,7 +23,7 @@ from pydantic import BaseModel
 
 from fh_pydantic_form.form_renderer import PydanticForm
 from fh_pydantic_form.registry import FieldRendererRegistry
-from fh_pydantic_form.type_helpers import ComparisonMap, ComparisonMetric
+from fh_pydantic_form.type_helpers import MetricEntry, MetricsDict
 
 logger = logging.getLogger(__name__)
 
@@ -143,8 +143,6 @@ class ComparisonForm(Generic[ModelType]):
         left_form: PydanticForm[ModelType],
         right_form: PydanticForm[ModelType],
         *,
-        left_metrics: Optional[ComparisonMap] = None,
-        right_metrics: Optional[ComparisonMap] = None,
         left_label: str = "Reference",
         right_label: str = "Generated",
     ):
@@ -155,8 +153,6 @@ class ComparisonForm(Generic[ModelType]):
             name: Unique name for this comparison form
             left_form: Pre-constructed PydanticForm for left column
             right_form: Pre-constructed PydanticForm for right column
-            left_metrics: Mapping of field paths to comparison metrics for left form
-            right_metrics: Mapping of field paths to comparison metrics for right form
             left_label: Label for left column
             right_label: Label for right column
 
@@ -174,8 +170,6 @@ class ComparisonForm(Generic[ModelType]):
         self.left_form = left_form
         self.right_form = right_form
         self.model_class = left_form.model_class  # Convenience reference
-        self.left_metrics = left_metrics or {}
-        self.right_metrics = right_metrics or {}
         self.left_label = left_label
         self.right_label = right_label
 
@@ -193,7 +187,6 @@ class ComparisonForm(Generic[ModelType]):
         header_label: str,
         start_order: int,
         wrapper_id: str,
-        comparison_metrics: Optional[ComparisonMap] = None,
     ) -> FT:
         """
         Render a single column with CSS order values for grid alignment
@@ -203,7 +196,6 @@ class ComparisonForm(Generic[ModelType]):
             header_label: Label for the column header
             start_order: Starting order value (0 for left, 1 for right)
             wrapper_id: ID for the wrapper div
-            comparison_metrics: Optional comparison metrics for this column
 
         Returns:
             A div with class="contents" containing ordered grid items
@@ -231,11 +223,8 @@ class ComparisonForm(Generic[ModelType]):
             # Get value from form
             value = form.values_dict.get(field_name)
 
-            # Get comparison metric if provided
+            # Get path string for data-path attribute
             path_str = field_name
-            comparison_metric = (
-                comparison_metrics.get(path_str) if comparison_metrics else None
-            )
 
             # Get renderer class
             renderer_cls = registry.get_renderer(field_name, field_info)
@@ -254,8 +243,7 @@ class ComparisonForm(Generic[ModelType]):
                 spacing=form.spacing,
                 field_path=[field_name],
                 form_name=form.name,
-                comparison=comparison_metric,
-                comparison_map=comparison_metrics,
+                metrics_dict=form.metrics_dict,  # Use form's own metrics
             )
 
             # Render with data-path and order
@@ -356,7 +344,6 @@ class ComparisonForm(Generic[ModelType]):
             header_label=self.left_label,
             start_order=0,
             wrapper_id=f"{self.left_form.name}-inputs-wrapper",
-            comparison_metrics=self.left_metrics,
         )
 
         # Render right column with wrapper
@@ -365,7 +352,6 @@ class ComparisonForm(Generic[ModelType]):
             header_label=self.right_label,
             start_order=1,
             wrapper_id=f"{self.right_form.name}-inputs-wrapper",
-            comparison_metrics=self.right_metrics,
         )
 
         # Create the grid container with both wrappers
@@ -394,7 +380,6 @@ class ComparisonForm(Generic[ModelType]):
             form: PydanticForm[ModelType],
             side: str,
             label: str,
-            metrics: Optional[ComparisonMap],
         ):
             """Factory function to create reset handler with proper closure"""
 
@@ -410,7 +395,6 @@ class ComparisonForm(Generic[ModelType]):
                     header_label=label,
                     start_order=start_order,
                     wrapper_id=f"{form.name}-inputs-wrapper",
-                    comparison_metrics=metrics,
                 )
                 return wrapper
 
@@ -420,7 +404,6 @@ class ComparisonForm(Generic[ModelType]):
             form: PydanticForm[ModelType],
             side: str,
             label: str,
-            metrics: Optional[ComparisonMap],
         ):
             """Factory function to create refresh handler with proper closure"""
 
@@ -436,27 +419,26 @@ class ComparisonForm(Generic[ModelType]):
                     header_label=label,
                     start_order=start_order,
                     wrapper_id=f"{form.name}-inputs-wrapper",
-                    comparison_metrics=metrics,
                 )
                 return wrapper
 
             return handler
 
-        for side, form, label, metrics in [
-            ("left", self.left_form, self.left_label, self.left_metrics),
-            ("right", self.right_form, self.right_label, self.right_metrics),
+        for side, form, label in [
+            ("left", self.left_form, self.left_label),
+            ("right", self.right_form, self.right_label),
         ]:
             assert form is not None
 
             # Reset route
             reset_path = f"/compare/{self.name}/{side}/reset"
-            reset_handler = create_reset_handler(form, side, label, metrics)
+            reset_handler = create_reset_handler(form, side, label)
             app.route(reset_path, methods=["POST"])(reset_handler)
             logger.debug(f"Registered comparison reset route: {reset_path}")
 
             # Refresh route
             refresh_path = f"/compare/{self.name}/{side}/refresh"
-            refresh_handler = create_refresh_handler(form, side, label, metrics)
+            refresh_handler = create_refresh_handler(form, side, label)
             app.route(refresh_path, methods=["POST"])(refresh_handler)
             logger.debug(f"Registered comparison refresh route: {refresh_path}")
 
@@ -529,13 +511,13 @@ class ComparisonForm(Generic[ModelType]):
         )
 
 
-def simple_diff_comparison(
+def simple_diff_metrics(
     left_data: BaseModel | Dict[str, Any],
     right_data: BaseModel | Dict[str, Any],
     model_class: Type[BaseModel],
-) -> ComparisonMap:
+) -> MetricsDict:
     """
-    Simple helper to generate comparison metrics based on equality
+    Simple helper to generate metrics based on equality
 
     Args:
         left_data: Reference data
@@ -543,9 +525,9 @@ def simple_diff_comparison(
         model_class: Model class for structure
 
     Returns:
-        ComparisonMap with simple equality-based metrics
+        MetricsDict with simple equality-based metrics
     """
-    comparison_map = {}
+    metrics_dict = {}
 
     # Convert to dicts if needed
     if hasattr(left_data, "model_dump"):
@@ -564,11 +546,11 @@ def simple_diff_comparison(
         right_val = right_dict.get(field_name)
 
         if left_val == right_val:
-            comparison_map[field_name] = ComparisonMetric(
+            metrics_dict[field_name] = MetricEntry(
                 metric=1.0, color="green", comment="Values match exactly"
             )
         elif left_val is None or right_val is None:
-            comparison_map[field_name] = ComparisonMetric(
+            metrics_dict[field_name] = MetricEntry(
                 metric=0.0, color="orange", comment="One value is missing"
             )
         else:
@@ -579,14 +561,14 @@ def simple_diff_comparison(
                 max_len = max(len(left_val), len(right_val))
                 similarity = common / max_len if max_len > 0 else 0
 
-                comparison_map[field_name] = ComparisonMetric(
+                metrics_dict[field_name] = MetricEntry(
                     metric=round(similarity, 2),
                     comment=f"String similarity: {similarity:.0%}",
                 )
             else:
-                comparison_map[field_name] = ComparisonMetric(
+                metrics_dict[field_name] = MetricEntry(
                     metric=0.0,
                     comment=f"Different values: {left_val} vs {right_val}",
                 )
 
-    return comparison_map
+    return metrics_dict
