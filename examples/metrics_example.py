@@ -159,7 +159,7 @@ metrics_showcase = {
     "author.name": MetricEntry(
         metric=0.9, comment="Author name is well formatted - nested field example"
     ),
-    # 11. Nested field: author.email
+    # # 11. Nested field: author.email
     "author.email": MetricEntry(
         metric=0.6, comment="Email format is acceptable but could be improved"
     ),
@@ -206,10 +206,6 @@ metrics_showcase = {
         metric=0.0, comment="First address tag has issues - deeply nested path example"
     ),
     # 21. Another deeply nested example
-    "author.addresses[0].tags[1]": MetricEntry(
-        metric=1.0,
-        comment="Second tag of first address is perfect - complex nested path",
-    ),
     # 22. Second address tags
     "author.addresses[1].tags[0]": MetricEntry(
         metric=0.75, comment="Work tag is well categorized"

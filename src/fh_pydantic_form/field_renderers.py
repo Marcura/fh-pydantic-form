@@ -94,13 +94,20 @@ def _merge_cls(base: str, extra: str) -> str:
 class MetricsRendererMixin:
     """Mixin to add metrics highlighting capabilities to field renderers"""
 
-    def _decorate_metrics(self, element: FT, metric_entry: Optional[MetricEntry]) -> FT:
+    def _decorate_metrics(
+        self,
+        element: FT,
+        metric_entry: Optional[MetricEntry],
+        *,
+        propagate_children: bool = True,
+    ) -> FT:
         """
         Decorate an element with metrics visual feedback.
 
         Args:
             element: The FastHTML element to decorate
             metric_entry: Optional metric entry with color, score, and comment
+            propagate_children: Whether to propagate highlighting to nested input fields
 
         Returns:
             Decorated element with background color, tooltip, and optional metric badge
@@ -118,7 +125,8 @@ class MetricsRendererMixin:
             element.attrs["title"] = comment  # Fallback standard tooltip
 
         # Apply input-level highlighting early, before any wrapping
-        element = self._highlight_input_fields(element, metric_entry)
+        if propagate_children:
+            element = self._highlight_input_fields(element, metric_entry)
 
         # Add metric score badge if present
         score = metric_entry.get("metric")
@@ -609,7 +617,9 @@ class BooleanFieldRenderer(BaseFieldRenderer):
         )
 
         # Apply metrics decoration if available
-        return self._decorate_metrics(field_element, self.metric_entry)
+        return self._decorate_metrics(
+            field_element, self.metric_entry, propagate_children=False
+        )
 
 
 class DateFieldRenderer(BaseFieldRenderer):
@@ -945,7 +955,9 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
         )
 
         # 6. Apply metrics decoration if available
-        return self._decorate_metrics(accordion_container, self.metric_entry)
+        return self._decorate_metrics(
+            accordion_container, self.metric_entry, propagate_children=False
+        )
 
     def render_input(self) -> FT:
         """
