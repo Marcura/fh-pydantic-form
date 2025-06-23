@@ -30,10 +30,12 @@
 10. [Disabling & Excluding Fields](#disabling--excluding-fields)
 11. [Refreshing & Resetting](#refreshing--resetting)
 12. [Label Colors](#label-colors)
-13. [Schema Drift Resilience](#schema-drift-resilience)
-14. [Custom Renderers](#custom-renderers)
-15. [API Reference](#api-reference)
-16. [Contributing](#contributing)
+13. [Metrics & Highlighting](#metrics--highlighting)
+14. [ComparisonForm](#comparisonform)
+15. [Schema Drift Resilience](#schema-drift-resilience)
+16. [Custom Renderers](#custom-renderers)
+17. [API Reference](#api-reference)
+18. [Contributing](#contributing)
 
 ## Purpose
 
@@ -497,6 +499,327 @@ form_renderer = PydanticForm(
 
 This can be useful for e.g. highlighting the values of different fields in a pdf with different highlighting colors matching the form input label color. 
 
+## Metrics & Highlighting
+
+`fh-pydantic-form` provides a powerful metrics system for visual highlighting of form fields based on extraction quality scores and confidence assessments. This is particularly useful for evaluating LLM structured output extraction, comparing generated data against ground truth, and building quality assessment interfaces.
+
+### Basic Metrics Usage
+
+```python
+from fh_pydantic_form import PydanticForm
+
+# Define metrics for your form fields
+metrics_dict = {
+    "title": {
+        "metric": 0.95,
+        "comment": "Excellent title quality - clear and engaging"
+    },
+    "rating": {
+        "metric": 0.3,
+        "comment": "Low rating needs attention"
+    },
+    "status": {
+        "metric": 0.0,
+        "comment": "Critical status issue - requires immediate review"
+    }
+}
+
+# Create form with metrics
+form_renderer = PydanticForm(
+    "my_form",
+    MyModel,
+    metrics_dict=metrics_dict
+)
+```
+
+### Metrics Dictionary Structure
+
+Each field can have the following metrics properties:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `metric` | `float` or `str` | Numeric score (0.0-1.0) or string assessment |
+| `color` | `str` | Custom color (overrides automatic color-coding) |
+| `comment` | `str` | Tooltip text shown on hover |
+
+### Automatic Color Coding
+
+Numeric metrics are automatically color-coded:
+
+- **1.0**: Bright green (perfect score)
+- **0.5-1.0**: Medium green (good range)
+- **0.0-0.5**: Dark red (needs attention)
+- **0.0**: Bright red (critical issue)
+
+```python
+metrics_dict = {
+    "field1": {"metric": 1.0, "comment": "Perfect!"},      # Bright green
+    "field2": {"metric": 0.8, "comment": "Very good"},     # Medium green
+    "field3": {"metric": 0.3, "comment": "Needs work"},    # Dark red
+    "field4": {"metric": 0.0, "comment": "Critical"},      # Bright red
+}
+```
+
+### Custom Colors
+
+Override automatic colors with custom values:
+
+```python
+metrics_dict = {
+    "status": {
+        "metric": 0.0,
+        "color": "purple",  # Custom color overrides red
+        "comment": "Status requires special attention"
+    },
+    "priority": {
+        "metric": 1.0,
+        "color": "#FF6B35",  # Custom hex color
+        "comment": "High priority with custom highlight"
+    }
+}
+```
+
+### String Metrics
+
+Use string values for qualitative assessments:
+
+```python
+metrics_dict = {
+    "validation_status": {
+        "metric": "NEEDS_REVIEW",
+        "color": "#F59E0B",  # Amber color
+        "comment": "Requires human review"
+    },
+    "data_quality": {
+        "metric": "EXCELLENT",
+        "color": "#10B981",  # Green color
+        "comment": "Data quality exceeds standards"
+    }
+}
+```
+
+### Nested Field Metrics
+
+Support for nested objects and list items:
+
+```python
+metrics_dict = {
+    # Nested object fields
+    "author.name": {
+        "metric": 0.95,
+        "comment": "Author name perfectly formatted"
+    },
+    "author.email": {
+        "metric": 0.9,
+        "comment": "Email format excellent"
+    },
+    
+    # List item metrics
+    "tags[0]": {
+        "metric": 1.0,
+        "comment": "First tag is perfect"
+    },
+    "tags[1]": {
+        "metric": 0.8,
+        "comment": "Second tag very good"
+    },
+    
+    # Complex nested paths
+    "author.addresses[0].street": {
+        "metric": 1.0,
+        "comment": "Street address perfectly formatted"
+    },
+    "author.addresses[1].city": {
+        "metric": 0.1,
+        "color": "teal",
+        "comment": "City has verification problems"
+    }
+}
+```
+
+### Practical Use Cases
+
+**LLM Structured Output Evaluation:**
+```python
+# Evaluate LLM extraction quality against ground truth
+extraction_metrics = {
+    "product.name": {
+        "metric": 0.9,
+        "comment": "Name extracted with minor formatting issue: missing space"
+    },
+    "product.category": {
+        "metric": 0.0,
+        "comment": "Critical error: LLM misclassified Electronics instead of Sports"
+    },
+    "key_features": {
+        "metric": 0.6,
+        "comment": "LLM missed 2 of 5 key features from source text"
+    },
+    "extraction_confidence": {
+        "metric": 1.0,
+        "comment": "LLM confidence score accurately reflects actual performance"
+    }
+}
+```
+
+**Document Processing Quality:**
+```python
+# Highlight extraction quality from documents
+doc_extraction_metrics = {
+    "invoice_number": {
+        "metric": 1.0,
+        "comment": "Invoice number perfectly extracted from PDF"
+    },
+    "line_items": {
+        "metric": 0.75,
+        "comment": "3/4 line items extracted correctly"
+    },
+    "total_amount": {
+        "metric": 0.0,
+        "comment": "Amount extraction failed - currency symbol confusion"
+    }
+}
+```
+
+See `examples/metrics_example.py` for a comprehensive demonstration of all metrics features.
+
+## ComparisonForm
+
+The `ComparisonForm` component provides side-by-side comparison of two related forms, perfect for evaluating LLM structured output against ground truth, annotation correction workflows, and comparing extraction results.
+
+### Basic Usage
+
+```python
+from fh_pydantic_form import PydanticForm, ComparisonForm
+
+# Create two forms to compare
+left_form = PydanticForm(
+    "ground_truth",
+    ProductModel,
+    initial_values=annotated_ground_truth,
+    disabled=False  # Editable for annotation correction
+)
+
+right_form = PydanticForm(
+    "llm_output", 
+    ProductModel,
+    initial_values=llm_extracted_data,
+    disabled=True,  # Read-only LLM output
+    metrics_dict=extraction_quality_metrics
+)
+
+# Create comparison form
+comparison_form = ComparisonForm(
+    name="extraction_evaluation",
+    left_form=left_form,
+    right_form=right_form,
+    left_label="📝 Ground Truth (Editable)",
+    right_label="🤖 LLM Output (with Quality Scores)"
+)
+```
+
+### Required JavaScript
+
+Include the comparison form JavaScript in your app headers:
+
+```python
+from fh_pydantic_form import comparison_form_js
+
+app, rt = fh.fast_app(
+    hdrs=[
+        mui.Theme.blue.headers(),
+        comparison_form_js(),  # Required for comparison forms
+    ],
+    pico=False,
+    live=True,
+)
+```
+
+### Complete Example
+
+```python
+@rt("/")
+def get():
+    return fh.Div(
+        mui.Container(
+            mui.Card(
+                mui.CardHeader(
+                    fh.H1("LLM Extraction Evaluation")
+                ),
+                mui.CardBody(
+                    # Render the comparison form
+                    comparison_form.form_wrapper(
+                        fh.Div(
+                            comparison_form.render_inputs(),
+                            
+                            # Action buttons
+                            fh.Div(
+                                mui.Button(
+                                    "Update Ground Truth",
+                                    type="submit",
+                                    hx_post="/update_ground_truth",
+                                    hx_target="#result"
+                                ),
+                                comparison_form.left_reset_button("Reset Left"),
+                                comparison_form.left_refresh_button("Refresh Left"),
+                                cls="mt-4 flex gap-2"
+                            ),
+                            
+                            fh.Div(id="result", cls="mt-4")
+                        )
+                    )
+                )
+            )
+        )
+    )
+
+@rt("/update_ground_truth")
+async def post_update_ground_truth(req):
+    # Validate left form (ground truth side)
+    validated = await comparison_form.left_form.model_validate_request(req)
+    
+    # Process the ground truth update
+    return success_response(validated)
+
+# Register routes for both forms
+comparison_form.register_routes(app)
+```
+
+### Key Features
+- **Aligned fields** input fields are horizontally aligned for easy comparison.
+- **Synchronized Accordions**: Expanding/collapsing sections syncs between both forms
+- **Independent Controls**: Separate refresh and reset buttons for each side
+- **Metrics Integration**: Right side typically shows LLM output quality scores
+- **Flexible Layout**: Responsive design works on desktop and mobile
+- **Form Validation**: Standard validation works with either form
+
+### Common Patterns
+
+**LLM Output Evaluation:**
+```python
+# Left: Editable ground truth
+# Right: Read-only LLM output with extraction quality metrics
+truth_form = PydanticForm(..., disabled=False, metrics_dict={})
+llm_form = PydanticForm(..., disabled=True, metrics_dict=extraction_metrics)
+```
+
+**Document Extraction Comparison:**
+```python
+# Left: Manual annotation
+# Right: Automated LLM extraction
+manual_form = PydanticForm(..., initial_values=manual_annotation)
+auto_form = PydanticForm(..., initial_values=llm_extraction, metrics_dict=quality_scores)
+```
+
+**Annotation Correction Workflow:**
+```python
+# Left: Correctable ground truth
+# Right: LLM output with confidence scores
+ground_truth_form = PydanticForm(..., disabled=False)
+llm_output_form = PydanticForm(..., disabled=True, metrics_dict=confidence_scores)
+```
+
+See `examples/comparison_example.py` for a complete LLM extraction evaluation interface demonstration.
 
 ## Setting Initial Values
 
@@ -625,8 +948,19 @@ form_renderer = PydanticForm(
 | `label_colors` | `Optional[Dict[str, str]]` | `None` | Mapping of field names to CSS colors or Tailwind classes |
 | `exclude_fields` | `Optional[List[str]]` | `None` | List of field names to exclude from rendering (auto-injected on submission) |
 | `spacing` | `SpacingValue` | `"normal"` | Spacing theme: `"normal"`, `"compact"`, or `SpacingTheme` enum |
+| `metrics_dict` | `Optional[Dict[str, Dict]]` | `None` | Field metrics for highlighting and tooltips |
 
-### Key Methods
+### ComparisonForm Constructor
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | `str` | Required | Unique identifier for the comparison form |
+| `left_form` | `PydanticForm` | Required | Form to display on the left side |
+| `right_form` | `PydanticForm` | Required | Form to display on the right side |
+| `left_label` | `str` | `"Left"` | Label for the left form |
+| `right_label` | `str` | `"Right"` | Label for the right form |
+
+### PydanticForm Methods
 
 | Method | Purpose |
 |--------|---------|
@@ -637,11 +971,24 @@ form_renderer = PydanticForm(
 | `parse(form_dict)` | Parse raw form data into model-compatible dictionary |
 | `model_validate_request(req)` | Extract, parse, and validate form data from request |
 
+### ComparisonForm Methods
+
+| Method | Purpose |
+|--------|---------|
+| `render_inputs()` | Generate side-by-side form inputs |
+| `form_wrapper(content)` | Wrap content with comparison form structure |
+| `left_reset_button(text=None, **kwargs)` | Reset button for left form |
+| `right_reset_button(text=None, **kwargs)` | Reset button for right form |
+| `left_refresh_button(text=None, **kwargs)` | Refresh button for left form |
+| `right_refresh_button(text=None, **kwargs)` | Refresh button for right form |
+| `register_routes(app)` | Register HTMX endpoints for both forms |
+
 ### Utility Functions
 
 | Function | Purpose |
 |----------|---------|
 | `list_manipulation_js()` | JavaScript for list reordering and toggle functionality |
+| `comparison_form_js()` | JavaScript for comparison form accordion synchronization |
 | `default_dict_for_model(model_class)` | Generate default values for all fields in a model |
 | `default_for_annotation(annotation)` | Get sensible default for a type annotation |
 

@@ -1,5 +1,34 @@
 # Release Notes
 
+## Version 0.3.0 (2025-06-23)
+
+### 🎉 Major Features
+
+#### Metrics and Highlighting System
+- **NEW**: Advanced metrics support with `metrics_dict` parameter
+  - Field-level metrics with visual highlighting through colored bars
+  - Supports numeric metrics with automatic color scaling
+  - Nested field metrics support for complex data structures
+
+#### ComparisonForm Component
+- **NEW**: Side-by-side form comparison functionality
+  - Dual-pane interface for comparing two related forms
+  - Synchronized accordion states between left and right forms
+  - Independent reset and refresh buttons for each form
+#### List Enhancement Features
+- **NEW**: List item indexes display for better navigation
+- **NEW**: Number of items counter for list fields
+
+
+### 🔧 Enhancements
+#### Examples & Documentation
+- **NEW**: `comparison_example.py` demonstrating side-by-side form usage
+- **NEW**: `metrics_example.py` showcasing metrics and highlighting features
+- **UPDATED**: `complex_example.py` with enhanced examples and descriptions
+
+
+---
+
 ## Version 0.2.5 (2025-06-19)
 
 - Fix bug with empty lists. Now should parse correctly to empty lists instead of returning defaults.
