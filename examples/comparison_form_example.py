@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field
 
 from fh_pydantic_form import (
     ComparisonForm,
-    MetricEntry,
     PydanticForm,
     comparison_form_js,
     list_manipulation_js,
@@ -78,7 +77,7 @@ class ExtractedProduct(BaseModel):
         default_factory=list, description="Main product features"
     )
     specifications: Specifications = Field(
-        default_factory=Specifications, description="Technical specifications"
+        default_factory=lambda: Specifications(), description="Technical specifications"
     )
 
     # Description and metadata
@@ -91,90 +90,6 @@ class ExtractedProduct(BaseModel):
     extracted_at: datetime.datetime = Field(
         default_factory=datetime.datetime.now, description="Extraction timestamp"
     )
-
-
-# ============================================================================
-# Evaluation Metrics for Error Analysis
-# ============================================================================
-
-eval_metrics = {
-    # Product info metrics
-    "product": MetricEntry(
-        metric=0.75,
-        comment="Product section: Most fields correct with minor issues",
-    ),
-    "product.name": MetricEntry(
-        metric=0.90,
-        comment="Minor difference: 'Pro Max' vs 'ProMax'",
-    ),
-    "product.brand": MetricEntry(
-        metric=1.0,
-        comment="Brand correctly extracted",
-    ),
-    "product.category": MetricEntry(
-        metric=0.0,
-        comment="Wrong category: 'Electronics' should be 'Sports & Outdoors'",
-    ),
-    "product.price": MetricEntry(
-        metric=0.95,
-        comment="Price extracted but missing cents: 299 vs 299.99",
-    ),
-    "product.in_stock": MetricEntry(
-        metric=1.0,
-        comment="Stock status correct",
-    ),
-    # Features metrics
-    "key_features": MetricEntry(
-        metric=0.60,
-        comment="3 of 5 key features extracted, some paraphrasing",
-    ),
-    "key_features[0]": MetricEntry(
-        metric=1.0,
-        comment="Waterproof feature correctly identified",
-    ),
-    "key_features[1]": MetricEntry(
-        metric=0.8,
-        comment="Battery life rounded: '10 hours' vs '10.5 hours'",
-    ),
-    "key_features[2]": MetricEntry(
-        metric=0.0,
-        comment="Missed GPS tracking feature",
-    ),
-    # Specifications metrics
-    "specifications": MetricEntry(
-        metric=0.70,
-        comment="Specifications partially extracted",
-    ),
-    "specifications.weight": MetricEntry(
-        metric=0.0,
-        comment="Weight not found in extraction",
-    ),
-    "specifications.dimensions": MetricEntry(
-        metric=0.85,
-        comment="Dimensions normalized: used 'x' instead of '×'",
-    ),
-    "specifications.material": MetricEntry(
-        metric=1.0,
-        comment="Material correctly identified",
-    ),
-    "specifications.warranty": MetricEntry(
-        metric=0.5,
-        comment="Warranty period incomplete: '1 year' vs '1 year limited'",
-    ),
-    # Other fields
-    "description": MetricEntry(
-        metric=0.75,
-        comment="Description paraphrased, lost some marketing language",
-    ),
-    "target_audience": MetricEntry(
-        metric=0.0,
-        comment="Target audience not extracted from listing",
-    ),
-    "extraction_confidence": MetricEntry(
-        metric=0.73,
-        comment="Overall confidence: 73%",
-    ),
-}
 
 
 # ============================================================================
@@ -248,6 +163,94 @@ generated_output = ExtractedProduct(
     extraction_confidence=0.73,
     source_url="https://example.com/products/fittech-tracker-pro-max",
 )
+
+
+# ============================================================================
+# Evaluation Metrics for Error Analysis
+# ============================================================================
+
+eval_metrics = {
+    # Product info metrics
+    "product": {
+        "metric": 0.75,
+        "comment": "FIELD_AGGREGATE: 4/5 subfields correct, 1 categorical error detected",
+    },
+    "product.name": {
+        "metric": 0.90,
+        "comment": "STRING_SIMILARITY: Minor spacing difference detected: 'Pro Max' vs 'ProMax'",
+    },
+    "product.brand": {
+        "metric": 1.0,
+        "comment": "EXACT_MATCH: Brand name extracted correctly",
+    },
+    "product.category": {
+        "metric": 0.0,
+        "comment": "CATEGORY_ERROR: Predicted 'Electronics', expected 'Sports & Outdoors'",
+    },
+    "product.price": {
+        "metric": 0.95,
+        "comment": "NUMERIC_PRECISION: Price extracted but precision loss: 299.0 vs 299.99",
+    },
+    "product.in_stock": {
+        "metric": 1.0,
+        "comment": "BOOLEAN_MATCH: Stock status correctly identified as True",
+    },
+    # Features metrics
+    "key_features": {
+        "metric": 0.60,
+        "comment": "LIST_COVERAGE: 3/5 expected features extracted, 2 missing items detected",
+    },
+    "key_features[0]": {
+        "metric": 1.0,
+        "comment": "FEATURE_MATCH: Waterproof specification correctly extracted",
+    },
+    "key_features[1]": {
+        "metric": 0.80,
+        "comment": "NUMERIC_APPROXIMATION: Battery life rounded down: 10.0 vs 10.5 hours",
+    },
+    "key_features.missing_items": {
+        "metric": 0.0,
+        "comment": "MISSING_FEATURES: 'Built-in GPS tracking', 'Sleep quality analysis' not extracted",
+    },
+    # Specifications metrics
+    "specifications": {
+        "metric": 0.70,
+        "comment": "FIELD_AGGREGATE: 4/5 subfields extracted correctly, 1 null value detected",
+    },
+    "specifications.weight": {
+        "metric": 0.0,
+        "comment": "NULL_VALUE: Weight field not extracted from source",
+    },
+    "specifications.dimensions": {
+        "metric": 0.85,
+        "comment": "FORMAT_NORMALIZATION: Separator difference: 'x' vs '×' symbols",
+    },
+    "specifications.material": {
+        "metric": 1.0,
+        "comment": "EXACT_MATCH: Material description correctly extracted",
+    },
+    "specifications.color": {
+        "metric": 1.0,
+        "comment": "EXACT_MATCH: Color options correctly extracted",
+    },
+    "specifications.warranty": {
+        "metric": 0.67,
+        "comment": "PARTIAL_MATCH: Duration correct but qualifier missing: '1 year' vs '1 year limited'",
+    },
+    # Other fields
+    "description": {
+        "metric": 0.78,
+        "comment": "SEMANTIC_SIMILARITY: Content preserved but marketing language simplified",
+    },
+    "target_audience": {
+        "metric": 0.0,
+        "comment": "NULL_VALUE: Target audience field not extracted from source",
+    },
+    "extraction_confidence": {
+        "metric": 1.0,
+        "comment": "CONFIDENCE_SCORE: Self-reported confidence matches actual performance: 0.73",
+    },
+}
 
 
 # ============================================================================
