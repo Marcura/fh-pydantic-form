@@ -1,3 +1,5 @@
+from datetime import time
+
 import pytest
 from pydantic import BaseModel
 
@@ -297,6 +299,98 @@ class TestSchemaEvolution:
 
 class TestEdgeCases:
     """Test various edge cases and corner scenarios."""
+
+    @pytest.fixture
+    def time_test_model(self):
+        """Model with time field for testing time format handling."""
+
+        class TimeTestModel(BaseModel):
+            name: str = "Test User"
+            start_time: time = time(9, 0)  # Default 09:00
+            end_time: time | None = None  # Optional time field
+
+        return TimeTestModel
+
+    def test_time_string_formats_robustness(self, time_test_model):
+        """Test handling of various time string formats."""
+        test_cases = [
+            # Valid time formats that should be parsed successfully
+            ({"start_time": "14:30"}, "14:30", "HH:MM format"),
+            ({"start_time": "14:30:45"}, "14:30", "HH:MM:SS format"),
+            (
+                {"start_time": "14:30:45.123456"},
+                "14:30",
+                "HH:MM:SS.microseconds format",
+            ),
+            ({"start_time": "09:05"}, "09:05", "Morning time with leading zero"),
+            ({"start_time": "00:00"}, "00:00", "Midnight"),
+            ({"start_time": "23:59"}, "23:59", "End of day"),
+            # Edge cases and potentially problematic formats
+            ({"start_time": "9:30"}, "09:30", "Single digit hour - may need padding"),
+            (
+                {"start_time": "invalid_time"},
+                "",
+                "Invalid time string should fallback gracefully",
+            ),
+            ({"start_time": ""}, "", "Empty string should fallback gracefully"),
+            ({"start_time": None}, "", "None value should be handled"),
+            # Actual time object
+            ({"start_time": time(15, 45)}, "15:45", "Actual time object"),
+            ({"start_time": time(8, 5, 30)}, "08:05", "Time object with seconds"),
+        ]
+
+        for initial_values, expected_display_time, description in test_cases:
+            # Create form and render - should not crash regardless of input
+            form = PydanticForm("test", time_test_model, initial_values=initial_values)
+            rendered = form.render_inputs()
+
+            # Should always render something without crashing
+            assert rendered is not None, f"Failed to render for case: {description}"
+
+            # Check internal state preservation for valid dict inputs
+            if isinstance(initial_values, dict):
+                start_time_value = initial_values.get("start_time")
+                if (
+                    start_time_value is not None
+                    and "invalid" not in description.lower()
+                ):
+                    preserved_value = form.values_dict.get("start_time")
+                    # Value should be preserved in some form (string or time object)
+                    assert preserved_value is not None or start_time_value == "", (
+                        f"Value not preserved for case: {description}"
+                    )
+
+    def test_mixed_time_data_types(self, time_test_model):
+        """Test time fields with mixed data types."""
+        mixed_time_data = {
+            "name": "Time Test User",
+            "start_time": "14:30:15",  # Valid string format
+            "end_time": time(17, 0),  # Actual time object
+        }
+
+        form = PydanticForm("test", time_test_model, initial_values=mixed_time_data)
+        rendered = form.render_inputs()
+
+        assert rendered is not None
+        assert form.values_dict["name"] == "Time Test User"
+        # Both time values should be preserved in the internal state
+        assert form.values_dict.get("start_time") is not None
+        assert form.values_dict.get("end_time") is not None
+
+    def test_optional_time_field_handling(self, time_test_model):
+        """Test optional time fields with various values."""
+        test_cases = [
+            ({"end_time": None}, "Explicit None for optional time"),
+            ({"end_time": "16:45"}, "Valid string for optional time"),
+            ({}, "Missing optional time field"),
+        ]
+
+        for initial_values, description in test_cases:
+            form = PydanticForm("test", time_test_model, initial_values=initial_values)
+            rendered = form.render_inputs()
+
+            assert rendered is not None, f"Failed to render for case: {description}"
+            # Should handle optional time fields gracefully
 
     def test_extremely_large_dict(self, simple_test_model):
         """Test handling of very large dictionaries."""

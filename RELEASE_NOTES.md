@@ -1,5 +1,11 @@
 # Release Notes
 
+
+
+## Version 0.3.1 (2025-06-24)
+
+- fix datetime.time renderer when format is not HH:MM 
+
 ## Version 0.3.0 (2025-06-23)
 
 ### 🎉 Major Features

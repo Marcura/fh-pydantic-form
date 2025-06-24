@@ -820,11 +820,19 @@ class TimeFieldRenderer(BaseFieldRenderer):
             A TimeInput component appropriate for time values
         """
         formatted_value = ""
-        if (
-            isinstance(self.value, str) and len(self.value) == 5
-        ):  # Basic check for HH:MM format
-            # Assume it's the correct string format from the form
-            formatted_value = self.value
+        if isinstance(self.value, str):
+            # Try to parse the time string using various formats
+            time_formats = ["%H:%M", "%H:%M:%S", "%H:%M:%S.%f"]
+
+            for fmt in time_formats:
+                try:
+                    from datetime import datetime
+
+                    parsed_time = datetime.strptime(self.value, fmt).time()
+                    formatted_value = parsed_time.strftime("%H:%M")
+                    break
+                except ValueError:
+                    continue
         elif isinstance(self.value, time):
             formatted_value = self.value.strftime("%H:%M")  # HH:MM
 
