@@ -503,6 +503,9 @@ This can be useful for e.g. highlighting the values of different fields in a pdf
 
 `fh-pydantic-form` provides a powerful metrics system for visual highlighting of form fields based on extraction quality scores and confidence assessments. This is particularly useful for evaluating LLM structured output extraction, comparing generated data against ground truth, and building quality assessment interfaces.
 
+<img width="796" alt="image" src="https://github.com/user-attachments/assets/df2f8623-991d-45b1-80d8-5c7239187a74" />
+
+
 ### Basic Metrics Usage
 
 ```python
@@ -686,6 +689,9 @@ See `examples/metrics_example.py` for a comprehensive demonstration of all metri
 ## ComparisonForm
 
 The `ComparisonForm` component provides side-by-side comparison of two related forms, perfect for evaluating LLM structured output against ground truth, annotation correction workflows, and comparing extraction results.
+
+
+<img width="1177" alt="image" src="https://github.com/user-attachments/assets/75020059-0d4d-4519-9c71-70a082d3242e" />
 
 ### Basic Usage
 
