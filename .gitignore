@@ -132,3 +132,5 @@ uv.lock
 
 .sesskey
 *.db
+*.db-shm
+*.db-wal
