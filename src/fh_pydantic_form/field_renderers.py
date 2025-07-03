@@ -603,7 +603,7 @@ class StringFieldRenderer(BaseFieldRenderer):
         Render input element for the field
 
         Returns:
-            A TextInput component appropriate for string values
+            A TextArea component appropriate for string values
         """
         # is_field_required = (
         #     not self.is_optional
@@ -625,21 +625,36 @@ class StringFieldRenderer(BaseFieldRenderer):
         if input_spacing_cls:
             input_cls_parts.append(input_spacing_cls)
 
+        # Calculate appropriate number of rows based on content
+        content = self.value or ""
+        if content:
+            # Count line breaks
+            line_count = len(content.split("\n"))
+            # Also consider content length for very long single lines (assuming ~60 chars per line)
+            char_count = len(content)
+            estimated_lines = max(line_count, (char_count // 60) + 1)
+            # Compact bounds: minimum 1 row, maximum 3 rows
+            rows = min(max(estimated_lines, 1), 3)
+        else:
+            # Single row for empty content
+            rows = 1
+
         input_attrs = {
-            "value": self.value or "",
+            # "value": content,
             "id": self.field_name,
             "name": self.field_name,
-            "type": "text",
             "placeholder": placeholder_text,
             "required": is_field_required,
             "cls": " ".join(input_cls_parts),
+            "rows": rows,
+            "style": "resize: vertical; min-height: 2.5rem; padding: 0.5rem; line-height: 1.25;",
         }
 
         # Only add the disabled attribute if the field should actually be disabled
         if self.disabled:
             input_attrs["disabled"] = True
 
-        return mui.Input(**input_attrs)
+        return mui.TextArea(content, **input_attrs)
 
 
 class NumberFieldRenderer(BaseFieldRenderer):
