@@ -1,5 +1,6 @@
-import pytest
 import re
+
+import pytest
 
 
 @pytest.mark.integration
@@ -18,19 +19,26 @@ class TestNestedListRoutes:
         assert response.status_code == 200
         dom = soup(response.text)
 
-        # Should contain an input field for the new tag with stable placeholder ID
+        # Should contain a textarea field for the new tag with stable placeholder ID
         input_elem = dom.find(
-            "input", {"name": re.compile(r"main_address_tags_new_\d+")}
+            "textarea",
+            {"name": re.compile(r"test_complex_nested_main_address_tags_new_\d+")},
         )
         assert input_elem is not None
-        assert input_elem.get("type") == "text"
 
         # Should not contain error messages
         assert "Invalid" not in response.text
         assert "Error" not in response.text
 
         # Should contain proper accordion structure
-        li_elem = dom.find("li", {"id": re.compile(r"main_address_tags_new_\d+")})
+        li_elem = dom.find(
+            "li",
+            {
+                "id": re.compile(
+                    r"test_complex_nested_main_address_.*tags_new_\d+.*_card"
+                )
+            },
+        )
         assert li_elem is not None
 
     def test_add_tag_to_other_address(
@@ -45,15 +53,22 @@ class TestNestedListRoutes:
         assert response.status_code == 200
         dom = soup(response.text)
 
-        # Should contain an input field for the new tag in the nested structure
+        # Should contain a textarea field for the new tag in the nested structure
         input_elem = dom.find(
-            "input", {"name": re.compile(r"other_addresses_0_tags_new_\d+")}
+            "textarea",
+            {"name": re.compile(r"test_complex_nested_other_addresses_0_tags_new_\d+")},
         )
         assert input_elem is not None
-        assert input_elem.get("type") == "text"
 
         # Should have proper list item structure
-        li_elem = dom.find("li", {"id": re.compile(r"other_addresses_0_tags_new_\d+")})
+        li_elem = dom.find(
+            "li",
+            {
+                "id": re.compile(
+                    r"test_complex_nested_other_addresses_.*tags_new_\d+.*_card"
+                )
+            },
+        )
         assert li_elem is not None
 
         # Should not show validation errors
@@ -160,8 +175,14 @@ class TestNestedListRoutes:
         dom1 = soup(response1.text)
         dom2 = soup(response2.text)
 
-        input1 = dom1.find("input", {"name": re.compile(r"main_address_tags_new_\d+")})
-        input2 = dom2.find("input", {"name": re.compile(r"main_address_tags_new_\d+")})
+        input1 = dom1.find(
+            "textarea",
+            {"name": re.compile(r"test_complex_nested_main_address_tags_new_\d+")},
+        )
+        input2 = dom2.find(
+            "textarea",
+            {"name": re.compile(r"test_complex_nested_main_address_tags_new_\d+")},
+        )
 
         assert input1 is not None
         assert input2 is not None
@@ -186,7 +207,14 @@ class TestNestedListRoutes:
 
         # The response should be targeting the correct container
         # Check that the structure allows for proper JavaScript manipulation
-        li_elem = dom.find("li", {"id": re.compile(r"main_address_tags_new_\d+")})
+        li_elem = dom.find(
+            "li",
+            {
+                "id": re.compile(
+                    r"test_complex_nested_main_address_.*tags_new_\d+.*_card"
+                )
+            },
+        )
         assert li_elem is not None
 
         # Should have proper classes for styling and JavaScript hooks
@@ -239,12 +267,20 @@ class TestNestedListRoutes:
         dom = soup(response.text)
 
         # Should have accordion structure
-        li_elem = dom.find("li", {"id": re.compile(r"main_address_tags_new_\d+")})
+        li_elem = dom.find(
+            "li",
+            {
+                "id": re.compile(
+                    r"test_complex_nested_main_address_.*tags_new_\d+.*_card"
+                )
+            },
+        )
         assert li_elem is not None
 
-        # Should contain the expected input element
+        # Should contain the expected textarea element
         input_elem = dom.find(
-            "input", {"name": re.compile(r"main_address_tags_new_\d+")}
+            "textarea",
+            {"name": re.compile(r"test_complex_nested_main_address_tags_new_\d+")},
         )
         assert input_elem is not None
 
