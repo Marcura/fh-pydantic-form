@@ -1639,6 +1639,33 @@ class ListFieldRenderer(BaseFieldRenderer):
             is_model = hasattr(item_type, "model_fields")
 
             # --- Generate item summary for the accordion title ---
+            # Create a user-friendly display index
+            if isinstance(idx, str) and idx.startswith("new_"):
+                # Get the type name for new items
+                if is_model:
+                    # For BaseModel types, use the class name
+                    type_name = item_type.__name__
+                else:
+                    # For simple types, use a friendly name
+                    type_name_map = {
+                        str: "String",
+                        int: "Number",
+                        float: "Number",
+                        bool: "Boolean",
+                        date: "Date",
+                        time: "Time",
+                    }
+                    type_name = type_name_map.get(
+                        item_type,
+                        item_type.__name__
+                        if hasattr(item_type, "__name__")
+                        else str(item_type),
+                    )
+
+                display_idx = f"New {type_name}"
+            else:
+                display_idx = str(idx)
+
             if is_model:
                 try:
                     # Determine how to get the string representation based on item type
@@ -1659,7 +1686,7 @@ class ListFieldRenderer(BaseFieldRenderer):
 
                     if model_for_display is not None:
                         # Use the model's __str__ method
-                        item_summary_text = f"{idx}: {str(model_for_display)}"
+                        item_summary_text = f"{display_idx}: {str(model_for_display)}"
                     else:
                         # Fallback for None or unexpected types
                         item_summary_text = f"{item_type.__name__}: (Unknown format: {type(item).__name__})"
@@ -1684,7 +1711,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                     )
                     item_summary_text = f"{item_type.__name__}: (Error displaying item)"
             else:
-                item_summary_text = f"{idx}: {str(item)}"
+                item_summary_text = f"{display_idx}: {str(item)}"
 
             # --- Render item content elements ---
             item_content_elements = []

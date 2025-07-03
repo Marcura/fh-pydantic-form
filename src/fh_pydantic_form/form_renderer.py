@@ -306,26 +306,28 @@ class PydanticForm(Generic[ModelType]):
         """
         self.values_dict = self.initial_values_dict.copy()
 
-    def _clone_with_values(self, values: Dict[str, Any]) -> "PydanticForm":
+    def with_initial_values(
+        self, initial_values: Optional[Union[ModelType, Dict[str, Any]]] = None
+    ) -> "PydanticForm":
         """
-        Create a copy of this renderer with the same configuration but different values.
+        Create a new PydanticForm instance with the same configuration but different initial values.
 
-        This preserves all constructor arguments (label_colors, custom_renderers, etc.)
-        to avoid configuration drift during refresh operations.
+        This preserves all constructor arguments (label_colors, custom_renderers, spacing, etc.)
+        while allowing you to specify new initial values. This is useful for reusing form
+        configurations with different data.
 
         Args:
-            values: New values dictionary to use in the cloned renderer
+            initial_values: New initial values as BaseModel instance or dict.
+                           Same format as the constructor accepts.
 
         Returns:
-            A new PydanticForm instance with identical configuration but updated values
+            A new PydanticForm instance with identical configuration but updated initial values
         """
-        # Get custom renderers if they were registered (not stored directly on instance)
-        # We'll rely on global registry state being preserved
-
+        # Create the new instance with the same configuration
         clone = PydanticForm(
             form_name=self.name,
             model_class=self.model_class,
-            initial_values=None,  # Will be set via values_dict below
+            initial_values=initial_values,  # Pass through to constructor for proper handling
             custom_renderers=None,  # Registry is global, no need to re-register
             disabled=self.disabled,
             disabled_fields=self.disabled_fields,
@@ -334,9 +336,6 @@ class PydanticForm(Generic[ModelType]):
             spacing=self.spacing,
             metrics_dict=self.metrics_dict,
         )
-
-        # Set the values directly
-        clone.values_dict = values
 
         return clone
 
@@ -551,7 +550,7 @@ class PydanticForm(Generic[ModelType]):
         self.values_dict = parsed_data.copy()
 
         # Create temporary renderer with same configuration but updated values
-        temp_renderer = self._clone_with_values(parsed_data)
+        temp_renderer = self.with_initial_values(parsed_data)
 
         refreshed_inputs_component = temp_renderer.render_inputs()
 
@@ -585,18 +584,7 @@ class PydanticForm(Generic[ModelType]):
         logger.info(f"Resetting form '{self.name}' to initial values")
 
         # Create temporary renderer with original initial dict
-        temp_renderer = PydanticForm(
-            form_name=self.name,
-            model_class=self.model_class,
-            initial_values=self.initial_values_dict,  # Use dict instead of BaseModel
-            custom_renderers=getattr(self, "custom_renderers", None),
-            disabled=self.disabled,
-            disabled_fields=self.disabled_fields,
-            label_colors=self.label_colors,
-            exclude_fields=self.exclude_fields,
-            spacing=self.spacing,
-            metrics_dict=self.metrics_dict,
-        )
+        temp_renderer = self.with_initial_values(self.initial_values_dict)
 
         reset_inputs_component = temp_renderer.render_inputs()
 
