@@ -832,6 +832,7 @@ class PydanticForm(Generic[ModelType]):
             "hx_swap": "innerHTML",
             "hx_trigger": "click",  # Explicit trigger on click
             "hx_include": "closest form",  # Include all form fields from the enclosing form
+            "hx_preserve": "scroll",
             "uk_tooltip": "Update the form display based on current values (e.g., list item titles)",
             "cls": mui.ButtonT.secondary,
         }
