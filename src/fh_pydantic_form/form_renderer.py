@@ -870,6 +870,7 @@ class PydanticForm(Generic[ModelType]):
             "hx_target": f"#{form_content_wrapper_id}",  # Target the wrapper Div ID
             "hx_swap": "innerHTML",
             "hx_confirm": "Are you sure you want to reset the form to its initial values? Any unsaved changes will be lost.",
+            "hx_preserve": "scroll",
             "uk_tooltip": "Reset the form fields to their original values",
             "cls": mui.ButtonT.destructive,  # Use danger style to indicate destructive action
         }

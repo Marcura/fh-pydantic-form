@@ -598,6 +598,7 @@ class ComparisonForm(Generic[ModelType]):
         kwargs.setdefault("hx_target", f"#{form.name}-inputs-wrapper")
         kwargs.setdefault("hx_swap", "innerHTML")
         kwargs.setdefault("hx_include", prefix_selector)
+        kwargs.setdefault("hx_preserve", "scroll")
 
         # Delegate to the underlying form's button method
         button_method = getattr(form, f"{action}_button")

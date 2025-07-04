@@ -1404,21 +1404,14 @@ class ListFieldRenderer(BaseFieldRenderer):
             label_span.attrs["uk-tooltip"] = description
             label_span.attrs["title"] = description
 
-        # Decorate the label span with the metric badge (bullet)
-        label_span = self._decorate_label(label_span, self.metric_entry)
+        # Metric decoration will be applied to the title_component below
 
-        # Only add refresh icon if we have a form name
-        if form_name:
+        # Only add refresh icon if we have a form name and field is not disabled
+        if form_name and not self.disabled:
             # Create the smaller icon component
             refresh_icon_component = mui.UkIcon(
                 "refresh-ccw",
                 cls="w-3 h-3 text-gray-500 hover:text-blue-600",  # Smaller size
-            )
-
-            # Create the clickable span wrapper for the icon
-            # Use prefix-based selector to include only fields from this form
-            hx_include_selector = (
-                f"form [name^='{self.prefix}']" if self.prefix else "closest form"
             )
 
             # Use override endpoint if provided (for ComparisonForm), otherwise use standard form refresh
@@ -1426,23 +1419,32 @@ class ListFieldRenderer(BaseFieldRenderer):
                 self._refresh_endpoint_override or f"/form/{form_name}/refresh"
             )
 
-            refresh_icon_trigger = fh.Span(
+            # Create refresh icon as a button element to match the working refresh button exactly
+            refresh_icon_trigger = mui.Button(
                 refresh_icon_component,
-                cls="ml-1 inline-block align-middle cursor-pointer",  # Add margin, ensure inline-like behavior
+                type="button",  # Prevent form submission
                 hx_post=refresh_url,
                 hx_target=f"#{form_name}-inputs-wrapper",
                 hx_swap="innerHTML",
-                hx_include=hx_include_selector,  # Use prefix-based selector
+                hx_trigger="click",  # Explicit trigger on click
+                hx_include="closest form",  # Include all form fields from the enclosing form
+                hx_preserve="scroll",
                 uk_tooltip="Refresh form display to update list summaries",
-                # Prevent accordion toggle on the parent from firing
-                onclick="event.stopPropagation();",
+                cls="uk-button-link uk-button-small p-0 ml-1",  # Minimal button styling
             )
 
-            # Combine label and icon
+            # Combine label and icon - put refresh icon in a separate div to isolate it
             title_component = fh.Div(
-                label_span,  # Use the properly styled label span
-                refresh_icon_trigger,
-                cls="flex items-center",  # Remove cursor-pointer and click handler
+                fh.Div(
+                    label_span,  # Use the properly styled label span
+                    cls="flex-1",  # Take up remaining space
+                ),
+                fh.Div(
+                    refresh_icon_trigger,
+                    cls="flex-shrink-0",  # Don't shrink
+                    onclick="event.stopPropagation();",  # Isolate the refresh icon area
+                ),
+                cls="flex items-center",
             )
         else:
             # If no form name, just use the styled label
