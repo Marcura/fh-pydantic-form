@@ -52,6 +52,11 @@ window.fhpfInitComparisonSync = function initComparisonSync(){
     const sourceLi = ev.target.closest('li');
     if (!sourceLi) return;
 
+    // Skip if this is a nested list item (let mirrorNestedListItems handle it)
+    if (sourceLi.closest('[id$="_items_container"]')) {
+      return;
+    }
+
     // Find our grid-cell wrapper (both left & right share the same data-path)
     const cell = sourceLi.closest('[data-path]');
     if (!cell) return;
@@ -91,7 +96,94 @@ window.fhpfInitComparisonSync = function initComparisonSync(){
       });
   }
 
-  // 3) Wrap the list-toggle so ListFieldRenderer accordions sync too
+  // 3) Sync nested list item accordions (individual items within lists)
+  UIkit.util.on(
+    document,
+    'show hide',
+    '[id$="_items_container"] > li',  // only list items within items containers
+    mirrorNestedListItems
+  );
+
+  function mirrorNestedListItems(ev) {
+    const sourceLi = ev.target.closest('li');
+    if (!sourceLi) return;
+    
+    // Skip if this event was triggered by our own sync
+    if (sourceLi.dataset.syncDisabled) {
+      return;
+    }
+
+    // Find the list container (items_container) that contains this item
+    const listContainer = sourceLi.closest('[id$="_items_container"]');
+    if (!listContainer) return;
+
+    // Find the grid cell wrapper with data-path
+    const cell = listContainer.closest('[data-path]');
+    if (!cell) return;
+    const path = cell.dataset.path;
+
+    // Determine index of this <li> within its list container
+    const listAccordion = sourceLi.parentElement;
+    const idx = Array.prototype.indexOf.call(listAccordion.children, sourceLi);
+    const opening = ev.type === 'show';
+
+    // Mirror on the other side
+    document
+      .querySelectorAll(`[data-path="${path}"]`)
+      .forEach(peerCell => {
+        if (peerCell === cell) return;
+
+        // Find the peer's list container
+        const peerListContainer = peerCell.querySelector('[id$="_items_container"]');
+        if (!peerListContainer) return;
+
+        // The list container IS the accordion itself (not a wrapper around it)
+        let peerListAccordion;
+        if (peerListContainer.hasAttribute('uk-accordion') && peerListContainer.tagName === 'UL') {
+          peerListAccordion = peerListContainer;
+        } else {
+          peerListAccordion = peerListContainer.querySelector('ul[uk-accordion]');
+        }
+        
+        if (!peerListAccordion || idx >= peerListAccordion.children.length) return;
+
+        const peerLi = peerListAccordion.children[idx];
+        const peerContent = peerLi.querySelector('.uk-accordion-content');
+
+        // Prevent event cascading by temporarily disabling our own event listener
+        if (peerLi.dataset.syncDisabled) {
+          return;
+        }
+
+        // Mark this item as being synced to prevent loops
+        peerLi.dataset.syncDisabled = 'true';
+
+        // Check current state and only sync if different
+        const currentlyOpen = peerLi.classList.contains('uk-open');
+        
+        if (currentlyOpen !== opening) {
+          if (opening) {
+            peerLi.classList.add('uk-open');
+            if (peerContent) {
+              peerContent.hidden = false;
+              peerContent.style.height = 'auto';
+            }
+          } else {
+            peerLi.classList.remove('uk-open');
+            if (peerContent) {
+              peerContent.hidden = true;
+            }
+          }
+        }
+
+        // Re-enable sync after a short delay
+        setTimeout(() => {
+          delete peerLi.dataset.syncDisabled;
+        }, 100);
+      });
+  }
+
+  // 4) Wrap the list-toggle so ListFieldRenderer accordions sync too
   if (typeof window.toggleListItems === 'function' && !window.__listSyncWrapped) {
     // guard to only wrap once
     window.__listSyncWrapped = true;
