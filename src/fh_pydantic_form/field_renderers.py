@@ -1419,7 +1419,10 @@ class ListFieldRenderer(BaseFieldRenderer):
                 self._refresh_endpoint_override or f"/form/{form_name}/refresh"
             )
 
-            # Create refresh icon as a button element to match the working refresh button exactly
+            # Get container ID for accordion state preservation
+            container_id = self._container_id()
+
+            # Create refresh icon as a button with aggressive styling reset
             refresh_icon_trigger = mui.Button(
                 refresh_icon_component,
                 type="button",  # Prevent form submission
@@ -1430,7 +1433,13 @@ class ListFieldRenderer(BaseFieldRenderer):
                 hx_include="closest form",  # Include all form fields from the enclosing form
                 hx_preserve="scroll",
                 uk_tooltip="Refresh form display to update list summaries",
-                cls="uk-button-link uk-button-small p-0 ml-1",  # Minimal button styling
+                style="all: unset; display: inline-flex; align-items: center; cursor: pointer; padding: 0 0.5rem; margin-left: 0.5rem;",
+                **{
+                    "hx-on::before-request": f"window.saveAccordionState && window.saveAccordionState('{container_id}')"
+                },
+                **{
+                    "hx-on::after-swap": f"window.restoreAccordionState && window.restoreAccordionState('{container_id}')"
+                },
             )
 
             # Combine label and icon - put refresh icon in a separate div to isolate it
@@ -1441,7 +1450,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                 ),
                 fh.Div(
                     refresh_icon_trigger,
-                    cls="flex-shrink-0",  # Don't shrink
+                    cls="flex-shrink-0 px-1",  # Don't shrink, add horizontal padding for larger click area
                     onclick="event.stopPropagation();",  # Isolate the refresh icon area
                 ),
                 cls="flex items-center",

@@ -156,6 +156,63 @@ function toggleListItems(containerId) {
     }
 }
 
+// Simple accordion state preservation using item IDs
+window.saveAccordionState = function(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    const openItemIds = [];
+    container.querySelectorAll('li.uk-open').forEach(item => {
+        if (item.id) {
+            openItemIds.push(item.id);
+        }
+    });
+    
+    // Store in sessionStorage with container-specific key
+    sessionStorage.setItem(`accordion_state_${containerId}`, JSON.stringify(openItemIds));
+};
+
+window.restoreAccordionState = function(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    const savedState = sessionStorage.getItem(`accordion_state_${containerId}`);
+    if (!savedState) return;
+    
+    try {
+        const openItemIds = JSON.parse(savedState);
+        
+        // Restore open state for each saved item by ID
+        openItemIds.forEach(itemId => {
+            const item = document.getElementById(itemId);
+            if (item && container.contains(item)) {
+                item.classList.add('uk-open');
+                const content = item.querySelector('.uk-accordion-content');
+                if (content) {
+                    content.hidden = false;
+                    content.style.height = 'auto';
+                }
+            }
+        });
+    } catch (e) {
+        console.warn('Failed to restore accordion state:', e);
+    }
+};
+
+// Save all accordion states in the form
+window.saveAllAccordionStates = function() {
+    document.querySelectorAll('[id$="_items_container"]').forEach(container => {
+        window.saveAccordionState(container.id);
+    });
+};
+
+// Restore all accordion states in the form
+window.restoreAllAccordionStates = function() {
+    document.querySelectorAll('[id$="_items_container"]').forEach(container => {
+        window.restoreAccordionState(container.id);
+    });
+};
+
 // Wait for the DOM to be fully loaded before initializing
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize button states for elements present on initial load
@@ -835,6 +892,12 @@ class PydanticForm(Generic[ModelType]):
             "hx_preserve": "scroll",
             "uk_tooltip": "Update the form display based on current values (e.g., list item titles)",
             "cls": mui.ButtonT.secondary,
+            **{
+                "hx-on::before-request": "window.saveAllAccordionStates && window.saveAllAccordionStates()"
+            },
+            **{
+                "hx-on::after-swap": "window.restoreAllAccordionStates && window.restoreAllAccordionStates()"
+            },
         }
 
         # Update with any additional attributes
