@@ -605,11 +605,7 @@ class StringFieldRenderer(BaseFieldRenderer):
         Returns:
             A TextArea component appropriate for string values
         """
-        # is_field_required = (
-        #     not self.is_optional
-        #     and self.field_info.default is None
-        #     and getattr(self.field_info, "default_factory", None) is None
-        # )
+
         has_default = get_default(self.field_info) is not _UNSET
         is_field_required = not self.is_optional and not has_default
 
@@ -626,12 +622,11 @@ class StringFieldRenderer(BaseFieldRenderer):
             input_cls_parts.append(input_spacing_cls)
 
         # Calculate appropriate number of rows based on content
-        content = self.value or ""
-        if content:
+        if isinstance(self.value, str) and self.value:
             # Count line breaks
-            line_count = len(content.split("\n"))
+            line_count = len(self.value.split("\n"))
             # Also consider content length for very long single lines (assuming ~60 chars per line)
-            char_count = len(content)
+            char_count = len(self.value)
             estimated_lines = max(line_count, (char_count // 60) + 1)
             # Compact bounds: minimum 1 row, maximum 3 rows
             rows = min(max(estimated_lines, 1), 3)
@@ -640,7 +635,7 @@ class StringFieldRenderer(BaseFieldRenderer):
             rows = 1
 
         input_attrs = {
-            # "value": content,
+            # "value": self.value,
             "id": self.field_name,
             "name": self.field_name,
             "placeholder": placeholder_text,
@@ -654,7 +649,7 @@ class StringFieldRenderer(BaseFieldRenderer):
         if self.disabled:
             input_attrs["disabled"] = True
 
-        return mui.TextArea(content, **input_attrs)
+        return mui.TextArea(self.value or "", **input_attrs)
 
 
 class NumberFieldRenderer(BaseFieldRenderer):
