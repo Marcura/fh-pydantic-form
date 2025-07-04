@@ -17,9 +17,9 @@ def test_add_simple_list_item(list_client, htmx_headers, soup):
     li_with_new_id = dom.find("li", {"id": re.compile(r"tags_new_\d+")})
     assert li_with_new_id is not None
 
-    # Should contain an input field
-    input_elem = dom.find("input", {"type": "text"})
-    assert input_elem is not None
+    # Should contain a form field (input or textarea for string fields)
+    form_field = dom.find("input", {"type": "text"}) or dom.find("textarea")
+    assert form_field is not None
 
     # Should contain delete button
     delete_btn = dom.find("button", {"class": re.compile(r"uk-button-danger")})

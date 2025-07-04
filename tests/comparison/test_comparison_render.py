@@ -152,16 +152,19 @@ def test_render_inputs_field_values(render_comparison, soup):
     """Test that field values are rendered correctly."""
     html = render_comparison.render_inputs().__html__()
 
-    # Check left values
-    assert 'value="Original"' in html
-    assert 'value="5"' in html
-    assert 'value="tag1"' in html
-    assert 'value="tag2"' in html
-    assert "Original notes" in html
+    # Check left values - string fields are now in textarea elements, others in input elements
+    # For string fields (like "title"), content is in textarea text
+    assert "Original" in html  # Should be in textarea content
+    assert 'value="5"' in html  # Numbers still use input with value attribute
+    assert "tag1" in html  # List items for strings now use textarea content
+    assert "tag2" in html  # List items for strings now use textarea content
+    assert (
+        "Original notes" in html
+    )  # Notes field (string) should be in textarea content
 
     # Check right values
-    assert 'value="Modified"' in html
-    assert 'value="tag3"' in html
+    assert "Modified" in html  # Should be in textarea content
+    assert "tag3" in html  # List items for strings now use textarea content
 
 
 def test_render_with_excluded_fields():

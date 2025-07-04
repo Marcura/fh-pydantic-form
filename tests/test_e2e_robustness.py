@@ -9,6 +9,41 @@ from starlette.testclient import TestClient
 from fh_pydantic_form import PydanticForm, list_manipulation_js
 
 
+def _find_form_field_value(component, name_attr: str) -> Optional[str]:
+    """
+    Recursively search for a form field (input or textarea) with a specific name attribute
+    and return its value.
+
+    Args:
+        component: FastHTML component to search
+        name_attr: The name attribute to search for
+
+    Returns:
+        The value of the matching form field, or None if not found
+    """
+    if hasattr(component, "tag"):
+        attrs = getattr(component, "attrs", {})
+        if attrs.get("name") == name_attr:
+            if component.tag == "input":
+                return attrs.get("value")
+            elif component.tag == "textarea":
+                # For textarea, content is in the children, not value attribute
+                children = getattr(component, "children", [])
+                if children and len(children) > 0:
+                    return str(children[0])
+                return ""
+
+    # Recursively search children
+    if hasattr(component, "children") and component.children:
+        for child in component.children:
+            result = _find_form_field_value(child, name_attr)
+            if result is not None:
+                return result
+
+    return None
+
+
+# Keep the old function name for backward compatibility, but make it use the new one
 def _find_input_value(component, name_attr: str) -> Optional[str]:
     """
     Recursively search for an input element with a specific name attribute
@@ -21,19 +56,7 @@ def _find_input_value(component, name_attr: str) -> Optional[str]:
     Returns:
         The value attribute of the matching input, or None if not found
     """
-    if hasattr(component, "tag") and component.tag == "input":
-        attrs = getattr(component, "attrs", {})
-        if attrs.get("name") == name_attr:
-            return attrs.get("value")
-
-    # Recursively search children
-    if hasattr(component, "children") and component.children:
-        for child in component.children:
-            result = _find_input_value(child, name_attr)
-            if result is not None:
-                return result
-
-    return None
+    return _find_form_field_value(component, name_attr)
 
 
 def _find_element_with_id(component, element_id: str):
