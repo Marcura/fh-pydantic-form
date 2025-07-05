@@ -16,6 +16,10 @@
     <summary>show demo screen recording</summary>
 <video src="https://private-user-images.githubusercontent.com/27999937/436237879-feabf388-22af-43e6-b054-f103b8a1b6e6.mp4" controls="controls" style="max-width: 730px;">
 </video>
+
+https://github.com/user-attachments/assets/a00096d9-47ee-485b-af0a-e74838ec6c6d
+
+
 </details>
 
 ## Table of Contents
