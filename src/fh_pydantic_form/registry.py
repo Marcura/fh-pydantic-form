@@ -39,10 +39,7 @@ class FieldRendererRegistry:
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
-            logger.debug("Creating new FieldRendererRegistry singleton instance.")
             cls._instance = super().__new__(cls)
-        else:
-            logger.debug("Returning existing FieldRendererRegistry singleton instance.")
         return cls._instance
 
     @classmethod

@@ -156,6 +156,63 @@ function toggleListItems(containerId) {
     }
 }
 
+// Simple accordion state preservation using item IDs
+window.saveAccordionState = function(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    const openItemIds = [];
+    container.querySelectorAll('li.uk-open').forEach(item => {
+        if (item.id) {
+            openItemIds.push(item.id);
+        }
+    });
+    
+    // Store in sessionStorage with container-specific key
+    sessionStorage.setItem(`accordion_state_${containerId}`, JSON.stringify(openItemIds));
+};
+
+window.restoreAccordionState = function(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    const savedState = sessionStorage.getItem(`accordion_state_${containerId}`);
+    if (!savedState) return;
+    
+    try {
+        const openItemIds = JSON.parse(savedState);
+        
+        // Restore open state for each saved item by ID
+        openItemIds.forEach(itemId => {
+            const item = document.getElementById(itemId);
+            if (item && container.contains(item)) {
+                item.classList.add('uk-open');
+                const content = item.querySelector('.uk-accordion-content');
+                if (content) {
+                    content.hidden = false;
+                    content.style.height = 'auto';
+                }
+            }
+        });
+    } catch (e) {
+        console.warn('Failed to restore accordion state:', e);
+    }
+};
+
+// Save all accordion states in the form
+window.saveAllAccordionStates = function() {
+    document.querySelectorAll('[id$="_items_container"]').forEach(container => {
+        window.saveAccordionState(container.id);
+    });
+};
+
+// Restore all accordion states in the form
+window.restoreAllAccordionStates = function() {
+    document.querySelectorAll('[id$="_items_container"]').forEach(container => {
+        window.restoreAccordionState(container.id);
+    });
+};
+
 // Wait for the DOM to be fully loaded before initializing
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize button states for elements present on initial load
@@ -306,26 +363,28 @@ class PydanticForm(Generic[ModelType]):
         """
         self.values_dict = self.initial_values_dict.copy()
 
-    def _clone_with_values(self, values: Dict[str, Any]) -> "PydanticForm":
+    def with_initial_values(
+        self, initial_values: Optional[Union[ModelType, Dict[str, Any]]] = None
+    ) -> "PydanticForm":
         """
-        Create a copy of this renderer with the same configuration but different values.
+        Create a new PydanticForm instance with the same configuration but different initial values.
 
-        This preserves all constructor arguments (label_colors, custom_renderers, etc.)
-        to avoid configuration drift during refresh operations.
+        This preserves all constructor arguments (label_colors, custom_renderers, spacing, etc.)
+        while allowing you to specify new initial values. This is useful for reusing form
+        configurations with different data.
 
         Args:
-            values: New values dictionary to use in the cloned renderer
+            initial_values: New initial values as BaseModel instance or dict.
+                           Same format as the constructor accepts.
 
         Returns:
-            A new PydanticForm instance with identical configuration but updated values
+            A new PydanticForm instance with identical configuration but updated initial values
         """
-        # Get custom renderers if they were registered (not stored directly on instance)
-        # We'll rely on global registry state being preserved
-
+        # Create the new instance with the same configuration
         clone = PydanticForm(
             form_name=self.name,
             model_class=self.model_class,
-            initial_values=None,  # Will be set via values_dict below
+            initial_values=initial_values,  # Pass through to constructor for proper handling
             custom_renderers=None,  # Registry is global, no need to re-register
             disabled=self.disabled,
             disabled_fields=self.disabled_fields,
@@ -334,9 +393,6 @@ class PydanticForm(Generic[ModelType]):
             spacing=self.spacing,
             metrics_dict=self.metrics_dict,
         )
-
-        # Set the values directly
-        clone.values_dict = values
 
         return clone
 
@@ -349,19 +405,14 @@ class PydanticForm(Generic[ModelType]):
         """
         form_inputs = []
         registry = FieldRendererRegistry()  # Get singleton instance
-        logger.debug(
-            f"Starting render_inputs for form '{self.name}' with {len(self.model_class.model_fields)} fields"
-        )
 
         for field_name, field_info in self.model_class.model_fields.items():
             # Skip excluded fields
             if field_name in self.exclude_fields:
-                logger.debug(f"Skipping excluded field: {field_name}")
                 continue
 
             # Skip SkipJsonSchema fields (they should not be rendered in the form)
             if _is_skip_json_schema_field(field_info):
-                logger.debug(f"Skipping SkipJsonSchema field: {field_name}")
                 continue
 
             # Only use what was explicitly provided in initial values
@@ -375,35 +426,16 @@ class PydanticForm(Generic[ModelType]):
                 field_name in self.values_dict if self.values_dict else False
             )
 
-            # Log the initial value type and a summary for debugging
-            if initial_value is not None:
-                value_type = type(initial_value).__name__
-                if isinstance(initial_value, (list, dict)):
-                    value_size = f"size={len(initial_value)}"
-                else:
-                    value_size = ""
-                logger.debug(
-                    f"Field '{field_name}': {value_type} {value_size} (provided: {field_was_provided})"
-                )
-            else:
-                logger.debug(
-                    f"Field '{field_name}': None (provided: {field_was_provided})"
-                )
-
             # Only use defaults if field was not provided at all
             if not field_was_provided:
                 # Field not provided - use model defaults
                 if field_info.default is not None:
                     initial_value = field_info.default
-                    logger.debug(f"  - Using default value for '{field_name}'")
                 elif getattr(field_info, "default_factory", None) is not None:
                     try:
                         default_factory = field_info.default_factory
                         if callable(default_factory):
                             initial_value = default_factory()
-                            logger.debug(
-                                f"  - Using default_factory for '{field_name}'"
-                            )
                         else:
                             initial_value = None
                             logger.warning(
@@ -428,9 +460,6 @@ class PydanticForm(Generic[ModelType]):
 
             # Determine if this specific field should be disabled
             is_field_disabled = self.disabled or (field_name in self.disabled_fields)
-            logger.debug(
-                f"Field '{field_name}' disabled state: {is_field_disabled} (Global: {self.disabled}, Specific: {field_name in self.disabled_fields})"
-            )
 
             # Get label color for this field if specified
             label_color = self.label_colors.get(field_name)
@@ -460,7 +489,6 @@ class PydanticForm(Generic[ModelType]):
 
         # Define the ID for the wrapper div - this is what the HTMX request targets
         form_content_wrapper_id = f"{self.name}-inputs-wrapper"
-        logger.debug(f"Creating form inputs wrapper with ID: {form_content_wrapper_id}")
 
         # Create the wrapper div and apply compact styling if needed
         wrapped = self._compact_wrapper(
@@ -489,11 +517,6 @@ class PydanticForm(Generic[ModelType]):
             for key, value in data.items()
             if key.startswith(self.base_prefix)
         }
-
-        logger.debug(
-            f"Filtered form data for '{self.name}': "
-            f"{len(data)} keys -> {len(filtered)} keys"
-        )
 
         return filtered
 
@@ -551,7 +574,7 @@ class PydanticForm(Generic[ModelType]):
         self.values_dict = parsed_data.copy()
 
         # Create temporary renderer with same configuration but updated values
-        temp_renderer = self._clone_with_values(parsed_data)
+        temp_renderer = self.with_initial_values(parsed_data)
 
         refreshed_inputs_component = temp_renderer.render_inputs()
 
@@ -585,18 +608,7 @@ class PydanticForm(Generic[ModelType]):
         logger.info(f"Resetting form '{self.name}' to initial values")
 
         # Create temporary renderer with original initial dict
-        temp_renderer = PydanticForm(
-            form_name=self.name,
-            model_class=self.model_class,
-            initial_values=self.initial_values_dict,  # Use dict instead of BaseModel
-            custom_renderers=getattr(self, "custom_renderers", None),
-            disabled=self.disabled,
-            disabled_fields=self.disabled_fields,
-            label_colors=self.label_colors,
-            exclude_fields=self.exclude_fields,
-            spacing=self.spacing,
-            metrics_dict=self.metrics_dict,
-        )
+        temp_renderer = self.with_initial_values(self.initial_values_dict)
 
         reset_inputs_component = temp_renderer.render_inputs()
 
@@ -682,7 +694,6 @@ class PydanticForm(Generic[ModelType]):
                 if hasattr(initial_val, "model_dump"):
                     initial_val = initial_val.model_dump()
                 data[field_name] = initial_val
-                logger.debug(f"Injected initial value for missing field '{field_name}'")
                 continue
 
             # Second priority: use model defaults
@@ -692,18 +703,13 @@ class PydanticForm(Generic[ModelType]):
                 if hasattr(default_val, "model_dump"):
                     default_val = default_val.model_dump()
                 data[field_name] = default_val
-                logger.debug(
-                    f"Injected model default value for missing field '{field_name}'"
-                )
             else:
                 # Check if this is a SkipJsonSchema field
                 if _is_skip_json_schema_field(field_info):
-                    logger.debug(
-                        f"No default found for SkipJsonSchema field '{field_name}'"
-                    )
+                    pass  # Skip fields don't need defaults
                 else:
                     # No default → leave missing; validation will surface error
-                    logger.debug(f"No default found for field '{field_name}'")
+                    pass
 
         return data
 
@@ -722,13 +728,8 @@ class PydanticForm(Generic[ModelType]):
         async def _instance_specific_refresh_handler(req):
             """Handle form refresh request for this specific form instance"""
             # Add entry point logging to confirm the route is being hit
-            logger.debug(f"Received POST request on {refresh_route_path}")
             # Calls the instance method to handle the logic
             return await self.handle_refresh_request(req)
-
-        logger.debug(
-            f"Registered refresh route for form '{self.name}' at {refresh_route_path}"
-        )
 
         # --- Register the form-specific reset route ---
         reset_route_path = f"/form/{self.name}/reset"
@@ -736,17 +737,11 @@ class PydanticForm(Generic[ModelType]):
         @app.route(reset_route_path, methods=["POST"])
         async def _instance_specific_reset_handler(req):
             """Handle form reset request for this specific form instance"""
-            logger.debug(f"Received POST request on {reset_route_path}")
             # Calls the instance method to handle the logic
             return await self.handle_reset_request()
 
-        logger.debug(
-            f"Registered reset route for form '{self.name}' at {reset_route_path}"
-        )
-
         # Try the route with a more explicit pattern
         route_pattern = f"/form/{self.name}/list/{{action}}/{{list_path:path}}"
-        logger.debug(f"Registering list action route: {route_pattern}")
 
         @app.route(route_pattern, methods=["POST", "DELETE"])
         async def list_action(req, action: str, list_path: str):
@@ -774,9 +769,6 @@ class PydanticForm(Generic[ModelType]):
                 return mui.Alert(str(exc), cls=mui.AlertT.error)
 
             if req.method == "DELETE":
-                logger.debug(
-                    f"Received DELETE request for {list_path} for form '{self.name}'"
-                )
                 return fh.Response(status_code=200, content="")
 
             # === add (POST) ===
@@ -844,8 +836,15 @@ class PydanticForm(Generic[ModelType]):
             "hx_swap": "innerHTML",
             "hx_trigger": "click",  # Explicit trigger on click
             "hx_include": "closest form",  # Include all form fields from the enclosing form
+            "hx_preserve": "scroll",
             "uk_tooltip": "Update the form display based on current values (e.g., list item titles)",
             "cls": mui.ButtonT.secondary,
+            **{
+                "hx-on::before-request": "window.saveAllAccordionStates && window.saveAllAccordionStates()"
+            },
+            **{
+                "hx-on::after-swap": "window.restoreAllAccordionStates && window.restoreAllAccordionStates()"
+            },
         }
 
         # Update with any additional attributes
@@ -881,6 +880,7 @@ class PydanticForm(Generic[ModelType]):
             "hx_target": f"#{form_content_wrapper_id}",  # Target the wrapper Div ID
             "hx_swap": "innerHTML",
             "hx_confirm": "Are you sure you want to reset the form to its initial values? Any unsaved changes will be lost.",
+            "hx_preserve": "scroll",
             "uk_tooltip": "Reset the form fields to their original values",
             "cls": mui.ButtonT.destructive,  # Use danger style to indicate destructive action
         }
@@ -914,7 +914,6 @@ class PydanticForm(Generic[ModelType]):
         Raises:
             ValidationError: If validation fails based on the model's rules
         """
-        logger.debug(f"Validating request for form '{self.name}'")
         form_data = await req.form()
         form_dict = dict(form_data)
 

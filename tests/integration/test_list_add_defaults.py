@@ -1,5 +1,6 @@
-import pytest
 import re
+
+import pytest
 
 
 @pytest.mark.integration
@@ -17,10 +18,11 @@ class TestListAddDefaults:
         assert response.status_code == 200
         dom = soup(response.text)
 
-        # Should contain an input field for the new string item with new_ pattern
-        input_elem = dom.find("input", {"name": re.compile(r"tags_new_\d+")})
+        # Should contain a textarea field for the new string item with new_ pattern
+        input_elem = dom.find(
+            "textarea", {"name": re.compile(r"test_simple_list_tags_new_\d+")}
+        )
         assert input_elem is not None
-        assert input_elem.get("type") == "text"
 
         # Should not contain "Invalid" or error messages
         assert "Invalid" not in response.text
@@ -109,9 +111,11 @@ class TestListAddDefaults:
         assert response.status_code == 200
         dom = soup(response.text)
 
-        # Should contain input fields for the new model item
-        input_elem = dom.find("input", {"name": re.compile(r"items_new_\d+")})
-        assert input_elem is not None
+        # Should contain form fields for the new model item (check for accordion structure)
+        li_elem = dom.find(
+            "li", {"id": re.compile(r"test_literal_list_items_new_\d+.*_card")}
+        )
+        assert li_elem is not None
 
         # Should contain select dropdown for literal field
         assert "select" in response.text.lower() or "option" in response.text.lower()
@@ -158,7 +162,9 @@ class TestListAddDefaults:
         assert any(word in response_lower for word in ["address", "item", "new"])
 
         # Should contain proper list item structure
-        li_elem = dom.find("li", {"id": re.compile(r"addresses_new_\d+")})
+        li_elem = dom.find(
+            "li", {"id": re.compile(r"test_address_list_addresses_new_\d+.*_card")}
+        )
         assert li_elem is not None
 
     def test_date_time_fields_get_appropriate_defaults(
@@ -224,8 +230,12 @@ class TestListAddDefaults:
         assert "Invalid" not in response2.text
 
         # Each should have new_ pattern in IDs
-        li1 = dom1.find("li", {"id": re.compile(r"addresses_new_\d+")})
-        li2 = dom2.find("li", {"id": re.compile(r"addresses_new_\d+")})
+        li1 = dom1.find(
+            "li", {"id": re.compile(r"test_address_list_addresses_new_\d+.*_card")}
+        )
+        li2 = dom2.find(
+            "li", {"id": re.compile(r"test_address_list_addresses_new_\d+.*_card")}
+        )
         assert li1 is not None
         assert li2 is not None
 

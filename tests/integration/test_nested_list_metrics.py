@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 
@@ -12,8 +14,11 @@ class TestNestedListMetrics:
         )
         assert response.status_code == 200
         dom = soup(response.text)
-        # Should contain input for new tag
-        input_elem = dom.find("input")
+        # Should contain textarea for new tag
+        input_elem = dom.find(
+            "textarea",
+            {"name": re.compile(r"test_complex_nested_main_address_tags_new_\d+")},
+        )
         assert input_elem is not None
 
     def test_dynamic_list_item_metrics(
@@ -33,9 +38,15 @@ class TestNestedListMetrics:
         assert response2.status_code == 200
         dom1 = soup(response1.text)
         dom2 = soup(response2.text)
-        # Should have different input names/IDs (unless patch_time is used)
-        input1 = dom1.find("input")
-        input2 = dom2.find("input")
+        # Should have different textarea names/IDs (unless patch_time is used)
+        input1 = dom1.find(
+            "textarea",
+            {"name": re.compile(r"test_complex_nested_main_address_tags_new_\d+")},
+        )
+        input2 = dom2.find(
+            "textarea",
+            {"name": re.compile(r"test_complex_nested_main_address_tags_new_\d+")},
+        )
         assert input1 is not None
         assert input2 is not None
         if not patch_time:

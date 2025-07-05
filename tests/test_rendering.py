@@ -199,20 +199,25 @@ def test_render_partially_disabled_simple_form(partially_disabled_simple_client)
     )
 
     # Check that the name and score fields do NOT have the disabled attribute
-    # Get the full input tags for these fields
-    name_input_match = re.search(
+    # Get the full form field tags for these fields (name is textarea, score is input)
+    name_field_match = re.search(
+        r'<textarea[^>]*name="test_simple_partially_disabled_name"[^>]*>', response.text
+    ) or re.search(
         r'<input[^>]*name="test_simple_partially_disabled_name"[^>]*>', response.text
     )
-    score_input_match = re.search(
+    score_field_match = re.search(
         r'<input[^>]*name="test_simple_partially_disabled_score"[^>]*>', response.text
+    ) or re.search(
+        r'<textarea[^>]*name="test_simple_partially_disabled_score"[^>]*>',
+        response.text,
     )
 
-    assert name_input_match is not None
-    assert score_input_match is not None
+    assert name_field_match is not None
+    assert score_field_match is not None
 
     # Verify disabled attribute is not in these tags
-    assert " disabled" not in name_input_match.group(0)
-    assert " disabled" not in score_input_match.group(0)
+    assert " disabled" not in name_field_match.group(0)
+    assert " disabled" not in score_field_match.group(0)
 
 
 def test_render_globally_disabled_complex_form(globally_disabled_complex_client):
@@ -375,21 +380,26 @@ def test_render_partially_disabled_complex_form(partially_disabled_complex_clien
         )
 
     # 4. Check that the non-disabled fields do NOT have the disabled attribute
-    # Get the full input tags for age and is_active
-    age_input_match = re.search(
+    # Get the full form field tags for age (input) and is_active (input)
+    age_field_match = re.search(
         r'<input[^>]*name="test_complex_partially_disabled_age"[^>]*>', response.text
+    ) or re.search(
+        r'<textarea[^>]*name="test_complex_partially_disabled_age"[^>]*>', response.text
     )
-    is_active_input_match = re.search(
+    is_active_field_match = re.search(
         r'<input[^>]*name="test_complex_partially_disabled_is_active"[^>]*>',
+        response.text,
+    ) or re.search(
+        r'<textarea[^>]*name="test_complex_partially_disabled_is_active"[^>]*>',
         response.text,
     )
 
-    assert age_input_match is not None
-    assert is_active_input_match is not None
+    assert age_field_match is not None
+    assert is_active_field_match is not None
 
     # Verify disabled attribute is not in these tags
-    assert " disabled" not in age_input_match.group(0)
-    assert " disabled" not in is_active_input_match.group(0)
+    assert " disabled" not in age_field_match.group(0)
+    assert " disabled" not in is_active_field_match.group(0)
 
     # 5. Check that other_addresses fields are NOT disabled
     other_address_match = re.search(
