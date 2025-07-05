@@ -66,6 +66,18 @@ class Specifications(BaseModel):
         return f"{len(specs)} specifications"
 
 
+class Review(BaseModel):
+    rating: int = Field(description="Rating out of 5 stars", ge=1, le=5)
+    title: str = Field(description="Review title")
+    content: str = Field(description="Review content")
+    reviewer: str = Field(description="Reviewer name")
+    verified_purchase: bool = Field(description="Whether this is a verified purchase")
+
+    def __str__(self) -> str:
+        stars = "⭐" * self.rating
+        return f"{stars} {self.title} - {self.reviewer}"
+
+
 class ExtractedProduct(BaseModel):
     """Extracted product information from e-commerce listing"""
 
@@ -78,6 +90,11 @@ class ExtractedProduct(BaseModel):
     )
     specifications: Specifications = Field(
         default_factory=lambda: Specifications(), description="Technical specifications"
+    )
+
+    # Customer reviews
+    reviews: List[Review] = Field(
+        default_factory=list, description="Customer reviews and ratings"
     )
 
     # Description and metadata
@@ -126,6 +143,36 @@ annotated_truth = ExtractedProduct(
         color="Black, Silver, Rose Gold",
         warranty="1 year limited warranty",
     ),
+    reviews=[
+        Review(
+            rating=5,
+            title="Perfect for my morning runs!",
+            content="Works great!",
+            reviewer="Sarah M.",
+            verified_purchase=True,
+        ),
+        Review(
+            rating=4,
+            title="Good tracker but battery could be better",
+            content="I've been using this fitness tracker for about 3 months now and overall I'm pretty satisfied with it. The heart rate monitoring is accurate and the GPS tracking works well during my outdoor runs. The sleep tracking feature has been really helpful in understanding my sleep patterns. However, I do wish the battery life was longer - I find myself charging it every 8-9 hours instead of the advertised 10.5 hours. The build quality feels solid and the waterproofing has held up well through multiple swimming sessions. The app interface is intuitive and syncs quickly with my phone. Would recommend for casual fitness enthusiasts, though serious athletes might want something with longer battery life.",
+            reviewer="Mike R.",
+            verified_purchase=True,
+        ),
+        Review(
+            rating=5,
+            title="Exceeded expectations in every way",
+            content="This is hands down the best fitness tracker I've owned. The accuracy of the heart rate monitor is impressive - I've compared it to medical-grade equipment and it's consistently within 1-2 BPM. The GPS locks on quickly and tracks my routes perfectly. The sleep analysis has helped me identify patterns I never noticed before. The build quality is exceptional - the aluminum case feels premium and the silicone band is comfortable even during long workouts. Battery life easily lasts the full 10+ hours as advertised. The companion app is well-designed with detailed analytics and helpful insights. Customer support was also excellent when I had a question about syncing. Worth every penny and I'd buy it again in a heartbeat.",
+            reviewer="Jennifer L.",
+            verified_purchase=True,
+        ),
+        Review(
+            rating=3,
+            title="Mixed feelings",
+            content="Some features work well, others don't. GPS is spotty indoors.",
+            reviewer="Tom W.",
+            verified_purchase=False,
+        ),
+    ],
     description=(
         "The Smart Fitness Tracker Pro Max combines cutting-edge health monitoring "
         "technology with sleek design. Track your workouts, monitor your heart rate 24/7, "
@@ -163,6 +210,38 @@ generated_output = ExtractedProduct(
         color="Black, Silver, Rose Gold",
         warranty="1 year",  # Missing "limited"
     ),
+    reviews=[
+        Review(
+            rating=5,
+            title="Perfect for my morning runs!",
+            content="Works great!",
+            reviewer="Sarah M.",
+            verified_purchase=True,
+        ),
+        Review(
+            rating=4,
+            title="Good tracker but battery could be better",
+            content="I've been using this fitness tracker for about 3 months now and overall I'm pretty satisfied with it. The heart rate monitoring is accurate and the GPS tracking works well during my outdoor runs. However, I do wish the battery life was longer - I find myself charging it every 8-9 hours instead of the advertised 10.5 hours.",
+            reviewer="Mike R.",
+            verified_purchase=True,
+        ),
+        # Missing the longest review - extraction failed
+        Review(
+            rating=2,  # Different rating extracted
+            title="Not great",  # Different title
+            content="GPS doesn't work well.",  # Much shorter content
+            reviewer="Tom W.",
+            verified_purchase=False,
+        ),
+        # Extra review that wasn't in ground truth
+        Review(
+            rating=4,
+            title="Decent value for money",
+            content="Good basic features but missing some advanced options. The heart rate monitor works fine for basic tracking. Setup was straightforward and the app is user-friendly. Build quality seems solid so far after 2 weeks of use. Sleep tracking provides some useful insights though not as detailed as I'd hoped. For the price point, it's a reasonable choice if you don't need all the bells and whistles of premium trackers.",
+            reviewer="Alex K.",
+            verified_purchase=True,
+        ),
+    ],
     description=(
         "This fitness tracker offers advanced health monitoring features with an elegant design. "
         "It tracks workouts, monitors heart rate continuously, and provides sleep insights. "
@@ -278,6 +357,27 @@ eval_metrics = {
         "metric": "AUTOMATED",  # Method type for audit trail
         "color": "#6B7280",  # Gray for neutral system info (not a quality judgment)
         "comment": "Fully automated extraction - consider manual verification for critical errors",
+    },
+    # Reviews extraction metrics
+    "reviews": {
+        "metric": 0.65,
+        "comment": "Review extraction partially successful: 4/4 reviews found but content quality varies",
+    },
+    "reviews[0]": {
+        "metric": 1.0,
+        "comment": "First review extracted perfectly - exact match with source",
+    },
+    "reviews[1]": {
+        "metric": 0.75,
+        "comment": "Review content truncated - missing key details about sleep tracking and app interface",
+    },
+    "reviews[2]": {
+        "metric": 0.30,
+        "comment": "Critical extraction errors: wrong rating (2 vs 3), different title, severely truncated content",
+    },
+    "reviews[3]": {
+        "metric": 0.0,
+        "comment": "Hallucinated review - this review does not exist in the original source data",
     },
 }
 
