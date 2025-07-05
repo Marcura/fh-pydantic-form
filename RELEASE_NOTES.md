@@ -1,6 +1,51 @@
 # Release Notes
 
+## Version 0.3.2 (2025-07-05)
 
+### 🔧 UI/UX Improvements
+
+#### Form Interaction Enhancements
+- **IMPROVED**: Better handling of falsy values in StringFieldRenderer for more robust form inputs
+- **ENHANCED**: Accordion state preservation across refresh operations for improved user experience
+- **FIXED**: Dropdown events no longer trigger accordion sync in comparison forms, preventing UI conflicts
+
+#### String Field Enhancements
+- **NEW**: Textarea input support for better handling of longer text fields
+- **IMPROVED**: StringFieldRenderer robustness with better code quality and error handling
+- **ENHANCED**: Fallback handling for string values with comprehensive test coverage
+
+#### List Management Improvements
+- **ENHANCED**: List items now behave like BaseModel accordions for consistent UI patterns
+- **IMPROVED**: Better default values for new list items
+- **FIXED**: Nested list item accordion synchronization in ComparisonForm
+
+### 🐛 Bug Fixes
+
+#### Performance & Logging
+- **FIXED**: Reduced excessive DEBUG logging messages for cleaner console output
+- **IMPROVED**: Overall application performance with optimized refresh operations
+
+#### Scroll & Navigation
+- **NEW**: Scroll position preservation during form refresh operations
+- **ENHANCED**: UI improvements for refresh and reset actions with better visual feedback
+
+### 📚 Documentation & Examples
+
+#### Enhanced Examples
+- **UPDATED**: Annotation example with cleanup and improvements
+- **IMPROVED**: Comparison example with better demonstration of features
+- **ENHANCED**: README.md with updated documentation and usage examples
+
+### 📊 Statistics
+- **24 commits** since v0.3.1
+- Focus on UI polish, form interaction improvements, and string field enhancements
+- Improved logging and performance optimizations
+- Enhanced documentation and examples
+
+**Key Highlights:**
+This release focuses on improving form interaction quality, with particular attention to string field handling, scroll preservation, and accordion state management. The textarea support and better falsy value handling make forms more robust for real-world usage scenarios.
+
+---
 
 ## Version 0.3.1 (2025-06-24)
 
