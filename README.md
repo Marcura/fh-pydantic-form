@@ -843,6 +843,34 @@ form_renderer = PydanticForm("my_form", MyModel, initial_values=initial_values_d
 
 The dictionary does not have to be complete, and we try to handle schema drift gracefully. If you exclude fields from the form, we fill those fields with the initial_values or the default values.
 
+### Reusing Form Configuration with Different Values
+
+The `with_initial_values()` method allows you to create a new form instance with the same configuration but different initial values:
+
+```python
+# Create a base form configuration
+base_form = PydanticForm(
+    "product_form",
+    ProductModel,
+    disabled_fields=["id"],
+    label_colors={"name": "text-blue-600", "price": "text-green-600"},
+    spacing="compact"
+)
+
+# Create forms with different initial values using the same configuration
+form_for_product_a = base_form.with_initial_values({"name": "Product A", "price": 29.99})
+form_for_product_b = base_form.with_initial_values({"name": "Product B", "price": 45.50})
+
+# Or with model instances
+existing_product = ProductModel(name="Existing Product", price=19.99)
+form_for_existing = base_form.with_initial_values(existing_product)
+```
+
+This is particularly useful for:
+- **Editing workflows** where you need the same form configuration for different records
+- **Template forms** where you want to reuse styling and field configurations
+- **Bulk operations** where you process multiple items with the same form structure
+
 
 
 ### Schema Drift Resilience
@@ -972,6 +1000,7 @@ form_renderer = PydanticForm(
 | Method | Purpose |
 |--------|---------|
 | `render_inputs()` | Generate the HTML form inputs (without `<form>` wrapper) |
+| `with_initial_values(initial_values)` | Create a new form instance with same configuration but different initial values |
 | `refresh_button(text=None, **kwargs)` | Create a refresh button component |
 | `reset_button(text=None, **kwargs)` | Create a reset button component |
 | `register_routes(app)` | Register HTMX endpoints for list manipulation |
