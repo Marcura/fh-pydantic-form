@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, ValidationError
 from fh_pydantic_form import PydanticForm, list_manipulation_js
 from fh_pydantic_form.field_renderers import BaseFieldRenderer
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app, rt = fh.fast_app(

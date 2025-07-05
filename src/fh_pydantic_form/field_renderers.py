@@ -272,9 +272,6 @@ class MetricsRendererMixin:
                     existing_style = node.attrs.get("style", "")
                     node.attrs["style"] = highlight_css + " " + existing_style
                     highlight_count += 1
-                    logger.debug(
-                        f"Applied highlight to tag={getattr(node, 'tag', 'unknown')}, attrs={list(node.attrs.keys()) if hasattr(node, 'attrs') else []}"
-                    )
 
             # Process children if they exist
             if hasattr(node, "children") and node.children:
@@ -285,7 +282,7 @@ class MetricsRendererMixin:
         apply_highlight(element)
 
         if highlight_count == 0:
-            logger.debug("No form controls found to highlight in element tree")
+            pass  # No form controls found to highlight
 
         return element
 

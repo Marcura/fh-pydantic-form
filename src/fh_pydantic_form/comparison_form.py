@@ -547,13 +547,11 @@ class ComparisonForm(Generic[ModelType]):
             reset_path = f"/compare/{self.name}/{side}/reset"
             reset_handler = create_reset_handler(form, side, label)
             app.route(reset_path, methods=["POST"])(reset_handler)
-            logger.debug(f"Registered comparison reset route: {reset_path}")
 
             # Refresh route
             refresh_path = f"/compare/{self.name}/{side}/refresh"
             refresh_handler = create_refresh_handler(form, side, label)
             app.route(refresh_path, methods=["POST"])(refresh_handler)
-            logger.debug(f"Registered comparison refresh route: {refresh_path}")
 
     def form_wrapper(self, content: FT, form_id: Optional[str] = None) -> FT:
         """

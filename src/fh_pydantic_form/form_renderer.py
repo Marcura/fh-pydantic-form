@@ -405,19 +405,14 @@ class PydanticForm(Generic[ModelType]):
         """
         form_inputs = []
         registry = FieldRendererRegistry()  # Get singleton instance
-        logger.debug(
-            f"Starting render_inputs for form '{self.name}' with {len(self.model_class.model_fields)} fields"
-        )
 
         for field_name, field_info in self.model_class.model_fields.items():
             # Skip excluded fields
             if field_name in self.exclude_fields:
-                logger.debug(f"Skipping excluded field: {field_name}")
                 continue
 
             # Skip SkipJsonSchema fields (they should not be rendered in the form)
             if _is_skip_json_schema_field(field_info):
-                logger.debug(f"Skipping SkipJsonSchema field: {field_name}")
                 continue
 
             # Only use what was explicitly provided in initial values
@@ -431,35 +426,16 @@ class PydanticForm(Generic[ModelType]):
                 field_name in self.values_dict if self.values_dict else False
             )
 
-            # Log the initial value type and a summary for debugging
-            if initial_value is not None:
-                value_type = type(initial_value).__name__
-                if isinstance(initial_value, (list, dict)):
-                    value_size = f"size={len(initial_value)}"
-                else:
-                    value_size = ""
-                logger.debug(
-                    f"Field '{field_name}': {value_type} {value_size} (provided: {field_was_provided})"
-                )
-            else:
-                logger.debug(
-                    f"Field '{field_name}': None (provided: {field_was_provided})"
-                )
-
             # Only use defaults if field was not provided at all
             if not field_was_provided:
                 # Field not provided - use model defaults
                 if field_info.default is not None:
                     initial_value = field_info.default
-                    logger.debug(f"  - Using default value for '{field_name}'")
                 elif getattr(field_info, "default_factory", None) is not None:
                     try:
                         default_factory = field_info.default_factory
                         if callable(default_factory):
                             initial_value = default_factory()
-                            logger.debug(
-                                f"  - Using default_factory for '{field_name}'"
-                            )
                         else:
                             initial_value = None
                             logger.warning(
@@ -484,9 +460,6 @@ class PydanticForm(Generic[ModelType]):
 
             # Determine if this specific field should be disabled
             is_field_disabled = self.disabled or (field_name in self.disabled_fields)
-            logger.debug(
-                f"Field '{field_name}' disabled state: {is_field_disabled} (Global: {self.disabled}, Specific: {field_name in self.disabled_fields})"
-            )
 
             # Get label color for this field if specified
             label_color = self.label_colors.get(field_name)
@@ -516,7 +489,6 @@ class PydanticForm(Generic[ModelType]):
 
         # Define the ID for the wrapper div - this is what the HTMX request targets
         form_content_wrapper_id = f"{self.name}-inputs-wrapper"
-        logger.debug(f"Creating form inputs wrapper with ID: {form_content_wrapper_id}")
 
         # Create the wrapper div and apply compact styling if needed
         wrapped = self._compact_wrapper(
@@ -545,11 +517,6 @@ class PydanticForm(Generic[ModelType]):
             for key, value in data.items()
             if key.startswith(self.base_prefix)
         }
-
-        logger.debug(
-            f"Filtered form data for '{self.name}': "
-            f"{len(data)} keys -> {len(filtered)} keys"
-        )
 
         return filtered
 
@@ -727,7 +694,6 @@ class PydanticForm(Generic[ModelType]):
                 if hasattr(initial_val, "model_dump"):
                     initial_val = initial_val.model_dump()
                 data[field_name] = initial_val
-                logger.debug(f"Injected initial value for missing field '{field_name}'")
                 continue
 
             # Second priority: use model defaults
@@ -737,18 +703,13 @@ class PydanticForm(Generic[ModelType]):
                 if hasattr(default_val, "model_dump"):
                     default_val = default_val.model_dump()
                 data[field_name] = default_val
-                logger.debug(
-                    f"Injected model default value for missing field '{field_name}'"
-                )
             else:
                 # Check if this is a SkipJsonSchema field
                 if _is_skip_json_schema_field(field_info):
-                    logger.debug(
-                        f"No default found for SkipJsonSchema field '{field_name}'"
-                    )
+                    pass  # Skip fields don't need defaults
                 else:
                     # No default → leave missing; validation will surface error
-                    logger.debug(f"No default found for field '{field_name}'")
+                    pass
 
         return data
 
@@ -767,13 +728,8 @@ class PydanticForm(Generic[ModelType]):
         async def _instance_specific_refresh_handler(req):
             """Handle form refresh request for this specific form instance"""
             # Add entry point logging to confirm the route is being hit
-            logger.debug(f"Received POST request on {refresh_route_path}")
             # Calls the instance method to handle the logic
             return await self.handle_refresh_request(req)
-
-        logger.debug(
-            f"Registered refresh route for form '{self.name}' at {refresh_route_path}"
-        )
 
         # --- Register the form-specific reset route ---
         reset_route_path = f"/form/{self.name}/reset"
@@ -781,17 +737,11 @@ class PydanticForm(Generic[ModelType]):
         @app.route(reset_route_path, methods=["POST"])
         async def _instance_specific_reset_handler(req):
             """Handle form reset request for this specific form instance"""
-            logger.debug(f"Received POST request on {reset_route_path}")
             # Calls the instance method to handle the logic
             return await self.handle_reset_request()
 
-        logger.debug(
-            f"Registered reset route for form '{self.name}' at {reset_route_path}"
-        )
-
         # Try the route with a more explicit pattern
         route_pattern = f"/form/{self.name}/list/{{action}}/{{list_path:path}}"
-        logger.debug(f"Registering list action route: {route_pattern}")
 
         @app.route(route_pattern, methods=["POST", "DELETE"])
         async def list_action(req, action: str, list_path: str):
@@ -819,9 +769,6 @@ class PydanticForm(Generic[ModelType]):
                 return mui.Alert(str(exc), cls=mui.AlertT.error)
 
             if req.method == "DELETE":
-                logger.debug(
-                    f"Received DELETE request for {list_path} for form '{self.name}'"
-                )
                 return fh.Response(status_code=200, content="")
 
             # === add (POST) ===
@@ -967,7 +914,6 @@ class PydanticForm(Generic[ModelType]):
         Raises:
             ValidationError: If validation fails based on the model's rules
         """
-        logger.debug(f"Validating request for form '{self.name}'")
         form_data = await req.form()
         form_dict = dict(form_data)
 
