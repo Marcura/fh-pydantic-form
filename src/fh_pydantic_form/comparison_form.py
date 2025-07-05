@@ -52,6 +52,11 @@ window.fhpfInitComparisonSync = function initComparisonSync(){
     const sourceLi = ev.target.closest('li');
     if (!sourceLi) return;
 
+    // Skip if this event is from a select/dropdown element
+    if (ev.target.closest('uk-select, select, [uk-select]')) {
+      return;
+    }
+
     // Skip if this is a nested list item (let mirrorNestedListItems handle it)
     if (sourceLi.closest('[id$="_items_container"]')) {
       return;
@@ -107,6 +112,11 @@ window.fhpfInitComparisonSync = function initComparisonSync(){
   function mirrorNestedListItems(ev) {
     const sourceLi = ev.target.closest('li');
     if (!sourceLi) return;
+    
+    // Skip if this event is from a select/dropdown element
+    if (ev.target.closest('uk-select, select, [uk-select]')) {
+      return;
+    }
     
     // Skip if this event was triggered by our own sync
     if (sourceLi.dataset.syncDisabled) {
