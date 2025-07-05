@@ -649,7 +649,13 @@ class StringFieldRenderer(BaseFieldRenderer):
         if self.disabled:
             input_attrs["disabled"] = True
 
-        return mui.TextArea(self.value or "", **input_attrs)
+        # Convert value to string representation, handling None and all other types
+        if self.value is None:
+            display_value = ""
+        else:
+            display_value = str(self.value)
+
+        return mui.TextArea(display_value, **input_attrs)
 
 
 class NumberFieldRenderer(BaseFieldRenderer):

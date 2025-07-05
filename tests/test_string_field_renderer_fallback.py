@@ -27,20 +27,24 @@ class TestStringFieldRendererFallback:
             (3.14159, "3.14159", []),
             (0, "0", []),
             (-5, "-5", []),
-            # Boolean values - ISSUE: False becomes empty
+            # Boolean values - now properly handled
             (True, "True", []),
-            (False, "", ["false_becomes_empty"]),  # This is a problem!
+            (False, "False", []),  # Fixed: False now becomes "False"
             # None - reasonable to become empty
             (None, "", []),
             # Collections - should show reasonable representations
             ([1, 2, 3], "[1, 2, 3]", []),
             (["a", "b"], "['a', 'b']", []),
             ([], "[]", []),
-            # Dictionaries - MAJOR ISSUE: becomes empty!
-            ({"key": "value"}, "", ["dict_becomes_empty"]),  # This is BAD!
-            ({}, "", ["dict_becomes_empty"]),
-            # Complex objects
-            (set([1, 2, 3]), "", ["object_becomes_empty"]),  # Sets become empty too
+            # Dictionaries - now properly handled
+            (
+                {"key": "value"},
+                "{'key': 'value'}",
+                [],
+            ),  # Fixed: dict now shows string representation
+            ({}, "{}", []),  # Fixed: empty dict now shows "{}"
+            # Complex objects - now show string representations
+            # Note: Set order is not guaranteed, so we test this separately below
         ],
     )
     def test_fallback_value_handling(self, value, expected_content, expected_issues):
@@ -68,6 +72,30 @@ class TestStringFieldRendererFallback:
         # Log known issues for documentation
         if expected_issues:
             pytest.skip(f"Known issues with {value!r}: {expected_issues}")
+
+    def test_set_string_representation(self):
+        """Test that sets show a reasonable string representation"""
+        field_info = FieldInfo(annotation=str)
+        test_set = {1, 2, 3}
+
+        renderer = StringFieldRenderer(
+            field_name="test_field", field_info=field_info, value=test_set
+        )
+
+        component = renderer.render_input()
+        html = component.__html__()
+
+        soup = BeautifulSoup(html, "html.parser")
+        textarea = soup.find("textarea")
+        assert textarea is not None
+        content = textarea.text
+
+        # Set order is not guaranteed, so we check for the general format
+        assert content.startswith("{")
+        assert content.endswith("}")
+        assert "1" in content
+        assert "2" in content
+        assert "3" in content
 
     def test_fallback_row_calculation_robustness(self):
         """Test that row calculation doesn't crash on non-string values"""
@@ -102,7 +130,8 @@ class TestStringFieldRendererFallback:
 
         test_cases = [
             (CustomObject(), "CustomObject(data=123)"),  # Should use __str__
-            (object(), ""),  # Default object() has no useful __str__, becomes empty
+            # Default object() shows its memory address like <object object at 0x...>
+            # We don't expect a specific string since the address changes
         ]
 
         field_info = FieldInfo(annotation=str)
@@ -120,13 +149,22 @@ class TestStringFieldRendererFallback:
             assert textarea is not None
             content = textarea.text
 
-            # For now, document the current behavior
-            # In the future, we might want to improve this
-            if value is object():
-                # Default object() becomes empty due to "or ''" logic
-                assert content == ""
-            else:
-                assert content == expected
+            assert content == expected
+
+        # Test that default object() produces a reasonable string representation
+        obj = object()
+        renderer = StringFieldRenderer(
+            field_name="test_field", field_info=field_info, value=obj
+        )
+        component = renderer.render_input()
+        html = component.__html__()
+        soup = BeautifulSoup(html, "html.parser")
+        textarea = soup.find("textarea")
+        assert textarea is not None
+        content = textarea.text
+        # Should contain "object" and "0x" for memory address
+        assert "object" in content.lower()
+        assert "0x" in content
 
     def test_fallback_type_annotation_ignored(self):
         """Test that StringFieldRenderer ignores the type annotation when used as fallback"""
