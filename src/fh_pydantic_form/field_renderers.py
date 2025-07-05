@@ -632,7 +632,6 @@ class StringFieldRenderer(BaseFieldRenderer):
             rows = 1
 
         input_attrs = {
-            # "value": self.value,
             "id": self.field_name,
             "name": self.field_name,
             "placeholder": placeholder_text,
