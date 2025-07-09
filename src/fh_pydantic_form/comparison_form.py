@@ -347,6 +347,13 @@ class ComparisonForm(Generic[ModelType]):
             # Determine comparison-specific refresh endpoint
             comparison_refresh = f"/compare/{self.name}/{'left' if form is self.left_form else 'right'}/refresh"
 
+            # Get label color for this field if specified
+            label_color = (
+                form.label_colors.get(field_name)
+                if hasattr(form, "label_colors")
+                else None
+            )
+
             # Create renderer
             renderer = renderer_cls(
                 field_name=field_name,
@@ -357,6 +364,7 @@ class ComparisonForm(Generic[ModelType]):
                 spacing=form.spacing,
                 field_path=[field_name],
                 form_name=form.name,
+                label_color=label_color,  # Pass the label color if specified
                 metrics_dict=form.metrics_dict,  # Use form's own metrics
                 refresh_endpoint_override=comparison_refresh,  # Pass comparison-specific refresh endpoint
             )
@@ -374,77 +382,6 @@ class ComparisonForm(Generic[ModelType]):
 
         # Return wrapper with display: contents
         return fh.Div(*cells, id=wrapper_id, cls="contents")
-
-    # def _create_field_pairs(
-    #     self,
-    # ) -> List[Tuple[str, BaseFieldRenderer, BaseFieldRenderer]]:
-    #     """
-    #     Create pairs of renderers (left, right) for each field path
-
-    #     Returns:
-    #         List of (path_string, left_renderer, right_renderer) tuples
-    #     """
-    #     pairs = []
-    #     registry = FieldRendererRegistry()
-
-    #     # Walk through model fields to create renderer pairs
-    #     for field_name, field_info in self.model_class.model_fields.items():
-    #         # Skip fields that are excluded in either form
-    #         if field_name in (self.left_form.exclude_fields or []) or field_name in (
-    #             self.right_form.exclude_fields or []
-    #         ):
-    #             logger.debug(
-    #                 f"Skipping field '{field_name}' - excluded in one or both forms"
-    #             )
-    #             continue
-
-    #         # Get values from each form
-    #         left_value = self.left_form.values_dict.get(field_name)
-    #         right_value = self.right_form.values_dict.get(field_name)
-
-    #         # Get the path string for comparison lookup
-    #         path_str = field_name
-    #         left_comparison_metric = self.left_metrics.get(path_str)
-    #         right_comparison_metric = self.right_metrics.get(path_str)
-
-    #         # Get renderer class
-    #         renderer_cls = registry.get_renderer(field_name, field_info)
-    #         if not renderer_cls:
-    #             from fh_pydantic_form.field_renderers import StringFieldRenderer
-
-    #             renderer_cls = StringFieldRenderer
-
-    #         # Create left renderer
-    #         left_renderer = renderer_cls(
-    #             field_name=field_name,
-    #             field_info=field_info,
-    #             value=left_value,
-    #             prefix=self.left_form.base_prefix,
-    #             disabled=self.left_form.disabled,
-    #             spacing=self.left_form.spacing,
-    #             field_path=[field_name],
-    #             form_name=self.left_form.name,
-    #             comparison=left_comparison_metric,
-    #             comparison_map=self.left_metrics,  # Pass the full comparison map
-    #         )
-
-    #         # Create right renderer
-    #         right_renderer = renderer_cls(
-    #             field_name=field_name,
-    #             field_info=field_info,
-    #             value=right_value,
-    #             prefix=self.right_form.base_prefix,
-    #             disabled=self.right_form.disabled,
-    #             spacing=self.right_form.spacing,
-    #             field_path=[field_name],
-    #             form_name=self.right_form.name,
-    #             comparison=right_comparison_metric,
-    #             comparison_map=self.right_metrics,  # Pass the full comparison map
-    #         )
-
-    #         pairs.append((path_str, left_renderer, right_renderer))
-
-    #     return pairs
 
     def render_inputs(self) -> FT:
         """
