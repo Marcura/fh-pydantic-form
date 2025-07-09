@@ -1,5 +1,8 @@
 # Release Notes
 
+## Version 0.3.3 (2025-07-09)
+
+- fix bug where label_color was not passed down in ComparisonForm
 ## Version 0.3.2 (2025-07-05)
 
 ### 🔧 UI/UX Improvements
