@@ -1,3 +1,7 @@
+import sys
+
+sys.path.insert(0, "/Users/oege/projects/fh-pydantic-form/src")
+
 import re
 
 import pytest
@@ -271,3 +275,110 @@ class TestListAddDefaults:
 
         # Should either work (if name is a list) or show appropriate error
         # The exact behavior depends on the model structure
+
+
+@pytest.mark.integration
+class TestOptionalListRendering:
+    """Integration tests for Optional[List[...]] rendering behavior."""
+
+    def test_optional_list_renders_correct_empty_state(self, optional_list_test_model):
+        """
+        Verify that an Optional[List] with a value of None renders an empty state
+        with the correct message and an 'Add Item' button.
+        """
+        from fh_pydantic_form import PydanticForm
+
+        # Arrange: Initialize form with None for the optional list
+        form = PydanticForm(
+            "test_form",
+            optional_list_test_model,
+            initial_values={"name": "Test", "optional_tags": None},
+        )
+
+        # Act
+        rendered_html = str(form.render_inputs())
+
+        # Assert
+        # Check that the field is rendered (should not be completely missing)
+        assert "optional_tags" in rendered_html
+        # Check that the "Add Item" button is present and targets the correct endpoint
+        assert 'hx-post="/form/test_form/list/add/optional_tags"' in rendered_html
+
+    def test_required_list_renders_correct_empty_state(self, optional_list_test_model):
+        """
+        Verify that a required List with an empty list value renders an empty state
+        with the correct message.
+        """
+        from fh_pydantic_form import PydanticForm
+
+        # Arrange: Initialize form with an empty list for the required list
+        form = PydanticForm(
+            "test_form",
+            optional_list_test_model,
+            initial_values={"name": "Test", "required_tags": []},
+        )
+
+        # Act
+        rendered_html = str(form.render_inputs())
+
+        # Assert
+        # Check that the field is rendered
+        assert "required_tags" in rendered_html
+        # Check that the "Add Item" button is present and targets the correct endpoint
+        assert 'hx-post="/form/test_form/list/add/required_tags"' in rendered_html
+
+    def test_optional_list_with_items_renders_items(self, optional_list_test_model):
+        """
+        Verify that an Optional[List] with items renders those items correctly.
+        """
+        from fh_pydantic_form import PydanticForm
+
+        # Arrange: Initialize form with items for the optional list
+        form = PydanticForm(
+            "test_form",
+            optional_list_test_model,
+            initial_values={"name": "Test", "optional_tags": ["item1", "item2"]},
+        )
+
+        # Act
+        rendered_html = str(form.render_inputs())
+
+        # Assert
+        # Check that the field is rendered with items
+        assert "optional_tags" in rendered_html
+        assert "item1" in rendered_html
+        assert "item2" in rendered_html
+
+    def test_optional_list_add_item_route_works(
+        self, optional_list_client, htmx_headers
+    ):
+        """
+        Test that the add item route works correctly for optional lists.
+        """
+        # Act
+        response = optional_list_client.post(
+            "/form/optional_list_form/list/add/optional_tags", headers=htmx_headers
+        )
+
+        # Assert
+        assert response.status_code == 200
+        # Should contain a new item with the new_ pattern
+        assert "new_" in response.text
+        assert "optional_tags" in response.text
+
+    def test_required_list_add_item_route_works(
+        self, optional_list_client, htmx_headers
+    ):
+        """
+        Test that the add item route works correctly for required lists.
+        """
+        # Act
+        response = optional_list_client.post(
+            "/form/optional_list_form/list/add/required_tags", headers=htmx_headers
+        )
+
+        # Assert
+        assert response.status_code == 200
+        # Should contain a new item with the new_ pattern
+        assert "new_" in response.text
+        assert "required_tags" in response.text

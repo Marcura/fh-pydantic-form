@@ -1,3 +1,7 @@
+import sys
+
+sys.path.insert(0, "/Users/oege/projects/fh-pydantic-form/src")
+
 import datetime
 from enum import Enum, IntEnum
 from typing import List, Literal, Optional
@@ -1399,6 +1403,61 @@ def user_default_list_client():
                 ),
             ),
         )
+
+    return TestClient(app)
+
+
+# Optional List Testing Fixtures
+@pytest.fixture(scope="module")
+def optional_list_test_model():
+    """Test model for Optional[List[...]] functionality."""
+
+    class OptionalListTestModel(BaseModel):
+        name: str  # No default value - this will be required
+        optional_tags: Optional[List[str]] = None
+        required_tags: List[str] = Field(default_factory=list)
+
+        def __str__(self) -> str:
+            return f"{self.name} (optional: {self.optional_tags}, required: {self.required_tags})"
+
+    return OptionalListTestModel
+
+
+@pytest.fixture(scope="module")
+def optional_list_client(optional_list_test_model):
+    """TestClient for testing optional list functionality."""
+    form_renderer = PydanticForm(
+        "optional_list_form",
+        optional_list_test_model,
+        initial_values={"name": "Test Name"},  # optional_tags will be None
+    )
+    app, rt = fh.fast_app(
+        hdrs=[mui.Theme.blue.headers(), list_manipulation_js()], pico=False, live=False
+    )
+    form_renderer.register_routes(app)
+
+    @rt("/")
+    def get():
+        return fh.Div(
+            mui.Container(
+                mui.CardHeader("Optional List Test Form"),
+                mui.Card(
+                    mui.CardBody(
+                        mui.Form(form_renderer.render_inputs(), id="test-form")
+                    ),
+                ),
+            ),
+        )
+
+    @rt("/submit", methods=["POST"])
+    async def post_submit(req):
+        try:
+            validated = await form_renderer.model_validate_request(req)
+            return fh.Pre(
+                f"Validation Successful: {validated.model_dump_json(indent=2)}"
+            )
+        except ValidationError as e:
+            return fh.Pre(f"Validation Error: {e.json(indent=2)}")
 
     return TestClient(app)
 

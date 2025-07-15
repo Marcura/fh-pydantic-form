@@ -435,7 +435,7 @@ class PydanticForm(Generic[ModelType]):
                     try:
                         default_factory = field_info.default_factory
                         if callable(default_factory):
-                            initial_value = default_factory()
+                            initial_value = default_factory()  # type: ignore[call-arg]
                         else:
                             initial_value = None
                             logger.warning(

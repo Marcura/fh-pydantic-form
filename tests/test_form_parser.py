@@ -1,3 +1,7 @@
+import sys
+
+sys.path.insert(0, "/Users/oege/projects/fh-pydantic-form/src")
+
 from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -254,10 +258,12 @@ def test_parse_list_fields():
     parsed = _parse_list_fields(form_data, list_field_defs, base_prefix="prefix_")
 
     # Check simple list
+    assert parsed["tags"] is not None
     assert len(parsed["tags"]) == 3
     assert parsed["tags"] == ["tag1", "tag2", "new_tag"]
 
     # Check model list
+    assert parsed["addresses"] is not None
     assert len(parsed["addresses"]) == 2
     assert parsed["addresses"][0]["sub_field"] == "Address 1"
     assert parsed["addresses"][0]["is_active"] is True
@@ -288,14 +294,16 @@ def test_parse_lists_with_missing_booleans():
 
     parsed = _parse_list_fields(form_data, list_field_defs, base_prefix="prefix_")
 
-    assert len(parsed["items"]) == 2
-    assert parsed["items"][0]["name"] == "Item 1"
-    assert parsed["items"][0]["is_active"] is True
-    assert parsed["items"][0]["is_primary"] is False
+    items = parsed["items"]
+    assert items is not None
+    assert len(items) == 2
+    assert items[0]["name"] == "Item 1"
+    assert items[0]["is_active"] is True
+    assert items[0]["is_primary"] is False
 
-    assert parsed["items"][1]["name"] == "Item 2"
-    assert parsed["items"][1]["is_active"] is False
-    assert parsed["items"][1]["is_primary"] is False
+    assert items[1]["name"] == "Item 2"
+    assert items[1]["is_active"] is False
+    assert items[1]["is_primary"] is False
 
 
 def test_form_renderer_parse(complex_renderer):
@@ -364,3 +372,81 @@ def test_form_renderer_parse(complex_renderer):
     assert model.name == "Test User"
     assert model.tags == ["test1", "test2"]
     assert model.other_addresses[0].street == "456 Other St"
+
+
+def test_parse_list_fields_handles_empty_optional_and_required_lists(
+    optional_list_test_model,
+):
+    """
+    Tests that an empty optional list becomes None, while an empty required list becomes [].
+    """
+    # Arrange
+    list_field_defs = _identify_list_fields(optional_list_test_model)
+    form_data: dict[str, str] = {}  # No list items submitted
+    base_prefix = "test_form_"
+
+    # Act
+    parsed_lists = _parse_list_fields(form_data, list_field_defs, base_prefix)
+
+    # Assert
+    assert parsed_lists.get("optional_tags") is None
+    assert parsed_lists.get("required_tags") == []
+
+
+def test_parse_list_fields_handles_populated_optional_list(optional_list_test_model):
+    """
+    Tests that a populated optional list results in a list, not None.
+    """
+    # Arrange
+    list_field_defs = _identify_list_fields(optional_list_test_model)
+    form_data = {
+        "test_form_optional_tags_0": "item1",
+        "test_form_optional_tags_1": "item2",
+    }
+    base_prefix = "test_form_"
+
+    # Act
+    parsed_lists = _parse_list_fields(form_data, list_field_defs, base_prefix)
+
+    # Assert
+    assert parsed_lists.get("optional_tags") == ["item1", "item2"]
+    assert parsed_lists.get("required_tags") == []
+
+
+def test_parse_list_fields_handles_excluded_optional_list(optional_list_test_model):
+    """
+    Tests that excluded optional lists don't appear in the result.
+    """
+    # Arrange
+    list_field_defs = _identify_list_fields(optional_list_test_model)
+    form_data: dict[str, str] = {}  # No list items submitted
+    base_prefix = "test_form_"
+    exclude_fields = ["optional_tags"]
+
+    # Act
+    parsed_lists = _parse_list_fields(
+        form_data, list_field_defs, base_prefix, exclude_fields
+    )
+
+    # Assert
+    assert "optional_tags" not in parsed_lists
+    assert parsed_lists.get("required_tags") == []
+
+
+def test_identify_list_fields_recognizes_optional_lists(optional_list_test_model):
+    """
+    Tests that _identify_list_fields correctly identifies both optional and required lists.
+    """
+    # Act
+    list_fields = _identify_list_fields(optional_list_test_model)
+
+    # Assert
+    assert len(list_fields) == 2
+    assert "optional_tags" in list_fields
+    assert "required_tags" in list_fields
+
+    # Check that both are identified as string lists
+    assert list_fields["optional_tags"]["item_type"] is str
+    assert list_fields["optional_tags"]["is_model_type"] is False
+    assert list_fields["required_tags"]["item_type"] is str
+    assert list_fields["required_tags"]["is_model_type"] is False
