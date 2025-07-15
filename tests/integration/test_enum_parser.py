@@ -250,10 +250,14 @@ class TestEnumModelParsing:
             "priority_options": ["1", "3"],
         }
         # Compare string representations for enum values
-        assert [str(x) for x in result.get("status_history", [])] == [
+        status_history = result.get("status_history", [])
+        assert status_history is not None
+        assert [str(x) for x in status_history] == [
             str(x) for x in expected["status_history"]
         ]
-        assert [str(x) for x in result.get("priority_options", [])] == [
+        priority_options = result.get("priority_options", [])
+        assert priority_options is not None
+        assert [str(x) for x in priority_options] == [
             str(x) for x in expected["priority_options"]
         ]
 
@@ -297,10 +301,14 @@ class TestEnumModelParsing:
             "priority_options": ["99"],  # Invalid passed through
         }
         # Compare string representations
-        assert [str(x) for x in result.get("status_history", [])] == [
+        status_history = result.get("status_history", [])
+        assert status_history is not None
+        assert [str(x) for x in status_history] == [
             str(x) for x in expected["status_history"]
         ]
-        assert [str(x) for x in result.get("priority_options", [])] == [
+        priority_options = result.get("priority_options", [])
+        assert priority_options is not None
+        assert [str(x) for x in priority_options] == [
             str(x) for x in expected["priority_options"]
         ]
 

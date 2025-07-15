@@ -97,7 +97,7 @@ class TestEnumFieldRenderer:
 
     def test_optional_enum_renderer_none_option(self):
         """Test that optional enum fields include a None option."""
-        field_info = FieldInfo(annotation=Optional[StatusEnum])
+        field_info = FieldInfo(annotation=Optional[StatusEnum])  # type: ignore[arg-type]
         renderer = EnumFieldRenderer(
             field_name="test_field",
             field_info=field_info,
@@ -110,7 +110,7 @@ class TestEnumFieldRenderer:
 
     def test_optional_enum_renderer_none_selected(self):
         """Test that None value is correctly selected in optional enum."""
-        field_info = FieldInfo(annotation=Optional[StatusEnum])
+        field_info = FieldInfo(annotation=Optional[StatusEnum])  # type: ignore[arg-type]
         renderer = EnumFieldRenderer(
             field_name="test_field",
             field_info=field_info,
