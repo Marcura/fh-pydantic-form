@@ -7,8 +7,8 @@ from typing import (
     Optional,
     Tuple,
     Union,
-    get_origin,
     get_args,
+    get_origin,
 )
 
 from fh_pydantic_form.type_helpers import (
@@ -438,7 +438,7 @@ def _parse_list_fields(
     list_field_defs: Dict[str, Dict[str, Any]],
     base_prefix: str = "",
     exclude_fields: Optional[List[str]] = None,
-) -> Dict[str, List[Any]]:
+) -> Dict[str, Optional[List[Any]]]:
     """
     Parse list fields from form data by analyzing keys and reconstructing ordered lists.
 
@@ -490,7 +490,7 @@ def _parse_list_fields(
                 list_items_temp[field_name][idx_str][subfield] = value
 
     # Build final lists based on tracked order
-    final_lists = {}
+    final_lists: Dict[str, Optional[List[Any]]] = {}
     for field_name, ordered_indices in list_item_indices_ordered.items():
         field_def = list_field_defs[field_name]
         item_type = field_def["item_type"]
@@ -544,8 +544,12 @@ def _parse_list_fields(
         if field_name in final_lists:
             continue
 
-        # User submitted form with zero items → honour intent with empty list
-        final_lists[field_name] = []
+        # User submitted form with zero items → honour intent with None for Optional[List]
+        field_info = field_def["field_info"]
+        if _is_optional_type(field_info.annotation):
+            final_lists[field_name] = None  # Use None for empty Optional[List]
+        else:
+            final_lists[field_name] = []  # Regular empty list for required fields
 
     return final_lists
 

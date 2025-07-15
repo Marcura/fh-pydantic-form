@@ -1523,12 +1523,15 @@ class ListFieldRenderer(BaseFieldRenderer):
         annotation = getattr(self.field_info, "annotation", None)
         item_type = None  # Initialize here to avoid UnboundLocalError
 
+        # Handle Optional[List[...]] by unwrapping the Optional first
+        base_annotation = _get_underlying_type_if_optional(annotation)
+
         if (
-            annotation is not None
-            and hasattr(annotation, "__origin__")
-            and annotation.__origin__ is list
+            base_annotation is not None
+            and hasattr(base_annotation, "__origin__")
+            and base_annotation.__origin__ is list
         ):
-            item_type = annotation.__args__[0]
+            item_type = base_annotation.__args__[0]
 
         if not item_type:
             logger.error(f"Cannot determine item type for list field {self.field_name}")
@@ -1600,10 +1603,20 @@ class ListFieldRenderer(BaseFieldRenderer):
             if self.disabled:
                 add_button_attrs["disabled"] = "true"
 
+            # Differentiate message for Optional[List] vs required List
+            if self.is_optional:
+                empty_message = (
+                    "No items in this optional list. Click 'Add Item' if needed."
+                )
+            else:
+                empty_message = (
+                    "No items in this required list. Click 'Add Item' to create one."
+                )
+
             empty_state = mui.Alert(
                 fh.Div(
                     mui.UkIcon("info", cls="mr-2"),
-                    "No items in this list. Click 'Add Item' to create one.",
+                    empty_message,
                     mui.Button("Add Item", **add_button_attrs),
                     cls="flex flex-col items-start",
                 ),

@@ -87,13 +87,16 @@ def register_default_renderers() -> None:
 
     # Register list renderer for List[*] types
     def is_list_field(field_info):
-        """Check if field is a list type"""
+        """Check if field is a list type, including Optional[List[...]]"""
         annotation = getattr(field_info, "annotation", None)
-        return (
-            annotation is not None
-            and hasattr(annotation, "__origin__")
-            and annotation.__origin__ is list
-        )
+        if annotation is None:
+            return False
+
+        # Handle Optional[List[...]] by unwrapping the Optional
+        underlying_type = _get_underlying_type_if_optional(annotation)
+
+        # Check if the underlying type is a list
+        return get_origin(underlying_type) is list
 
     FieldRendererRegistry.register_type_renderer_with_predicate(
         is_list_field, ListFieldRenderer

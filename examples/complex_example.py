@@ -176,6 +176,9 @@ class ComplexSchema(BaseModel):
         ),
         description="Backup address (auto-generated, not shown in form)",
     )
+    optional_list: Optional[List[str]] = Field(
+        default=None, description="Optional list of strings"
+    )
 
 
 # Create an initial model with example data
