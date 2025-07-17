@@ -1,4 +1,5 @@
 import datetime
+import decimal
 from enum import Enum
 from typing import Literal, get_origin
 
@@ -17,6 +18,7 @@ from fh_pydantic_form.field_renderers import (
     BaseModelFieldRenderer,
     BooleanFieldRenderer,
     DateFieldRenderer,
+    DecimalFieldRenderer,
     EnumFieldRenderer,
     ListFieldRenderer,
     LiteralFieldRenderer,
@@ -55,6 +57,7 @@ def register_default_renderers() -> None:
     FieldRendererRegistry.register_type_renderer(bool, BooleanFieldRenderer)
     FieldRendererRegistry.register_type_renderer(int, NumberFieldRenderer)
     FieldRendererRegistry.register_type_renderer(float, NumberFieldRenderer)
+    FieldRendererRegistry.register_type_renderer(decimal.Decimal, DecimalFieldRenderer)
     FieldRendererRegistry.register_type_renderer(datetime.date, DateFieldRenderer)
     FieldRendererRegistry.register_type_renderer(datetime.time, TimeFieldRenderer)
 

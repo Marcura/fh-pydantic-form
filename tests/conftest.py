@@ -2,6 +2,7 @@ import sys
 
 sys.path.insert(0, "/Users/oege/projects/fh-pydantic-form/src")
 
+
 import datetime
 from enum import Enum, IntEnum
 from typing import List, Literal, Optional
@@ -1360,6 +1361,119 @@ def mock_skip_defaults(mocker):
         ),
         "logger": mocker.patch("fh_pydantic_form.form_renderer.logger"),
     }
+
+
+# Decimal-related fixtures
+@pytest.fixture(scope="module")
+def decimal_test_model():
+    """Simple decimal test model for reuse across tests."""
+    from decimal import Decimal
+    from typing import Optional
+
+    class DecimalTestModel(BaseModel):
+        price: Decimal
+        cost: Optional[Decimal] = None
+        margin: Decimal = Decimal("0.30")
+
+    return DecimalTestModel
+
+
+@pytest.fixture(scope="module")
+def complex_decimal_test_model():
+    """Complex decimal test model with various field types."""
+    from decimal import Decimal
+    from typing import List, Optional
+
+    class ComplexDecimalModel(BaseModel):
+        name: str = "Test Product"
+        base_price: Decimal
+        discount: Optional[Decimal] = None
+        tax_rate: Decimal = Decimal("0.08")
+        fees: List[Decimal] = Field(default_factory=list)
+        total: Optional[Decimal] = Field(default=None)
+
+    return ComplexDecimalModel
+
+
+@pytest.fixture
+def decimal_form_renderer(decimal_test_model):
+    """Form renderer for simple decimal model."""
+    return PydanticForm("decimal_form", decimal_test_model)
+
+
+@pytest.fixture
+def complex_decimal_form_renderer(complex_decimal_test_model):
+    """Form renderer for complex decimal model."""
+    return PydanticForm("complex_decimal_form", complex_decimal_test_model)
+
+
+@pytest.fixture
+def decimal_form_data():
+    """Sample form data with decimal values."""
+    return {
+        "decimal_form_price": "99.99",
+        "decimal_form_cost": "45.50",
+        "decimal_form_margin": "0.35",
+    }
+
+
+@pytest.fixture
+def complex_decimal_form_data():
+    """Sample form data for complex decimal model."""
+    return {
+        "complex_decimal_form_name": "Test Product",
+        "complex_decimal_form_base_price": "199.99",
+        "complex_decimal_form_discount": "20.00",
+        "complex_decimal_form_tax_rate": "0.0875",
+        "complex_decimal_form_fees_0": "5.00",
+        "complex_decimal_form_fees_1": "2.50",
+    }
+
+
+@pytest.fixture(scope="module")
+def decimal_client(decimal_test_model):
+    """TestClient for decimal form E2E testing."""
+    form_renderer = PydanticForm("decimal_client_form", decimal_test_model)
+    app, rt = fh.fast_app(hdrs=[mui.Theme.blue.headers()], pico=False, live=False)
+
+    @rt("/")
+    def get():
+        return fh.Div(
+            mui.Container(
+                mui.CardHeader("Decimal Test Form"),
+                mui.Card(
+                    mui.CardBody(
+                        mui.Form(
+                            form_renderer.render_inputs(),
+                            mui.Button(
+                                "Submit", type="submit", cls=mui.ButtonT.primary
+                            ),
+                            hx_post="/submit_form",
+                            hx_target="#result",
+                            hx_swap="innerHTML",
+                            id="decimal-test-form",
+                        )
+                    ),
+                ),
+                fh.Div(id="result"),
+            ),
+        )
+
+    @rt("/submit_form", methods=["POST"])
+    async def post_submit_form(req):
+        try:
+            validated = await form_renderer.model_validate_request(req)
+            return mui.Card(
+                mui.CardHeader(fh.H3("Validation Successful")),
+                mui.CardBody(fh.Pre(validated.model_dump_json(indent=2))),
+            )
+        except ValidationError as e:
+            return mui.Card(
+                mui.CardHeader(fh.H3("Validation Error", cls="text-red-500")),
+                mui.CardBody(fh.Pre(e.json(indent=2))),
+            )
+
+    return TestClient(app)
 
 
 @pytest.fixture(scope="module")

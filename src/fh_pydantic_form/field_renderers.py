@@ -1,6 +1,7 @@
 import logging
 import re
 from datetime import date, time
+from decimal import Decimal
 from enum import Enum
 from typing import (
     Any,
@@ -510,7 +511,7 @@ class BaseFieldRenderer(MetricsRendererMixin):
         label_text_span = fh.Span(label_text, **span_attrs)
 
         # Prepare label attributes
-        label_attrs = {"For": self.field_name}
+        label_attrs = {"for": self.field_name}
 
         # Build label classes with tokenized gap
         label_gap_class = spacing("label_gap", self.spacing)
@@ -696,6 +697,66 @@ class NumberFieldRenderer(BaseFieldRenderer):
             if self.field_info.annotation is float
             or get_origin(self.field_info.annotation) is float
             else "1",
+        }
+
+        # Only add the disabled attribute if the field should actually be disabled
+        if self.disabled:
+            input_attrs["disabled"] = True
+
+        return mui.Input(**input_attrs)
+
+
+class DecimalFieldRenderer(BaseFieldRenderer):
+    """Renderer for decimal.Decimal fields"""
+
+    def __init__(self, *args, **kwargs):
+        """Initialize decimal field renderer, passing all arguments to parent"""
+        super().__init__(*args, **kwargs)
+
+    def render_input(self) -> FT:
+        """
+        Render input element for decimal fields
+
+        Returns:
+            A NumberInput component appropriate for decimal values
+        """
+        # Determine if field is required
+        has_default = get_default(self.field_info) is not _UNSET
+        is_field_required = not self.is_optional and not has_default
+
+        placeholder_text = f"Enter {self.original_field_name.replace('_', ' ')}"
+        if self.is_optional:
+            placeholder_text += " (Optional)"
+
+        input_cls_parts = ["w-full"]
+        input_spacing_cls = spacing_many(
+            ["input_size", "input_padding", "input_line_height", "input_font_size"],
+            self.spacing,
+        )
+        if input_spacing_cls:
+            input_cls_parts.append(input_spacing_cls)
+
+        # Convert Decimal value to string for display
+        if isinstance(self.value, Decimal):
+            # Use format to avoid scientific notation
+            display_value = format(self.value, "f")
+            # Normalize zero values to display as "0"
+            if self.value == 0:
+                display_value = "0"
+        elif self.value is not None:
+            display_value = str(self.value)
+        else:
+            display_value = ""
+
+        input_attrs = {
+            "value": display_value,
+            "id": self.field_name,
+            "name": self.field_name,
+            "type": "number",
+            "placeholder": placeholder_text,
+            "required": is_field_required,
+            "cls": " ".join(input_cls_parts),
+            "step": "any",  # Allow arbitrary decimal precision
         }
 
         # Only add the disabled attribute if the field should actually be disabled

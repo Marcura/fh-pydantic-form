@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as _dt
+import decimal
 from enum import Enum
 from typing import Any, Literal, get_args, get_origin
 
@@ -25,6 +26,7 @@ _SIMPLE_DEFAULTS = {
     int: 0,
     float: 0.0,
     bool: False,
+    decimal.Decimal: decimal.Decimal("0"),
     _dt.date: lambda: _today(),  # callable - gets current date (late-bound)
     _dt.time: lambda: _dt.time(0, 0),  # callable - midnight
 }
@@ -51,6 +53,10 @@ def default_for_annotation(annotation: Any) -> Any:
     # Optional[T] → None
     if _is_optional_type(annotation):
         return None
+
+    # List[T] → []
+    if origin is list:
+        return []
 
     # Literal[...] → first literal value
     if origin is Literal:
