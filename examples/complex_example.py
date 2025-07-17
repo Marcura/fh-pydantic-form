@@ -1,5 +1,6 @@
 import datetime
 import logging
+from decimal import Decimal
 from enum import Enum, IntEnum
 from typing import List, Literal, Optional
 
@@ -105,6 +106,7 @@ class ComplexSchema(BaseModel):
     name: str = Field(description="Name of the customer")
     age: int = Field(description="Age of the customer")
     score: float = Field(description="Score of the customer")
+    balance: Decimal = Field(description="Account balance (decimal precision)")
     is_active: bool = Field(description="Is the customer active")
     description: Optional[str] = Field(description="Description of the customer")
     customer_type: CustomerTypeEnum = Field(description="Type of the customer")
@@ -187,6 +189,7 @@ initial_values = ComplexSchema(
     name="Demo User",
     age=42,
     score=88.5,
+    balance=Decimal("1234.56"),
     is_active=True,
     description="Demo description",
     customer_type=CustomerTypeEnum.INDIVIDUAL,
@@ -239,6 +242,7 @@ form_renderer_normal = PydanticForm(
         "name": "blue",
         "age": "green",
         "score": "#FF0000",  # red
+        "balance": "emerald",
         "is_active": "purple",
         "description": "orange",
         # Enum fields
@@ -282,6 +286,7 @@ form_renderer_compact = PydanticForm(
         "name": "blue",
         "age": "green",
         "score": "#FF0000",  # red
+        "balance": "emerald",
         "is_active": "purple",
         "description": "orange",
         # Enum fields
