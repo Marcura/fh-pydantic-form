@@ -1,5 +1,13 @@
 # Release Notes
 
+## Version 0.3.5 (2025-07-17)
+
+- **NEW**: Added support for `decimal.Decimal` fields with dedicated field renderer
+- **FIXED**: Scientific notation display issues in decimal values  
+- **IMPROVED**: MyPy type checking compliance
+
+---
+
 ## Version 0.3.4 (2025-07-15)
 
 - **NEW**: Added support for Optional[List[..]] types in form fields
