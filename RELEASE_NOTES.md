@@ -1,5 +1,10 @@
 # Release Notes
 
+## Version 0.3.6 (2025-07-21)
+
+- **NEW**: can now pass new metrics_dict to `.with_initial_values()` helper method.
+
+---
 ## Version 0.3.5 (2025-07-17)
 
 - **NEW**: Added support for `decimal.Decimal` fields with dedicated field renderer
