@@ -364,7 +364,9 @@ class PydanticForm(Generic[ModelType]):
         self.values_dict = self.initial_values_dict.copy()
 
     def with_initial_values(
-        self, initial_values: Optional[Union[ModelType, Dict[str, Any]]] = None
+        self,
+        initial_values: Optional[Union[ModelType, Dict[str, Any]]] = None,
+        metrics_dict: Optional[Dict[str, Any]] = None,
     ) -> "PydanticForm":
         """
         Create a new PydanticForm instance with the same configuration but different initial values.
@@ -391,7 +393,7 @@ class PydanticForm(Generic[ModelType]):
             label_colors=self.label_colors,
             exclude_fields=self.exclude_fields,
             spacing=self.spacing,
-            metrics_dict=self.metrics_dict,
+            metrics_dict=metrics_dict,
         )
 
         return clone
