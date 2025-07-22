@@ -1000,7 +1000,7 @@ form_renderer = PydanticForm(
 | Method | Purpose |
 |--------|---------|
 | `render_inputs()` | Generate the HTML form inputs (without `<form>` wrapper) |
-| `with_initial_values(initial_values)` | Create a new form instance with same configuration but different initial values |
+| `with_initial_values(initial_values, metrics_dict=None)` | Create a new form instance with same configuration but different initial values |
 | `refresh_button(text=None, **kwargs)` | Create a refresh button component |
 | `reset_button(text=None, **kwargs)` | Create a reset button component |
 | `register_routes(app)` | Register HTMX endpoints for list manipulation |
