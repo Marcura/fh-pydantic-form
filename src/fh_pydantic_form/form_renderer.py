@@ -349,6 +349,13 @@ class PydanticForm(Generic[ModelType]):
             for field_type, renderer_cls in custom_renderers:
                 registry.register_type_renderer(field_type, renderer_cls)
 
+    @property
+    def form_name(self) -> str:
+        """
+        LLMs like to hallucinate this property, so might as well make it real.
+        """
+        return self.name
+
     def _compact_wrapper(self, inner: FT) -> FT:
         """
         Wrap inner markup in a wrapper div.
@@ -378,6 +385,7 @@ class PydanticForm(Generic[ModelType]):
         Args:
             initial_values: New initial values as BaseModel instance or dict.
                            Same format as the constructor accepts.
+            metrics_dict: Optional metrics dictionary for field-level visual feedback
 
         Returns:
             A new PydanticForm instance with identical configuration but updated initial values
@@ -393,7 +401,9 @@ class PydanticForm(Generic[ModelType]):
             label_colors=self.label_colors,
             exclude_fields=self.exclude_fields,
             spacing=self.spacing,
-            metrics_dict=metrics_dict,
+            metrics_dict=metrics_dict
+            if metrics_dict is not None
+            else self.metrics_dict,
         )
 
         return clone
