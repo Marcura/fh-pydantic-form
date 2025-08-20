@@ -14,7 +14,7 @@ from typing import (
 import fasthtml.common as fh
 import monsterui.all as mui
 from fastcore.xml import FT
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from pydantic.fields import FieldInfo
 
 from fh_pydantic_form.color_utils import (
@@ -23,6 +23,7 @@ from fh_pydantic_form.color_utils import (
     robust_color_to_rgba,
 )
 from fh_pydantic_form.constants import _UNSET
+from fh_pydantic_form.defaults import default_dict_for_model, default_for_annotation
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import (
     DecorationScope,
@@ -402,6 +403,14 @@ class BaseFieldRenderer(MetricsRendererMixin):
         self.field_name = f"{prefix}{field_name}" if prefix else field_name
         self.original_field_name = field_name
         self.field_info = field_info
+        # Normalize PydanticUndefined → None so it never renders as text
+        try:
+            from pydantic_core import PydanticUndefined
+
+            if value is PydanticUndefined:
+                value = None
+        except Exception:
+            pass
         self.value = value
         self.prefix = prefix
         self.field_path: List[str] = field_path or []
@@ -1249,18 +1258,18 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
 
                 # Only use defaults if field wasn't provided
                 if not field_was_provided:
-                    if nested_field_info.default is not None:
-                        nested_field_value = nested_field_info.default
-                    elif (
-                        getattr(nested_field_info, "default_factory", None) is not None
-                    ):
-                        try:
-                            nested_field_value = nested_field_info.default_factory()
-                        except Exception as e:
-                            logger.warning(
-                                f"Default factory failed for {nested_field_name}: {e}"
-                            )
-                            nested_field_value = None
+                    dv = get_default(nested_field_info)  # _UNSET if truly unset
+                    if dv is not _UNSET:
+                        nested_field_value = dv
+                    else:
+                        ann = nested_field_info.annotation
+                        base_ann = get_origin(ann) or ann
+                        if isinstance(base_ann, type) and issubclass(
+                            base_ann, BaseModel
+                        ):
+                            nested_field_value = default_dict_for_model(base_ann)
+                        else:
+                            nested_field_value = default_for_annotation(ann)
 
                 # Get renderer for this nested field
                 registry = FieldRendererRegistry()  # Get singleton instance
@@ -1866,18 +1875,20 @@ class ListFieldRenderer(BaseFieldRenderer):
 
                             # Use defaults only if field not provided
                             if not field_was_provided:
-                                if nested_field_info.default is not None:
-                                    nested_field_value = nested_field_info.default
-                                elif (
-                                    getattr(nested_field_info, "default_factory", None)
-                                    is not None
-                                ):
-                                    try:
-                                        nested_field_value = (
-                                            nested_field_info.default_factory()
+                                dv = get_default(nested_field_info)
+                                if dv is not _UNSET:
+                                    nested_field_value = dv
+                                else:
+                                    ann = nested_field_info.annotation
+                                    base_ann = get_origin(ann) or ann
+                                    if isinstance(base_ann, type) and issubclass(
+                                        base_ann, BaseModel
+                                    ):
+                                        nested_field_value = default_dict_for_model(
+                                            base_ann
                                         )
-                                    except Exception:
-                                        continue  # Skip fields with problematic defaults
+                                    else:
+                                        nested_field_value = default_for_annotation(ann)
 
                             # Get renderer and render field with error handling
                             renderer_cls = FieldRendererRegistry().get_renderer(

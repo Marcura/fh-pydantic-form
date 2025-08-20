@@ -440,24 +440,14 @@ class PydanticForm(Generic[ModelType]):
 
             # Only use defaults if field was not provided at all
             if not field_was_provided:
-                # Field not provided - use model defaults
-                if field_info.default is not None:
-                    initial_value = field_info.default
-                elif getattr(field_info, "default_factory", None) is not None:
-                    try:
-                        default_factory = field_info.default_factory
-                        if callable(default_factory):
-                            initial_value = default_factory()  # type: ignore[call-arg]
-                        else:
-                            initial_value = None
-                            logger.warning(
-                                f"  - default_factory for '{field_name}' is not callable"
-                            )
-                    except Exception as e:
-                        initial_value = None
-                        logger.warning(
-                            f"  - Error in default_factory for '{field_name}': {e}"
-                        )
+                # Field not provided - use model defaults in order of priority
+                # 1. Try explicit field default
+                default_val = get_default(field_info)
+                if default_val is not _UNSET:
+                    initial_value = default_val
+                else:
+                    # 2. Fall back to smart defaults for the type
+                    initial_value = default_for_annotation(field_info.annotation)
             # If field was provided (even as None), respect that value
 
             # Get renderer from global registry
