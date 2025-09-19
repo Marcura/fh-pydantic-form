@@ -152,6 +152,9 @@ class TestIsSkipJsonSchemaField:
             def __str__(self):
                 return "SkipJsonSchema[str]"
 
+            def __repr__(self):
+                return "SkipJsonSchema[str]"
+
         mock_type = MockSkipJsonSchemaType()
         assert _is_skip_json_schema_field(mock_type) is True
 
