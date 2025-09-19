@@ -3,10 +3,12 @@ import logging
 from decimal import Decimal
 from enum import Enum, IntEnum
 from typing import List, Literal, Optional
+from uuid import uuid4
 
 import fasthtml.common as fh
 import monsterui.all as mui
 from pydantic import BaseModel, Field, ValidationError
+from pydantic.json_schema import SkipJsonSchema
 
 from fh_pydantic_form import PydanticForm, list_manipulation_js
 from fh_pydantic_form.field_renderers import BaseFieldRenderer
@@ -29,6 +31,15 @@ class Address(BaseModel):
     city: str  # = "Anytown"
     is_billing: bool = False
     tags: List[str] = Field(default=["tag1"], description="Tags for the address")
+    # SkipJsonSchema fields - normally hidden but can be selectively shown
+    internal_id: SkipJsonSchema[str] = Field(  # type: ignore
+        default_factory=lambda: f"addr_{uuid4().hex[:8]}",
+        description="Internal address tracking ID (system use only)",
+    )
+    audit_notes: SkipJsonSchema[List[str]] = Field(  # type: ignore
+        default_factory=list,
+        description="Internal audit notes (system use only)",
+    )
 
     def __str__(self) -> str:
         return f"{self.street}, {self.city} ({'billing' if self.is_billing else 'shipping'})"
@@ -103,6 +114,22 @@ class ComplexSchema(BaseModel):
     """
 
     skip_field: str = Field(description="This field will be skipped")
+    # SkipJsonSchema fields - normally hidden from forms
+    document_id: SkipJsonSchema[str] = Field(  # type: ignore
+        default_factory=lambda: f"doc_{uuid4().hex[:12]}",
+        description="Document tracking ID (system generated)",
+    )
+    created_at: SkipJsonSchema[datetime.datetime] = Field(  # type: ignore
+        default_factory=datetime.datetime.now,
+        description="Creation timestamp (system managed)",
+    )
+    version: SkipJsonSchema[int] = Field(  # type: ignore
+        default=1, description="Document version (system managed)"
+    )
+    security_flags: SkipJsonSchema[List[str]] = Field(  # type: ignore
+        default_factory=lambda: ["verified", "approved"],
+        description="Security flags (admin only)",
+    )
     name: str = Field(description="Name of the customer")
     age: int = Field(description="Age of the customer")
     score: float = Field(description="Score of the customer")
@@ -139,7 +166,7 @@ class ComplexSchema(BaseModel):
 
     # Nested model
     main_address: Address = Field(
-        default_factory=Address, description="Main address of the customer"
+        default_factory=lambda: Address(), description="Main address of the customer"
     )
     # list of nested models
     other_addresses: List[Address] = Field(
@@ -148,7 +175,8 @@ class ComplexSchema(BaseModel):
 
     # single custom nested model
     custom_detail: CustomDetail = Field(
-        default_factory=CustomDetail, description="Custom detail of the customer"
+        default_factory=lambda: CustomDetail(),
+        description="Custom detail of the customer",
     )
     # list of custom nested models
     more_custom_details: List[CustomDetail] = Field(
@@ -186,6 +214,11 @@ class ComplexSchema(BaseModel):
 # Create an initial model with example data
 initial_values = ComplexSchema(
     skip_field="This field will be skipped",
+    # SkipJsonSchema field values - these will be hidden by default
+    document_id="DEMO_DOC_12345ABC",
+    created_at=datetime.datetime(2023, 1, 1, 10, 30, 0),
+    version=5,
+    security_flags=["demo", "test", "verified"],
     name="Demo User",
     age=42,
     score=88.5,
@@ -199,11 +232,29 @@ initial_values = ComplexSchema(
     status="PENDING",
     optional_status=None,
     tags=["tag1", "tag2", "tag3"],
-    main_address=Address(street="123 Main St", city="Anytown", is_billing=True),
+    main_address=Address(
+        street="123 Main St",
+        city="Anytown",
+        is_billing=True,
+        internal_id="MAIN_ADDR_001",
+        audit_notes=["Created as main", "Verified address"],
+    ),
     custom_detail=CustomDetail(value="Main Detail", confidence="HIGH"),
     other_addresses=[
-        Address(street="456 Second St", city="Othertown", is_billing=False),
-        Address(street="789 Third St", city="Thirdville", is_billing=True),
+        Address(
+            street="456 Second St",
+            city="Othertown",
+            is_billing=False,
+            internal_id="OTHER_ADDR_002",
+            audit_notes=["Secondary address", "Shipping only"],
+        ),
+        Address(
+            street="789 Third St",
+            city="Thirdville",
+            is_billing=True,
+            internal_id="OTHER_ADDR_003",
+            audit_notes=["Backup billing", "High priority"],
+        ),
     ],
     more_custom_details=[
         CustomDetail(value="Detail 1", confidence="HIGH"),
@@ -309,9 +360,63 @@ form_renderer_compact = PydanticForm(
     spacing="compact",
 )
 
-# Register routes for both forms
+# Create a third form demonstrating SkipJsonSchema with keep_skip_json_fields
+form_renderer_skip_demo = PydanticForm(
+    form_name="main_form_skip_demo",
+    model_class=ComplexSchema,
+    initial_values=initial_values.model_dump(),
+    custom_renderers=[(CustomDetail, CustomDetailFieldRenderer)],
+    exclude_fields=[
+        "skip_field",
+        # Still exclude the regular excluded fields
+        "internal_id",
+        "audit_trail",
+        "system_metadata",
+        "processing_flags",
+        "backup_address",
+    ],
+    # DEMO: Selectively keep some SkipJsonSchema fields visible!
+    keep_skip_json_fields=[
+        "document_id",  # Top-level skip field
+        "version",  # Another top-level skip field
+        "main_address.internal_id",  # Nested skip field
+        "other_addresses.audit_notes",  # Skip field in list items
+    ],
+    label_colors={
+        # Basic fields
+        "name": "blue",
+        "age": "green",
+        "score": "#FF0000",
+        "balance": "emerald",
+        "is_active": "purple",
+        "description": "orange",
+        # SkipJsonSchema fields that are kept
+        "document_id": "red",
+        "version": "amber",
+        # Enum fields
+        "customer_type": "teal",
+        "priority": "cyan",
+        # Date/time fields
+        "creation_date": "pink",
+        "start_time": "indigo",
+        # Status fields
+        "status": "yellow",
+        "optional_status": "lime",
+        # List fields
+        "tags": "amber",
+        # Nested model fields
+        "main_address": "emerald",
+        "other_addresses": "red",
+        "custom_detail": "violet",
+        "more_custom_details": "rose",
+    },
+    spacing="normal",
+)
+
+# Register routes for all three forms
 form_renderer_normal.register_routes(app)
 form_renderer_compact.register_routes(app)
+form_renderer_skip_demo.register_routes(app)
 
 
 @rt("/")
@@ -449,10 +554,68 @@ def get():
                             cls="mt-2",
                         ),
                     ),
+                    # SkipJsonSchema Section (NEW!)
+                    mui.Details(
+                        mui.Summary(
+                            fh.H3(
+                                "🔒 SkipJsonSchema Fields with Selective Keeping",
+                                cls="text-red-600",
+                            )
+                        ),
+                        fh.Div(
+                            fh.P(
+                                "Advanced SkipJsonSchema field management with selective visibility:"
+                            ),
+                            fh.Ul(
+                                fh.Li(
+                                    fh.Strong("Hidden by default: "),
+                                    "SkipJsonSchema fields are automatically hidden from forms",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Selective keeping: "),
+                                    "Use keep_skip_json_fields to selectively show specific fields",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Nested field support: "),
+                                    'Dot notation for nested fields: "main_address.internal_id"',
+                                ),
+                                fh.Li(
+                                    fh.Strong("List item support: "),
+                                    'Keep fields in list items: "other_addresses.audit_notes"',
+                                ),
+                                fh.Li(
+                                    fh.Strong("Smart defaults: "),
+                                    "Non-kept fields use model defaults, kept fields retain initial values",
+                                ),
+                                fh.Li(
+                                    fh.Strong("Admin/debug use: "),
+                                    "Perfect for admin panels or debugging interfaces",
+                                ),
+                                cls="space-y-1 ml-4",
+                            ),
+                            fh.P(
+                                fh.Strong("Skip fields in this demo: "),
+                                fh.Code(
+                                    "document_id, created_at, version, security_flags, main_address.internal_id, other_addresses.audit_notes"
+                                ),
+                                cls="text-sm text-gray-600 mt-2",
+                            ),
+                            fh.P(
+                                fh.Strong("Kept in SkipJsonSchema demo form: "),
+                                fh.Code(
+                                    ", ".join(
+                                        form_renderer_skip_demo.keep_skip_json_fields
+                                    )
+                                ),
+                                cls="text-sm text-green-600 mt-1",
+                            ),
+                            cls="mt-2",
+                        ),
+                    ),
                     # Form Features Section
                     mui.Details(
                         mui.Summary(
-                            fh.H3("⚡ Dynamic Form Features", cls="text-red-600")
+                            fh.H3("⚡ Dynamic Form Features", cls="text-purple-600")
                         ),
                         fh.Div(
                             fh.Ul(
@@ -609,14 +772,14 @@ def get():
                 ),
                 cls="mb-4",
             ),
-            # Side-by-side form comparison
+            # Three-form comparison
             mui.Card(
                 mui.CardHeader(
-                    fh.H2("🎨 Spacing Theme Comparison", cls="text-purple-600")
+                    fh.H2("🎨 Form Feature Comparison", cls="text-purple-600")
                 ),
                 mui.CardBody(
                     fh.P(
-                        "Compare Normal vs Compact spacing themes side by side:",
+                        "Compare three different form configurations: Normal spacing, Compact spacing, and SkipJsonSchema demo:",
                         cls="text-gray-600 mb-4",
                     ),
                     # Two-column layout for forms
@@ -686,7 +849,41 @@ def get():
                             fh.Div(id="result-compact", cls="mt-4"),
                             cls="w-full",
                         ),
-                        cls="grid grid-cols-1 lg:grid-cols-2 gap-6",
+                        # SkipJsonSchema demo form (third column)
+                        fh.Div(
+                            mui.Card(
+                                mui.CardHeader(
+                                    fh.H3("🔒 SkipJsonSchema Demo", cls="text-red-600"),
+                                    fh.P(
+                                        "Selective keeping of normally hidden fields",
+                                        cls="text-sm text-gray-600",
+                                    ),
+                                ),
+                                mui.CardBody(
+                                    mui.Form(
+                                        form_renderer_skip_demo.render_inputs(),
+                                        fh.Div(
+                                            mui.Button(
+                                                "🔍 Validate SkipJsonSchema",
+                                                cls=mui.ButtonT.primary,
+                                            ),
+                                            form_renderer_skip_demo.refresh_button(
+                                                "🔄"
+                                            ),
+                                            form_renderer_skip_demo.reset_button("↩️"),
+                                            cls="mt-4 flex items-center gap-2 flex-wrap",
+                                        ),
+                                        hx_post="/submit_form_skip_demo",
+                                        hx_target="#result-skip-demo",
+                                        hx_swap="innerHTML",
+                                        id=f"{form_renderer_skip_demo.name}-form",
+                                    )
+                                ),
+                            ),
+                            fh.Div(id="result-skip-demo", cls="mt-4"),
+                            cls="w-full",
+                        ),
+                        cls="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6",
                     ),
                 ),
             ),
@@ -812,6 +1009,138 @@ async def post_main_form_compact(req):
                 fh.H4("❌ Compact Form - Validation Error", cls="text-red-500")
             ),
             mui.CardBody(fh.Pre(e.json(indent=2), cls="bg-red-50 p-1 rounded text-xs")),
+        )
+
+
+@rt("/submit_form_skip_demo")
+async def post_main_form_skip_demo(req):
+    try:
+        validated = await form_renderer_skip_demo.model_validate_request(req)
+
+        # Get the raw parsed data to show what was injected
+        form_data = await req.form()
+        form_dict = dict(form_data)
+        parsed_data = form_renderer_skip_demo.parse(form_dict)
+
+        # Identify which SkipJsonSchema fields were kept vs hidden
+        kept_skip_fields = {}
+        hidden_skip_fields = {}
+
+        for field_name in ["document_id", "created_at", "version", "security_flags"]:
+            if field_name in form_renderer_skip_demo.keep_skip_json_fields:
+                kept_skip_fields[field_name] = parsed_data.get(field_name, "NOT_FOUND")
+            else:
+                hidden_skip_fields[field_name] = parsed_data.get(
+                    field_name, "NOT_FOUND"
+                )
+
+        # Also check nested fields
+        if "main_address" in parsed_data and isinstance(
+            parsed_data["main_address"], dict
+        ):
+            kept_skip_fields["main_address.internal_id"] = parsed_data[
+                "main_address"
+            ].get("internal_id", "NOT_FOUND")
+
+        if "other_addresses" in parsed_data and isinstance(
+            parsed_data["other_addresses"], list
+        ):
+            for i, addr in enumerate(parsed_data["other_addresses"]):
+                if isinstance(addr, dict) and "audit_notes" in addr:
+                    kept_skip_fields[f"other_addresses[{i}].audit_notes"] = addr[
+                        "audit_notes"
+                    ]
+
+        # Identify regular excluded fields
+        excluded_fields_data = {
+            field_name: parsed_data.get(field_name, "NOT_FOUND")
+            for field_name in form_renderer_skip_demo.exclude_fields
+        }
+
+        return fh.Div(
+            mui.Card(
+                mui.CardHeader(
+                    fh.H4(
+                        "✅ SkipJsonSchema Demo - Validation Successful",
+                        cls="text-green-600",
+                    )
+                ),
+                mui.CardBody(
+                    mui.H5("Complete Validated Model:"),
+                    fh.Pre(
+                        validated.model_dump_json(indent=2),
+                        cls="bg-gray-100 p-2 rounded text-xs overflow-auto max-h-64",
+                    ),
+                ),
+            ),
+            mui.Card(
+                mui.CardHeader(
+                    fh.H5("🔒 Kept SkipJsonSchema Fields", cls="text-green-600")
+                ),
+                mui.CardBody(
+                    fh.Pre(
+                        fh.Code(
+                            "\n".join(
+                                [
+                                    f"{field_name}: {repr(value)}"
+                                    for field_name, value in kept_skip_fields.items()
+                                ]
+                            )
+                        ),
+                        cls="bg-green-50 p-2 rounded text-xs",
+                    ),
+                ),
+            ),
+            mui.Card(
+                mui.CardHeader(
+                    fh.H5(
+                        "🙈 Hidden SkipJsonSchema Fields (Got Defaults)",
+                        cls="text-orange-600",
+                    )
+                ),
+                mui.CardBody(
+                    fh.Pre(
+                        fh.Code(
+                            "\n".join(
+                                [
+                                    f"{field_name}: {repr(value)}"
+                                    for field_name, value in hidden_skip_fields.items()
+                                ]
+                            )
+                        ),
+                        cls="bg-orange-50 p-2 rounded text-xs",
+                    ),
+                ),
+            ),
+            mui.Card(
+                mui.CardHeader(
+                    fh.H5(
+                        "🔧 Regular Excluded Fields (Auto-Injected)",
+                        cls="text-blue-600",
+                    )
+                ),
+                mui.CardBody(
+                    fh.Pre(
+                        fh.Code(
+                            "\n".join(
+                                [
+                                    f"{field_name}: {repr(value)}"
+                                    for field_name, value in excluded_fields_data.items()
+                                ]
+                            )
+                        ),
+                        cls="bg-blue-50 p-2 rounded text-xs",
+                    ),
+                ),
+            ),
+            cls="space-y-2",
+        )
+    except ValidationError as e:
+        return mui.Card(
+            mui.CardHeader(
+                fh.H4("❌ SkipJsonSchema Demo - Validation Error", cls="text-red-500")
+            ),
+            mui.CardBody(fh.Pre(e.json(indent=2), cls="bg-red-50 p-2 rounded text-xs")),
         )
 
 
