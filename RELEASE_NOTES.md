@@ -1,5 +1,45 @@
 # Release Notes
 
+## Version 0.3.7 (2025-09-19)
+
+### 🎉 New Features
+
+#### SkipJsonSchema Field Support with Selective Override
+- **NEW**: Added comprehensive support for fields marked with `SkipJsonSchema` annotation
+- **NEW**: `keep_skip_json_fields` parameter allows selective inclusion of specific SkipJsonSchema fields
+  - Supports dot-notation paths for nested fields (e.g., `"addresses.internal_id"`)
+  - Enables fine-grained control over which internal fields are exposed in forms
+  - Works with complex nested structures and list fields
+- **ENHANCED**: SkipJsonSchema fields are automatically excluded from form rendering by default
+- **IMPROVED**: Better field introspection for complex type scenarios including optional skip fields
+
+### 🔧 Bug Fixes & Improvements
+
+#### Default Values Handling
+- **FIXED**: Default values for simple fields now work correctly without initial values
+- **IMPROVED**: Better handling of field defaults when no initial values are provided
+- **ENHANCED**: More robust form rendering for fields with default values
+
+#### Documentation & Examples
+- **UPDATED**: README.md with SkipJsonSchema handling documentation
+- **ENHANCED**: Complex example updated to demonstrate SkipJsonSchema usage patterns
+- **IMPROVED**: Better code documentation and examples
+
+### 🧪 Testing
+- **NEW**: Comprehensive test coverage for SkipJsonSchema field handling
+- **NEW**: Tests for default values behavior without initial values
+- **IMPROVED**: Enhanced test coverage for edge cases and type introspection
+
+### 📊 Statistics
+- **7 commits** since v0.3.6
+- Focus on optional field handling and default value improvements
+- Enhanced SkipJsonSchema support with comprehensive testing
+
+**Key Highlights:**
+This release significantly improves handling of optional fields, particularly those marked with `SkipJsonSchema`, and fixes important issues with default value handling when no initial values are provided.
+
+---
+
 ## Version 0.3.6 (2025-07-21)
 
 - **NEW**: can now pass new metrics_dict to `.with_initial_values()` helper method.
