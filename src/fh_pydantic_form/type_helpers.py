@@ -5,6 +5,7 @@ __all__ = [
     "_is_literal_type",
     "_is_enum_type",
     "_is_skip_json_schema_field",
+    "normalize_path_segments",
     "MetricEntry",
     "MetricsDict",
     "DecorationScope",
@@ -18,6 +19,7 @@ from typing import (
     Annotated,
     Any,
     Dict,
+    List,
     Literal,
     TypedDict,
     Union,
@@ -36,6 +38,18 @@ class DecorationScope(str, Enum):
     BORDER = "border"
     BULLET = "bullet"
     BOTH = "both"
+
+
+def normalize_path_segments(path_segments: List[str]) -> str:
+    """Collapse path segments into a dot path ignoring list indices and placeholders."""
+    normalized: List[str] = []
+    for segment in path_segments:
+        # Coerce to string to avoid surprises from enums or numbers
+        seg_str = str(segment)
+        if seg_str.isdigit() or seg_str.startswith("new_"):
+            continue
+        normalized.append(seg_str)
+    return ".".join(normalized)
 
 
 def _is_skip_json_schema_field(annotation_or_field_info: Any) -> bool:
@@ -101,8 +115,14 @@ def _is_skip_json_schema_field(annotation_or_field_info: Any) -> bool:
             ):
                 return True
 
-    # 3. Fallback – cheap but effective
-    return "SkipJsonSchema" in repr(annotation)
+    # 3. Fallback – cheap but effective, but be more specific to avoid false positives
+    # Only match if SkipJsonSchema appears as a standalone word (not part of a class name)
+    repr_str = repr(annotation)
+    # Look for patterns like "SkipJsonSchema[" or "SkipJsonSchema(" or "SkipJsonSchema]"
+    # but not "SomeClassNameSkipJsonSchema"
+    import re
+
+    return bool(re.search(r"\bSkipJsonSchema\b", repr_str))
 
 
 # Metrics types for field-level annotations

@@ -54,6 +54,8 @@ def _parse_non_list_fields(
     list_field_defs: Dict[str, Dict[str, Any]],
     base_prefix: str = "",
     exclude_fields: Optional[List[str]] = None,
+    keep_skip_json_pathset: Optional[set[str]] = None,
+    current_field_path: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     Parses non-list fields from form data based on the model definition.
@@ -64,12 +66,30 @@ def _parse_non_list_fields(
         list_field_defs: Dictionary of list field definitions (to skip)
         base_prefix: Prefix to use when looking up field names in form_data
         exclude_fields: Optional list of field names to exclude from parsing
+        keep_skip_json_pathset: Optional set of normalized paths for SkipJsonSchema fields to keep
 
     Returns:
         Dictionary with parsed non-list fields
     """
     result: Dict[str, Any] = {}
     exclude_fields = exclude_fields or []
+    keep_skip_json_pathset = keep_skip_json_pathset or set()
+
+    # Helper function to check if a SkipJsonSchema field should be kept
+    def _should_keep_skip_field(path_segments: List[str]) -> bool:
+        from fh_pydantic_form.type_helpers import normalize_path_segments
+
+        normalized = normalize_path_segments(path_segments)
+        return bool(normalized) and normalized in keep_skip_json_pathset
+
+    # Calculate the current path context for fields at this level
+    # For top-level parsing, this will be empty
+    # For nested parsing, this will contain the nested path segments
+    current_path_segments: List[str] = []
+    if current_field_path is not None:
+        # Use explicitly passed field path
+        current_path_segments = current_field_path
+    # For top-level parsing (base_prefix is just form name), current_path_segments remains empty
 
     for field_name, field_info in model_class.model_fields.items():
         if field_name in list_field_defs:
@@ -79,9 +99,11 @@ def _parse_non_list_fields(
         if field_name in exclude_fields:
             continue
 
-        # Skip SkipJsonSchema fields - they should not be parsed from form data
+        # Skip SkipJsonSchema fields unless they're explicitly kept
         if _is_skip_json_schema_field(field_info):
-            continue
+            field_path_segments = current_path_segments + [field_name]
+            if not _should_keep_skip_field(field_path_segments):
+                continue
 
         # Create full key with prefix
         full_key = f"{base_prefix}{field_name}"
@@ -128,7 +150,8 @@ def _parse_non_list_fields(
             # Get the nested model class (unwrap Optional if needed)
             nested_model_class = _get_underlying_type_if_optional(annotation)
 
-            # Parse the nested model - pass the base_prefix and exclude_fields
+            # Parse the nested model - pass the base_prefix, exclude_fields, and keep paths
+            nested_field_path = current_path_segments + [field_name]
             nested_value = _parse_nested_model_field(
                 field_name,
                 form_data,
@@ -136,6 +159,8 @@ def _parse_non_list_fields(
                 field_info,
                 base_prefix,
                 exclude_fields,
+                keep_skip_json_pathset,
+                nested_field_path,
             )
 
             # Only assign if we got a non-None value or the field is not optional
@@ -276,6 +301,8 @@ def _parse_nested_model_field(
     field_info,
     parent_prefix: str = "",
     exclude_fields: Optional[List[str]] = None,
+    keep_skip_json_pathset: Optional[set[str]] = None,
+    current_field_path: Optional[List[str]] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Parse a nested Pydantic model field from form data.
@@ -286,6 +313,8 @@ def _parse_nested_model_field(
         nested_model_class: The nested model class
         field_info: The field info from the parent model
         parent_prefix: Prefix from parent form/model to use when constructing keys
+        exclude_fields: Optional list of field names to exclude from parsing
+        keep_skip_json_pathset: Optional set of normalized paths for SkipJsonSchema fields to keep
 
     Returns:
         Dictionary with nested model structure or None/default if no data found
@@ -302,6 +331,16 @@ def _parse_nested_model_field(
             break
 
     if found_any_subfield:
+        # Helper function to check if a SkipJsonSchema field should be kept
+        def _should_keep_skip_field_nested(path_segments: List[str]) -> bool:
+            from fh_pydantic_form.type_helpers import normalize_path_segments
+
+            normalized = normalize_path_segments(path_segments)
+            return bool(normalized) and normalized in (keep_skip_json_pathset or set())
+
+        # Use the passed field path for calculating nested paths
+        nested_path_segments: List[str] = current_field_path or []
+
         # ------------------------------------------------------------------
         # 1. Process each **non-list** field in the nested model
         # ------------------------------------------------------------------
@@ -309,12 +348,14 @@ def _parse_nested_model_field(
             sub_key = f"{current_prefix}{sub_field_name}"
             annotation = getattr(sub_field_info, "annotation", None)
 
-            # Skip SkipJsonSchema fields - they should not be parsed from form data
+            # Skip SkipJsonSchema fields unless they're explicitly kept
             if _is_skip_json_schema_field(sub_field_info):
-                logger.debug(
-                    f"Skipping SkipJsonSchema field in nested model during parsing: {sub_field_name}"
-                )
-                continue
+                sub_field_path_segments = nested_path_segments + [sub_field_name]
+                if not _should_keep_skip_field_nested(sub_field_path_segments):
+                    logger.debug(
+                        f"Skipping SkipJsonSchema field in nested model during parsing: {sub_field_name}"
+                    )
+                    continue
 
             # Handle based on field type, with Optional unwrapping
             is_optional = _is_optional_type(annotation)
@@ -326,9 +367,17 @@ def _parse_nested_model_field(
 
             # Handle nested model fields (including Optional[NestedModel])
             elif isinstance(base_type, type) and hasattr(base_type, "model_fields"):
-                # Pass the current_prefix to the recursive call
+                # Pass the current_prefix and keep paths to the recursive call
+                sub_field_path = nested_path_segments + [sub_field_name]
                 sub_value = _parse_nested_model_field(
-                    sub_field_name, form_data, base_type, sub_field_info, current_prefix
+                    sub_field_name,
+                    form_data,
+                    base_type,
+                    sub_field_info,
+                    current_prefix,
+                    exclude_fields,
+                    keep_skip_json_pathset,
+                    sub_field_path,
                 )
                 if sub_value is not None:
                     nested_data[sub_field_name] = sub_value
@@ -358,6 +407,7 @@ def _parse_nested_model_field(
                 nested_list_defs,
                 current_prefix,  # ← prefix for this nested model
                 exclude_fields,  # Pass through exclude_fields
+                keep_skip_json_pathset,
             )
             # Merge without clobbering keys already set in step 1
             for lf_name, lf_val in list_results.items():
@@ -438,6 +488,7 @@ def _parse_list_fields(
     list_field_defs: Dict[str, Dict[str, Any]],
     base_prefix: str = "",
     exclude_fields: Optional[List[str]] = None,
+    keep_skip_json_pathset: Optional[set[str]] = None,
 ) -> Dict[str, Optional[List[Any]]]:
     """
     Parse list fields from form data by analyzing keys and reconstructing ordered lists.
@@ -447,6 +498,7 @@ def _parse_list_fields(
         list_field_defs: Dictionary of list field definitions
         base_prefix: Prefix to use when looking up field names in form_data
         exclude_fields: Optional list of field names to exclude from parsing
+        keep_skip_json_pathset: Optional set of normalized paths for SkipJsonSchema fields to keep
 
     Returns:
         Dictionary with parsed list fields
@@ -504,7 +556,15 @@ def _parse_list_fields(
             # ------------------------------------------------------------------
             if field_def["is_model_type"]:
                 item_prefix = f"{base_prefix}{field_name}_{idx_str}_"
-                parsed_item = _parse_model_list_item(form_data, item_type, item_prefix)
+                # For list items, the field path is the list field name (without index)
+                item_field_path = [field_name]
+                parsed_item = _parse_model_list_item(
+                    form_data,
+                    item_type,
+                    item_prefix,
+                    keep_skip_json_pathset,
+                    item_field_path,
+                )
                 items.append(parsed_item)
                 continue
 
@@ -558,6 +618,8 @@ def _parse_model_list_item(
     form_data: Dict[str, Any],
     item_type,
     item_prefix: str,
+    keep_skip_json_pathset: Optional[set[str]] = None,
+    current_field_path: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     Fully parse a single BaseModel list item – including its own nested lists.
@@ -568,6 +630,7 @@ def _parse_model_list_item(
         form_data: Dictionary containing form field data
         item_type: The BaseModel class for this list item
         item_prefix: Prefix for this specific list item (e.g., "main_form_compact_other_addresses_0_")
+        keep_skip_json_pathset: Optional set of normalized paths for SkipJsonSchema fields to keep
 
     Returns:
         Dictionary with fully parsed item data including nested lists
@@ -579,11 +642,18 @@ def _parse_model_list_item(
         item_type,
         nested_list_defs,
         base_prefix=item_prefix,
+        exclude_fields=[],
+        keep_skip_json_pathset=keep_skip_json_pathset,
+        current_field_path=current_field_path,
     )
     # 2. Parse inner lists
     result.update(
         _parse_list_fields(
-            form_data, nested_list_defs, base_prefix=item_prefix, exclude_fields=[]
+            form_data,
+            nested_list_defs,
+            base_prefix=item_prefix,
+            exclude_fields=[],
+            keep_skip_json_pathset=keep_skip_json_pathset,
         )
     )
     return result

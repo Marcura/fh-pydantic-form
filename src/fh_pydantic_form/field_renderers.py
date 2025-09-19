@@ -31,7 +31,9 @@ from fh_pydantic_form.type_helpers import (
     MetricsDict,
     _get_underlying_type_if_optional,
     _is_optional_type,
+    _is_skip_json_schema_field,
     get_default,
+    normalize_path_segments,
 )
 from fh_pydantic_form.ui_style import (
     SpacingTheme,
@@ -380,6 +382,7 @@ class BaseFieldRenderer(MetricsRendererMixin):
         metric_entry: Optional[MetricEntry] = None,
         metrics_dict: Optional[MetricsDict] = None,
         refresh_endpoint_override: Optional[str] = None,
+        keep_skip_json_pathset: Optional[set[str]] = None,
         **kwargs,  # Accept additional kwargs for extensibility
     ):
         """
@@ -421,6 +424,7 @@ class BaseFieldRenderer(MetricsRendererMixin):
         self.spacing = _normalize_spacing(spacing)
         self.metrics_dict = metrics_dict
         self._refresh_endpoint_override = refresh_endpoint_override
+        self._keep_skip_json_pathset = keep_skip_json_pathset or set()
 
         # Initialize metric entry attribute
         self.metric_entry: Optional[MetricEntry] = None
@@ -455,6 +459,15 @@ class BaseFieldRenderer(MetricsRendererMixin):
             else:
                 parts.append(segment)
         return ".".join(parts)
+
+    def _normalized_dot_path(self, path_segments: List[str]) -> str:
+        """Normalize path segments by dropping indices and joining with dots."""
+        return normalize_path_segments(path_segments)
+
+    def _is_kept_skip_field(self, full_path: List[str]) -> bool:
+        """Return True if a SkipJsonSchema field should be kept based on keep list."""
+        normalized = self._normalized_dot_path(full_path)
+        return bool(normalized) and normalized in self._keep_skip_json_pathset
 
     def _is_inline_color(self, color: str) -> bool:
         """
@@ -1271,6 +1284,14 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
                         else:
                             nested_field_value = default_for_annotation(ann)
 
+                # Skip SkipJsonSchema fields unless explicitly kept
+                if _is_skip_json_schema_field(
+                    nested_field_info
+                ) and not self._is_kept_skip_field(
+                    self.field_path + [nested_field_name]
+                ):
+                    continue
+
                 # Get renderer for this nested field
                 registry = FieldRendererRegistry()  # Get singleton instance
                 renderer_cls = registry.get_renderer(
@@ -1299,6 +1320,7 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
                     metric_entry=None,  # Let auto-lookup handle it
                     metrics_dict=self.metrics_dict,  # Pass down the metrics dict
                     refresh_endpoint_override=self._refresh_endpoint_override,  # Propagate refresh override
+                    keep_skip_json_pathset=self._keep_skip_json_pathset,  # Propagate keep paths
                 )
 
                 nested_inputs.append(renderer.render())
@@ -1852,6 +1874,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                         metric_entry=None,  # Let auto-lookup handle it
                         metrics_dict=self.metrics_dict,  # Pass down the metrics dict
                         refresh_endpoint_override=self._refresh_endpoint_override,  # Propagate refresh override
+                        keep_skip_json_pathset=self._keep_skip_json_pathset,  # Propagate keep paths
                     )
                     # Add the rendered input to content elements
                     item_content_elements.append(item_renderer.render_input())
@@ -1890,6 +1913,14 @@ class ListFieldRenderer(BaseFieldRenderer):
                                     else:
                                         nested_field_value = default_for_annotation(ann)
 
+                            # Skip SkipJsonSchema fields unless explicitly kept
+                            if _is_skip_json_schema_field(
+                                nested_field_info
+                            ) and not self._is_kept_skip_field(
+                                self.field_path + [nested_field_name]
+                            ):
+                                continue
+
                             # Get renderer and render field with error handling
                             renderer_cls = FieldRendererRegistry().get_renderer(
                                 nested_field_name, nested_field_info
@@ -1913,6 +1944,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                                 metric_entry=None,  # Let auto-lookup handle it
                                 metrics_dict=self.metrics_dict,  # Pass down the metrics dict
                                 refresh_endpoint_override=self._refresh_endpoint_override,  # Propagate refresh override
+                                keep_skip_json_pathset=self._keep_skip_json_pathset,  # Propagate keep paths
                             )
 
                             # Add rendered field to valid fields

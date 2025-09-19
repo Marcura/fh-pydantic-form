@@ -34,6 +34,7 @@ from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import (
     _is_skip_json_schema_field,
     get_default,
+    normalize_path_segments,
 )
 from fh_pydantic_form.ui_style import (
     SpacingTheme,
@@ -46,6 +47,21 @@ logger = logging.getLogger(__name__)
 
 # TypeVar for generic model typing
 ModelType = TypeVar("ModelType", bound=BaseModel)
+
+
+def _compile_keep_paths(paths: Optional[List[str]]) -> set[str]:
+    """Normalize and compile keep paths for fast membership tests."""
+    if not paths:
+        return set()
+
+    compiled: set[str] = set()
+    for raw_path in paths:
+        if not raw_path:
+            continue
+        normalized = raw_path.strip()
+        if normalized:
+            compiled.add(normalized)
+    return compiled
 
 
 def list_manipulation_js():
@@ -281,6 +297,7 @@ class PydanticForm(Generic[ModelType]):
         disabled_fields: Optional[List[str]] = None,
         label_colors: Optional[Dict[str, str]] = None,
         exclude_fields: Optional[List[str]] = None,
+        keep_skip_json_fields: Optional[List[str]] = None,
         spacing: SpacingValue = SpacingTheme.NORMAL,
         metrics_dict: Optional[Dict[str, Any]] = None,
     ):
@@ -298,6 +315,7 @@ class PydanticForm(Generic[ModelType]):
             disabled_fields: Optional list of top-level field names to disable specifically
             label_colors: Optional dictionary mapping field names to label colors (CSS color values)
             exclude_fields: Optional list of top-level field names to exclude from the form
+            keep_skip_json_fields: Optional list of dot-paths for SkipJsonSchema fields to force-keep
             spacing: Spacing theme to use for form layout ("normal", "compact", or SpacingTheme enum)
             metrics_dict: Optional metrics dictionary for field-level visual feedback
         """
@@ -342,6 +360,8 @@ class PydanticForm(Generic[ModelType]):
         self.exclude_fields = exclude_fields or []  # Store excluded fields list
         self.spacing = _normalize_spacing(spacing)  # Store normalized spacing
         self.metrics_dict = metrics_dict or {}  # Store metrics dictionary
+        self.keep_skip_json_fields = keep_skip_json_fields or []
+        self._keep_skip_json_pathset = _compile_keep_paths(self.keep_skip_json_fields)
 
         # Register custom renderers with the global registry if provided
         if custom_renderers:
@@ -362,6 +382,15 @@ class PydanticForm(Generic[ModelType]):
         """
         wrapper_cls = "fhpf-wrapper w-full flex-1"
         return fh.Div(inner, cls=wrapper_cls)
+
+    def _normalized_dot_path(self, path_segments: List[str]) -> str:
+        """Normalize path segments by dropping indices and joining with dots."""
+        return normalize_path_segments(path_segments)
+
+    def _is_kept_skip_field(self, full_path: List[str]) -> bool:
+        """Return True if a SkipJsonSchema field should be kept based on keep list."""
+        normalized = self._normalized_dot_path(full_path)
+        return bool(normalized) and normalized in self._keep_skip_json_pathset
 
     def reset_state(self) -> None:
         """
@@ -400,6 +429,7 @@ class PydanticForm(Generic[ModelType]):
             disabled_fields=self.disabled_fields,
             label_colors=self.label_colors,
             exclude_fields=self.exclude_fields,
+            keep_skip_json_fields=self.keep_skip_json_fields,
             spacing=self.spacing,
             metrics_dict=metrics_dict
             if metrics_dict is not None
@@ -423,8 +453,10 @@ class PydanticForm(Generic[ModelType]):
             if field_name in self.exclude_fields:
                 continue
 
-            # Skip SkipJsonSchema fields (they should not be rendered in the form)
-            if _is_skip_json_schema_field(field_info):
+            # Skip SkipJsonSchema fields unless explicitly kept
+            if _is_skip_json_schema_field(field_info) and not self._is_kept_skip_field(
+                [field_name]
+            ):
                 continue
 
             # Only use what was explicitly provided in initial values
@@ -478,6 +510,7 @@ class PydanticForm(Generic[ModelType]):
                 field_path=[field_name],  # Set top-level field path
                 form_name=self.name,  # Pass form name
                 metrics_dict=self.metrics_dict,  # Pass the metrics dict
+                keep_skip_json_pathset=self._keep_skip_json_pathset,
             )
 
             rendered_field = renderer.render()
@@ -644,19 +677,25 @@ class PydanticForm(Generic[ModelType]):
             if field_name not in self.exclude_fields
         }
 
-        # Parse non-list fields first - pass the base_prefix and exclude_fields
+        # Parse non-list fields first - pass the base_prefix, exclude_fields, and keep paths
         result = _parse_non_list_fields(
             form_dict,
             self.model_class,
             list_field_defs,
             self.base_prefix,
             self.exclude_fields,
+            self._keep_skip_json_pathset,
+            None,  # Top-level parsing, no field path
         )
 
-        # Parse list fields based on keys present in form_dict - pass the base_prefix
+        # Parse list fields based on keys present in form_dict - pass the base_prefix and keep paths
         # Use filtered list field definitions to skip excluded list fields
         list_results = _parse_list_fields(
-            form_dict, filtered_list_field_defs, self.base_prefix
+            form_dict,
+            filtered_list_field_defs,
+            self.base_prefix,
+            self.exclude_fields,
+            self._keep_skip_json_pathset,
         )
 
         # Merge list results into the main result
@@ -685,12 +724,33 @@ class PydanticForm(Generic[ModelType]):
         """
         # Process ALL model fields, not just excluded ones
         for field_name, field_info in self.model_class.model_fields.items():
-            # Skip if already present in parsed data
-            if field_name in data:
-                continue
+            # Special handling for SkipJsonSchema fields
+            if _is_skip_json_schema_field(field_info):
+                # If keep_skip_json_fields was specified and this field is not kept, always use defaults
+                if self.keep_skip_json_fields and not self._is_kept_skip_field(
+                    [field_name]
+                ):
+                    # Remove any existing value and inject default
+                    if field_name in data:
+                        del data[field_name]
+                    # Fall through to default injection logic below
+                elif field_name in data:
+                    # This is either a kept SkipJsonSchema field or no keep list was specified, keep it
+                    continue
+                # If it's a kept field but not in data, fall through to default injection
+            else:
+                # Skip if already present in parsed data (normal fields)
+                if field_name in data:
+                    continue
 
             # First priority: check if initial_values_dict has this field
-            if field_name in self.initial_values_dict:
+            # Use initial values for non-SkipJsonSchema fields, or SkipJsonSchema fields that are kept,
+            # or SkipJsonSchema fields when no keep_skip_json_fields list was specified
+            if field_name in self.initial_values_dict and (
+                not _is_skip_json_schema_field(field_info)
+                or not self.keep_skip_json_fields
+                or self._is_kept_skip_field([field_name])
+            ):
                 initial_val = self.initial_values_dict[field_name]
                 # If the initial value is a BaseModel, convert to dict for consistency
                 if hasattr(initial_val, "model_dump"):
@@ -798,6 +858,7 @@ class PydanticForm(Generic[ModelType]):
                 field_path=segments,  # Pass the full path segments
                 form_name=self.name,  # Pass the explicit form name
                 metrics_dict=self.metrics_dict,  # Pass the metrics dict
+                keep_skip_json_pathset=self._keep_skip_json_pathset,
             )
 
             # Generate a unique placeholder index

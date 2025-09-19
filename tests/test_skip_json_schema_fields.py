@@ -64,6 +64,9 @@ class TestSkipJsonSchemaIntegration:
             city: str
             country: str = "USA"
             postal_code: Optional[str] = None
+            internal_id: SkipJsonSchema[Optional[str]] = Field(  # type: ignore
+                default_factory=lambda: str(uuid4()), description="Internal address ID"
+            )
 
         class ComplexDocument(document_base_model):  # type: ignore
             title: str
@@ -419,3 +422,152 @@ class TestSkipJsonSchemaIntegration:
 
         # Should log warning about failed factory
         mock_logger.warning.assert_called()
+
+    def test_nested_skip_fields_hidden_by_default(
+        self, complex_document_model: Type[BaseModel]
+    ):
+        """Test that nested SkipJsonSchema fields are hidden by default in forms."""
+        # Create initial values with nested data
+        initial_values = {
+            "title": "Test Document",
+            "content": "Some content",
+            "author": "Test Author",
+            "published": True,
+            "addresses": [
+                {"street": "123 Main St", "city": "Boston", "country": "USA"}
+            ],
+            "primary_address": {"street": "456 Oak Ave", "city": "Cambridge"},
+        }
+
+        form = PydanticForm(
+            "test_nested", complex_document_model, initial_values=initial_values
+        )
+        rendered = form.render_inputs()
+        rendered_str = str(rendered)
+
+        # Verify that top-level fields are rendered
+        assert 'name="test_nested_title"' in rendered_str
+        assert 'name="test_nested_content"' in rendered_str
+        assert 'name="test_nested_author"' in rendered_str
+        assert 'name="test_nested_published"' in rendered_str
+
+        # Verify that nested non-skip fields are rendered
+        assert 'name="test_nested_addresses_0_street"' in rendered_str
+        assert 'name="test_nested_addresses_0_city"' in rendered_str
+        assert 'name="test_nested_primary_address_street"' in rendered_str
+        assert 'name="test_nested_primary_address_city"' in rendered_str
+
+        # Verify that top-level SkipJsonSchema fields are NOT rendered
+        assert 'name="test_nested_id"' not in rendered_str
+        assert 'name="test_nested_created_at"' not in rendered_str
+        assert 'name="test_nested_updated_at"' not in rendered_str
+        assert 'name="test_nested_version"' not in rendered_str
+        assert 'name="test_nested_metadata"' not in rendered_str
+        assert 'name="test_nested_internal_notes"' not in rendered_str
+
+        # Verify that nested SkipJsonSchema fields are NOT rendered
+        assert 'name="test_nested_addresses_0_internal_id"' not in rendered_str
+        assert 'name="test_nested_primary_address_internal_id"' not in rendered_str
+
+    def test_keep_skip_json_fields_opt_in(
+        self, complex_document_model: Type[BaseModel]
+    ):
+        """Test that specific SkipJsonSchema fields can be selectively kept visible."""
+        # Create initial values with nested data including skip fields
+        initial_values = {
+            "title": "Test Document",
+            "content": "Some content",
+            "author": "Test Author",
+            "published": True,
+            "id": "original-id",
+            "version": 2,
+            "internal_notes": ["Original Note"],
+            "addresses": [
+                {"street": "123 Main St", "city": "Boston", "country": "USA"}
+            ],
+            "primary_address": {"street": "456 Oak Ave", "city": "Cambridge"},
+        }
+
+        # Configure form to keep specific SkipJsonSchema fields including nested ones
+        form = PydanticForm(
+            "test_keep",
+            complex_document_model,
+            initial_values=initial_values,
+            keep_skip_json_fields=[
+                "id",
+                "internal_notes",
+                "primary_address.internal_id",
+                "addresses.internal_id",
+            ],
+        )
+
+        rendered = form.render_inputs()
+        rendered_str = str(rendered)
+
+        # Verify that regular fields are still rendered
+        assert 'name="test_keep_title"' in rendered_str
+        assert 'name="test_keep_content"' in rendered_str
+        assert 'name="test_keep_author"' in rendered_str
+        assert 'name="test_keep_published"' in rendered_str
+
+        # Verify that nested non-skip fields are still rendered
+        assert 'name="test_keep_addresses_0_street"' in rendered_str
+        assert 'name="test_keep_addresses_0_city"' in rendered_str
+        assert 'name="test_keep_primary_address_street"' in rendered_str
+        assert 'name="test_keep_primary_address_city"' in rendered_str
+
+        # Verify that KEPT SkipJsonSchema fields ARE rendered
+        assert 'name="test_keep_id"' in rendered_str
+        assert 'name="test_keep_internal_notes_0"' in rendered_str
+        assert 'name="test_keep_primary_address_internal_id"' in rendered_str
+        assert 'name="test_keep_addresses_0_internal_id"' in rendered_str
+
+        # Verify that NON-KEPT SkipJsonSchema fields are NOT rendered
+        assert 'name="test_keep_created_at"' not in rendered_str
+        assert 'name="test_keep_updated_at"' not in rendered_str
+        assert 'name="test_keep_version"' not in rendered_str
+        assert 'name="test_keep_metadata"' not in rendered_str
+
+        # Test form parsing with kept skip fields
+        form_data = {
+            "test_keep_title": "Updated Title",
+            "test_keep_content": "Updated content",
+            "test_keep_author": "Updated Author",
+            "test_keep_published": "on",
+            "test_keep_id": "id-override",
+            "test_keep_internal_notes_0": "Retained Note",
+            "test_keep_addresses_0_street": "123 Main St",
+            "test_keep_addresses_0_city": "Boston",
+            "test_keep_addresses_0_country": "USA",
+            "test_keep_addresses_0_internal_id": "ADDR-UPDATED",
+            "test_keep_primary_address_street": "456 Oak Ave",
+            "test_keep_primary_address_city": "Cambridge",
+            "test_keep_primary_address_internal_id": "PRIMARY-UPDATED",
+        }
+
+        parsed = form.parse(form_data)
+
+        # Verify that kept SkipJsonSchema fields are parsed correctly
+        assert parsed["id"] == "id-override"
+        assert parsed["internal_notes"] == ["Retained Note"]
+
+        # Verify that non-kept SkipJsonSchema fields get defaults
+        assert "created_at" in parsed
+        assert "updated_at" in parsed
+        assert parsed["version"] == 1  # Default value
+        assert parsed["metadata"] == {}  # Default value
+
+        # Verify regular fields are parsed correctly
+        assert parsed["title"] == "Updated Title"
+        assert parsed["content"] == "Updated content"
+        assert parsed["author"] == "Updated Author"
+        assert parsed["published"] is True
+
+        # Verify nested fields are parsed correctly
+        assert len(parsed["addresses"]) == 1
+        assert parsed["addresses"][0]["street"] == "123 Main St"
+        assert parsed["addresses"][0]["city"] == "Boston"
+        assert parsed["addresses"][0]["internal_id"] == "ADDR-UPDATED"
+        assert parsed["primary_address"]["street"] == "456 Oak Ave"
+        assert parsed["primary_address"]["city"] == "Cambridge"
+        assert parsed["primary_address"]["internal_id"] == "PRIMARY-UPDATED"
