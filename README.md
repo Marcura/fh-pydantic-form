@@ -455,6 +455,83 @@ form_renderer = PydanticForm(
 
 This automatic default injection means you can safely exclude fields that shouldn't be user-editable while maintaining data integrity.
 
+### SkipJsonSchema Fields
+
+`fh-pydantic-form` provides advanced handling for `SkipJsonSchema` fields with selective visibility control. By default, fields marked with `SkipJsonSchema` are hidden from forms, but you can selectively show specific ones using the `keep_skip_json_fields` parameter.
+
+```python
+from pydantic.json_schema import SkipJsonSchema
+
+class DocumentModel(BaseModel):
+    title: str
+    content: str
+    
+    # Hidden by default - system fields
+    document_id: SkipJsonSchema[str] = Field(
+        default_factory=lambda: f"doc_{uuid4().hex[:12]}",
+        description="Internal document ID"
+    )
+    created_at: SkipJsonSchema[datetime.datetime] = Field(
+        default_factory=datetime.datetime.now,
+        description="Creation timestamp"
+    )
+    version: SkipJsonSchema[int] = Field(
+        default=1, 
+        description="Document version"
+    )
+
+# Normal form - all SkipJsonSchema fields hidden
+form_normal = PydanticForm("doc_form", DocumentModel)
+
+# Admin form - selectively show some SkipJsonSchema fields
+form_admin = PydanticForm(
+    "admin_form", 
+    DocumentModel,
+    keep_skip_json_fields=[
+        "document_id",  # Show document ID
+        "version",      # Show version number
+        # created_at remains hidden
+    ]
+)
+```
+
+#### Nested SkipJsonSchema Fields
+
+The feature supports dot notation for nested objects and list items:
+
+```python
+class Address(BaseModel):
+    street: str
+    city: str
+    # Hidden system field
+    internal_id: SkipJsonSchema[str] = Field(default_factory=lambda: f"addr_{uuid4().hex[:8]}")
+
+class UserModel(BaseModel):
+    name: str
+    main_address: Address
+    other_addresses: List[Address]
+
+# Show specific nested SkipJsonSchema fields
+form = PydanticForm(
+    "user_form",
+    UserModel,
+    keep_skip_json_fields=[
+        "main_address.internal_id",        # Show main address ID
+        "other_addresses.internal_id",     # Show all address IDs in the list
+    ]
+)
+```
+
+**Key Features:**
+- **Hidden by default:** SkipJsonSchema fields are automatically excluded from forms
+- **Selective visibility:** Use `keep_skip_json_fields` to show specific fields
+- **Nested support:** Access nested fields with dot notation (`"main_address.internal_id"`)
+- **List support:** Show fields in all list items (`"addresses.internal_id"`)
+- **Smart defaults:** Non-kept fields use model defaults, kept fields retain initial values
+- **Admin interfaces:** Perfect for admin panels or debugging where you need to see system fields
+
+See `examples/complex_example.py` for a comprehensive demonstration of SkipJsonSchema field handling.
+
 ## Refreshing & Resetting
 
 Forms support dynamic refresh and reset functionality:
@@ -982,6 +1059,7 @@ form_renderer = PydanticForm(
 | `disabled_fields` | `Optional[List[str]]` | `None` | List of specific field names to disable |
 | `label_colors` | `Optional[Dict[str, str]]` | `None` | Mapping of field names to CSS colors or Tailwind classes |
 | `exclude_fields` | `Optional[List[str]]` | `None` | List of field names to exclude from rendering (auto-injected on submission) |
+| `keep_skip_json_fields` | `Optional[List[str]]` | `None` | List of SkipJsonSchema field paths to selectively show (supports dot notation for nested fields) |
 | `spacing` | `SpacingValue` | `"normal"` | Spacing theme: `"normal"`, `"compact"`, or `SpacingTheme` enum |
 | `metrics_dict` | `Optional[Dict[str, Dict]]` | `None` | Field metrics for highlighting and tooltips |
 
