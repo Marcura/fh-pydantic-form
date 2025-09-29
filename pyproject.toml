@@ -29,9 +29,9 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "monsterui>=1.0.19",
+    "monsterui>=1.0.29",
     "pydantic>=2.0",
-    "python-fasthtml>=0.12.12",
+    "python-fasthtml>=0.12.29",
 ]
 
 [project.urls]
