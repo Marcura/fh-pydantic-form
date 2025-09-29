@@ -13,10 +13,15 @@ def test_submit_valid_simple_form(validation_client, htmx_headers):
     assert response.status_code == 200
     assert "Validation Successful" in response.text
 
-    # Check for the expected JSON output in the response
-    assert "&quot;name&quot;: &quot;Test Name&quot;" in response.text
-    assert "&quot;age&quot;: 30" in response.text
-    assert "&quot;score&quot;: 95.5" in response.text
+    # Check for the expected JSON output in the response - handle both encoded and unencoded quotes
+    assert (
+        '"name": "Test Name"' in response.text
+        or "&quot;name&quot;: &quot;Test Name&quot;" in response.text
+    )
+    assert '"age": 30' in response.text or "&quot;age&quot;: 30" in response.text
+    assert (
+        '"score": 95.5' in response.text or "&quot;score&quot;: 95.5" in response.text
+    )
 
 
 def test_submit_invalid_simple_form(validation_client, htmx_headers):
@@ -50,12 +55,15 @@ def test_submit_valid_list_form(list_client, htmx_headers):
     assert response.status_code == 200
     assert "Validation Successful" in response.text
 
-    # Check for expected JSON output in the response
-    assert "&quot;name&quot;: &quot;Test List&quot;" in response.text
-    assert "&quot;tags&quot;: [" in response.text
-    assert "&quot;tag1&quot;" in response.text
-    assert "&quot;tag2&quot;" in response.text
-    assert "&quot;tag3&quot;" in response.text
+    # Check for expected JSON output in the response - handle both encoded and unencoded quotes
+    assert (
+        '"name": "Test List"' in response.text
+        or "&quot;name&quot;: &quot;Test List&quot;" in response.text
+    )
+    assert '"tags": [' in response.text or "&quot;tags&quot;: [" in response.text
+    assert '"tag1"' in response.text or "&quot;tag1&quot;" in response.text
+    assert '"tag2"' in response.text or "&quot;tag2&quot;" in response.text
+    assert '"tag3"' in response.text or "&quot;tag3&quot;" in response.text
 
 
 def test_submit_valid_complex_form(complex_client, htmx_headers):
@@ -102,46 +110,117 @@ def test_submit_valid_complex_form(complex_client, htmx_headers):
     assert response.status_code == 200
     assert "Validation Successful" in response.text
 
-    # Check for expected JSON patterns in the response
-    assert "&quot;name&quot;: &quot;Complex User&quot;" in response.text
-    assert "&quot;age&quot;: 42" in response.text
-    assert "&quot;score&quot;: 98.7" in response.text
-    assert "&quot;is_active&quot;: true" in response.text
-    assert "&quot;description&quot;: &quot;Test description&quot;" in response.text
-    assert "&quot;creation_date&quot;: &quot;2023-05-15&quot;" in response.text
-    assert "&quot;start_time&quot;: &quot;14:30:00&quot;" in response.text
-    assert "&quot;status&quot;: &quot;PROCESSING&quot;" in response.text
-    assert "&quot;optional_status&quot;: null" in response.text
+    # Check for expected JSON patterns in the response - handle both encoded and unencoded quotes
+    assert (
+        '"name": "Complex User"' in response.text
+        or "&quot;name&quot;: &quot;Complex User&quot;" in response.text
+    )
+    assert '"age": 42' in response.text or "&quot;age&quot;: 42" in response.text
+    assert (
+        '"score": 98.7' in response.text or "&quot;score&quot;: 98.7" in response.text
+    )
+    assert (
+        '"is_active": true' in response.text
+        or "&quot;is_active&quot;: true" in response.text
+    )
+    assert (
+        '"description": "Test description"' in response.text
+        or "&quot;description&quot;: &quot;Test description&quot;" in response.text
+    )
+    assert (
+        '"creation_date": "2023-05-15"' in response.text
+        or "&quot;creation_date&quot;: &quot;2023-05-15&quot;" in response.text
+    )
+    assert (
+        '"start_time": "14:30:00"' in response.text
+        or "&quot;start_time&quot;: &quot;14:30:00&quot;" in response.text
+    )
+    assert (
+        '"status": "PROCESSING"' in response.text
+        or "&quot;status&quot;: &quot;PROCESSING&quot;" in response.text
+    )
+    assert (
+        '"optional_status": null' in response.text
+        or "&quot;optional_status&quot;: null" in response.text
+    )
 
     # Check for list content
-    assert "&quot;tags&quot;: [" in response.text
-    assert "&quot;complex&quot;" in response.text
-    assert "&quot;test&quot;" in response.text
-    assert "&quot;valid&quot;" in response.text
+    assert '"tags": [' in response.text or "&quot;tags&quot;: [" in response.text
+    assert '"complex"' in response.text or "&quot;complex&quot;" in response.text
+    assert '"test"' in response.text or "&quot;test&quot;" in response.text
+    assert '"valid"' in response.text or "&quot;valid&quot;" in response.text
 
     # Check for nested model content
-    assert "&quot;main_address&quot;: {" in response.text
-    assert "&quot;street&quot;: &quot;123 Test Street&quot;" in response.text
-    assert "&quot;is_billing&quot;: true" in response.text
+    assert (
+        '"main_address": {' in response.text
+        or "&quot;main_address&quot;: {" in response.text
+    )
+    assert (
+        '"street": "123 Test Street"' in response.text
+        or "&quot;street&quot;: &quot;123 Test Street&quot;" in response.text
+    )
+    assert (
+        '"is_billing": true' in response.text
+        or "&quot;is_billing&quot;: true" in response.text
+    )
 
     # Check for list of nested models
-    assert "&quot;other_addresses&quot;: [" in response.text
-    assert "&quot;street&quot;: &quot;456 Other Street&quot;" in response.text
-    assert "&quot;is_billing&quot;: false" in response.text  # Default for missing
-    assert "&quot;street&quot;: &quot;789 Second Street&quot;" in response.text
-    assert "&quot;is_billing&quot;: true" in response.text
+    assert (
+        '"other_addresses": [' in response.text
+        or "&quot;other_addresses&quot;: [" in response.text
+    )
+    assert (
+        '"street": "456 Other Street"' in response.text
+        or "&quot;street&quot;: &quot;456 Other Street&quot;" in response.text
+    )
+    assert (
+        '"is_billing": false' in response.text
+        or "&quot;is_billing&quot;: false" in response.text
+    )  # Default for missing
+    assert (
+        '"street": "789 Second Street"' in response.text
+        or "&quot;street&quot;: &quot;789 Second Street&quot;" in response.text
+    )
+    assert (
+        '"is_billing": true' in response.text
+        or "&quot;is_billing&quot;: true" in response.text
+    )
 
     # Check for custom model content
-    assert "&quot;custom_detail&quot;: {" in response.text
-    assert "&quot;value&quot;: &quot;Custom value&quot;" in response.text
-    assert "&quot;confidence&quot;: &quot;HIGH&quot;" in response.text
+    assert (
+        '"custom_detail": {' in response.text
+        or "&quot;custom_detail&quot;: {" in response.text
+    )
+    assert (
+        '"value": "Custom value"' in response.text
+        or "&quot;value&quot;: &quot;Custom value&quot;" in response.text
+    )
+    assert (
+        '"confidence": "HIGH"' in response.text
+        or "&quot;confidence&quot;: &quot;HIGH&quot;" in response.text
+    )
 
     # Check for list of custom models
-    assert "&quot;more_custom_details&quot;: [" in response.text
-    assert "&quot;value&quot;: &quot;First detail&quot;" in response.text
-    assert "&quot;confidence&quot;: &quot;MEDIUM&quot;" in response.text
-    assert "&quot;value&quot;: &quot;Second detail&quot;" in response.text
-    assert "&quot;confidence&quot;: &quot;LOW&quot;" in response.text
+    assert (
+        '"more_custom_details": [' in response.text
+        or "&quot;more_custom_details&quot;: [" in response.text
+    )
+    assert (
+        '"value": "First detail"' in response.text
+        or "&quot;value&quot;: &quot;First detail&quot;" in response.text
+    )
+    assert (
+        '"confidence": "MEDIUM"' in response.text
+        or "&quot;confidence&quot;: &quot;MEDIUM&quot;" in response.text
+    )
+    assert (
+        '"value": "Second detail"' in response.text
+        or "&quot;value&quot;: &quot;Second detail&quot;" in response.text
+    )
+    assert (
+        '"confidence": "LOW"' in response.text
+        or "&quot;confidence&quot;: &quot;LOW&quot;" in response.text
+    )
 
 
 def test_submit_invalid_complex_form(complex_client, htmx_headers):

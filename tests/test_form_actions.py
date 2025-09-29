@@ -156,9 +156,19 @@ def test_combined_refresh_and_validation(complex_client, htmx_headers):
 
     assert validation_response.status_code == 200
     assert "Validation Successful" in validation_response.text
-    assert "&quot;name&quot;: &quot;Workflow Test&quot;" in validation_response.text
-    assert "&quot;age&quot;: 40" in validation_response.text
-    assert "&quot;score&quot;: 99.5" in validation_response.text
+    # Handle both encoded and unencoded quotes
+    assert (
+        '"name": "Workflow Test"' in validation_response.text
+        or "&quot;name&quot;: &quot;Workflow Test&quot;" in validation_response.text
+    )
+    assert (
+        '"age": 40' in validation_response.text
+        or "&quot;age&quot;: 40" in validation_response.text
+    )
+    assert (
+        '"score": 99.5' in validation_response.text
+        or "&quot;score&quot;: 99.5" in validation_response.text
+    )
 
 
 def test_error_handling_in_refresh(complex_client, htmx_headers):

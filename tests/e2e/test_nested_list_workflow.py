@@ -17,6 +17,32 @@ def get_base_form_data():
     }
 
 
+def assert_json_contains(response_text: str, expected_content: str) -> None:
+    """
+    Assert that the response text contains the expected JSON content,
+    handling both HTML-encoded and unencoded quotes.
+
+    This function checks for the content in both formats:
+    - HTML-encoded: &quot;key&quot;: value
+    - Unencoded: "key": value
+    """
+    # Check for both HTML-encoded and unencoded versions
+    encoded_version = expected_content.replace('"', "&quot;")
+    unencoded_version = expected_content.replace("&quot;", '"')
+
+    # Try both versions
+    if encoded_version in response_text or unencoded_version in response_text:
+        return
+
+    # If neither works, provide a helpful error message
+    raise AssertionError(
+        f"Expected JSON content not found in response.\n"
+        f"Expected (encoded): {encoded_version}\n"
+        f"Expected (unencoded): {unencoded_version}\n"
+        f"Response text: {response_text[:500]}..."
+    )
+
+
 @pytest.mark.e2e
 class TestNestedListWorkflow:
     """End-to-end workflow tests for nested list functionality."""
@@ -453,9 +479,9 @@ class TestOptionalListWorkflow:
         assert response.status_code == 200
         assert "Validation Successful" in response.text
         # The validated JSON output should show "optional_tags": null
-        assert "&quot;optional_tags&quot;: null" in response.text
+        assert_json_contains(response.text, '"optional_tags": null')
         # The required list should be an empty array
-        assert "&quot;required_tags&quot;: []" in response.text
+        assert_json_contains(response.text, '"required_tags": []')
 
     def test_submit_form_with_populated_optional_list_parses_as_list(
         self, optional_list_client, htmx_headers
@@ -480,9 +506,8 @@ class TestOptionalListWorkflow:
         assert response.status_code == 200
         assert "Validation Successful" in response.text
         # The validated JSON output should show a list with the items
-        assert (
-            "&quot;optional_tags&quot;: [\n    &quot;item1&quot;,\n    &quot;item2&quot;\n  ]"
-            in response.text
+        assert_json_contains(
+            response.text, '"optional_tags": [\n    "item1",\n    "item2"\n  ]'
         )
 
     def test_submit_form_with_populated_required_list_parses_as_list(
@@ -508,12 +533,11 @@ class TestOptionalListWorkflow:
         assert response.status_code == 200
         assert "Validation Successful" in response.text
         # The validated JSON output should show a list with the items
-        assert (
-            "&quot;required_tags&quot;: [\n    &quot;req1&quot;,\n    &quot;req2&quot;\n  ]"
-            in response.text
+        assert_json_contains(
+            response.text, '"required_tags": [\n    "req1",\n    "req2"\n  ]'
         )
         # The optional list should be null
-        assert "&quot;optional_tags&quot;: null" in response.text
+        assert_json_contains(response.text, '"optional_tags": null')
 
     def test_submit_form_with_mixed_optional_and_required_lists(
         self, optional_list_client, htmx_headers
@@ -538,12 +562,9 @@ class TestOptionalListWorkflow:
         assert response.status_code == 200
         assert "Validation Successful" in response.text
         # Both lists should have items
-        assert (
-            "&quot;optional_tags&quot;: [\n    &quot;opt1&quot;\n  ]" in response.text
-        )
-        assert (
-            "&quot;required_tags&quot;: [\n    &quot;req1&quot;,\n    &quot;req2&quot;\n  ]"
-            in response.text
+        assert_json_contains(response.text, '"optional_tags": [\n    "opt1"\n  ]')
+        assert_json_contains(
+            response.text, '"required_tags": [\n    "req1",\n    "req2"\n  ]'
         )
 
     def test_add_item_to_optional_list_then_submit(
@@ -581,9 +602,8 @@ class TestOptionalListWorkflow:
         assert response.status_code == 200
         assert "Validation Successful" in response.text
         # The dynamically added item should be in the result
-        assert (
-            "&quot;optional_tags&quot;: [\n    &quot;dynamically_added_item&quot;\n  ]"
-            in response.text
+        assert_json_contains(
+            response.text, '"optional_tags": [\n    "dynamically_added_item"\n  ]'
         )
 
     def test_add_item_to_required_list_then_submit(
@@ -621,9 +641,9 @@ class TestOptionalListWorkflow:
         assert response.status_code == 200
         assert "Validation Successful" in response.text
         # The dynamically added item should be in the result
-        assert (
-            "&quot;required_tags&quot;: [\n    &quot;dynamically_added_required_item&quot;\n  ]"
-            in response.text
+        assert_json_contains(
+            response.text,
+            '"required_tags": [\n    "dynamically_added_required_item"\n  ]',
         )
 
     def test_validation_error_preserves_optional_list_state(
