@@ -537,21 +537,41 @@ class BaseFieldRenderer(MetricsRendererMixin):
 
         # Note: We explicitly do NOT pass disabled=self.disabled here
         # Copy buttons should always be enabled, even in disabled forms
+        #
+        # Pure JS copy: Bypass HTMX entirely to avoid accordion collapse
+        # If target is "left", we're copying FROM right TO left
+        # The button is on the target (destination) side, but we need the source prefix
+        # Since comparison forms have two sides, we need to determine the OTHER side's prefix
+        # This button is on self.prefix side, copying FROM the other side
+        # We need to get this from the comparison form context...
+        # For now, let's use the comparison_copy_target to determine source
+        # If copy target is "left", source is "right" form's prefix
+        # We'll need to pass this info through somehow
+
+        # Actually, the button should be on the TARGET side showing which direction to copy
+        # But we need the SOURCE prefix. In comparison_form.py _render_column:
+        # comparison_copy_target tells us which form this button targets (destination)
+        # So if target="left", this button is on left, and we copy FROM right
+        # We need to infer the other form's prefix somehow...
+
+        # Since we don't have access to the other form's prefix here directly,
+        # we need to pass it through. For now, let's check the form_name pattern.
+        # In ComparisonForm, left_form and right_form have different names.
+        # But we don't have that info here...
+
+        # HACK: We know comparison forms use predictable prefixes
+        # If target is "left", source prefix should contain "right" or "generated"
+        # If target is "right", source prefix should contain "left" or "annotated"
+        # But this is fragile...
+
+        # Better: Pass BOTH the path and target, let JS figure out the source prefix
         return mui.Button(
             mui.UkIcon(arrow, cls="w-3 h-3"),
             type="button",
-            hx_post=f"/compare/{self._cmp_name}/{self._cmp_copy_target}/copy",
-            hx_target=f"#{self.explicit_form_name or self.field_name.split('_')[0]}-inputs-wrapper",
-            hx_swap="innerHTML swap:50ms",  # Add small delay for swap
-            hx_include="closest form",
-            hx_vals=f'{{"__fhpf_copy_path": "{path}"}}',
+            onclick=f"window.fhpfPerformCopy('{path}', '{self.prefix}', '{self._cmp_copy_target}'); return false;",
             uk_tooltip=tooltip_text,
             cls="uk-button-text uk-button-small",
             style="all: unset; display: inline-flex; align-items: center; cursor: pointer; padding: 0 0.25rem;",
-            onclick="window.saveAllAccordionStates && window.saveAllAccordionStates()",
-            **{
-                "hx-on::after-swap": "window.restoreAllAccordionStates && window.restoreAllAccordionStates()",
-            },
         )
 
     def render_label(self) -> FT:
@@ -720,6 +740,7 @@ class StringFieldRenderer(BaseFieldRenderer):
             "cls": " ".join(input_cls_parts),
             "rows": rows,
             "style": "resize: vertical; min-height: 2.5rem; padding: 0.5rem; line-height: 1.25;",
+            "data-field-path": self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -777,6 +798,7 @@ class NumberFieldRenderer(BaseFieldRenderer):
             if self.field_info.annotation is float
             or get_origin(self.field_info.annotation) is float
             else "1",
+            "data-field-path": self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -837,6 +859,7 @@ class DecimalFieldRenderer(BaseFieldRenderer):
             "required": is_field_required,
             "cls": " ".join(input_cls_parts),
             "step": "any",  # Allow arbitrary decimal precision
+            "data-field-path": self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -864,6 +887,7 @@ class BooleanFieldRenderer(BaseFieldRenderer):
             "id": self.field_name,
             "name": self.field_name,
             "checked": bool(self.value),
+            "data-field-path": self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -949,6 +973,7 @@ class DateFieldRenderer(BaseFieldRenderer):
             "placeholder": placeholder_text,
             "required": is_field_required,
             "cls": " ".join(input_cls_parts),
+            "data-field-path": self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -1013,6 +1038,7 @@ class TimeFieldRenderer(BaseFieldRenderer):
             "placeholder": placeholder_text,
             "required": is_field_required,
             "cls": " ".join(input_cls_parts),
+            "data-field-path": self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -1090,6 +1116,7 @@ class LiteralFieldRenderer(BaseFieldRenderer):
             "required": is_field_required,
             "placeholder": placeholder_text,
             "cls": " ".join(select_cls_parts),
+            "data-field-path": self._build_path_string(),
         }
 
         if self.disabled:
@@ -1178,6 +1205,7 @@ class EnumFieldRenderer(BaseFieldRenderer):
                 "w-full",
                 f"{spacing('input_size', self.spacing)} {spacing('input_padding', self.spacing)}".strip(),
             ),
+            "data-field-path": self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -2183,21 +2211,14 @@ class ListFieldRenderer(BaseFieldRenderer):
                 tooltip_text = f"Copy item to {self._cmp_copy_target}"
 
                 # Note: Copy button is never disabled, even in disabled forms
+                # Pure JS copy: Bypass HTMX entirely to avoid accordion collapse
                 item_copy_button = mui.Button(
                     mui.UkIcon(arrow, cls="w-3 h-3"),
                     type="button",
-                    hx_post=f"/compare/{self._cmp_name}/{self._cmp_copy_target}/copy",
-                    hx_target=f"#{self.explicit_form_name or self.field_name.split('_')[0]}-inputs-wrapper",
-                    hx_swap="innerHTML swap:50ms",  # Add small delay for swap
-                    hx_include="closest form",
-                    hx_vals=f'{{"__fhpf_copy_path": "{item_path_string}"}}',
+                    onclick=f"window.fhpfPerformCopy('{item_path_string}', '{self.prefix}', '{self._cmp_copy_target}'); return false;",
                     uk_tooltip=tooltip_text,
                     cls="uk-button-text uk-button-small",
                     style="all: unset; display: inline-flex; align-items: center; cursor: pointer; padding: 0 0.25rem;",
-                    onclick="window.saveAllAccordionStates && window.saveAllAccordionStates()",
-                    **{
-                        "hx-on::after-swap": "window.restoreAllAccordionStates && window.restoreAllAccordionStates()",
-                    },
                 )
 
                 # Wrap title and copy button together

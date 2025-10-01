@@ -288,17 +288,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateMoveButtons(container);
     });
 
-    // Listen for HTMX afterSwap events globally to restore accordion states
-    document.body.addEventListener('htmx:afterSwap', function(event) {
-        // Check if this swap is from a copy button (has the copy path in the request)
-        const requestConfig = event.detail.requestConfig;
-        if (requestConfig && requestConfig.parameters && requestConfig.parameters.__fhpf_copy_path) {
-            console.log('Copy operation detected, restoring accordion states...');
-            window.restoreAllAccordionStates && window.restoreAllAccordionStates();
-        }
-    });
-
-    // Now it's safe to attach the HTMX event listener to document.body for list operations
+    // Attach HTMX event listener to document.body for list operations
     document.body.addEventListener('htmx:afterSwap', function(event) {
         // Check if this is an insert (afterend swap)
         const targetElement = event.detail.target;

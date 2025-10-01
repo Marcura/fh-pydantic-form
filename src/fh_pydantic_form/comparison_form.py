@@ -5,6 +5,7 @@ This module provides a meta-renderer that displays two PydanticForm instances
 side-by-side with visual comparison feedback and synchronized accordion states.
 """
 
+import json
 import logging
 import re
 from copy import deepcopy
@@ -13,7 +14,6 @@ from typing import (
     Dict,
     Generic,
     List,
-    Literal,
     Optional,
     Type,
     TypeVar,
@@ -36,13 +36,136 @@ ModelType = TypeVar("ModelType", bound=BaseModel)
 
 
 def comparison_form_js():
-    """JavaScript for comparison: sync top-level and list accordions."""
+    """JavaScript for comparison: sync accordions and handle JS-only copy operations."""
     return fh.Script("""
+// Copy function - no HTMX, pure JS
+window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
+  try {
+    // Set flag to prevent accordion sync
+    window.__fhpfCopyInProgress = true;
+
+    // Save all accordion states before copy
+    var accordionStates = [];
+    document.querySelectorAll('ul[uk-accordion] > li').forEach(function(li) {
+      accordionStates.push({
+        element: li,
+        isOpen: li.classList.contains('uk-open')
+      });
+    });
+
+    // Determine source prefix based on target
+    // If copying TO left, source is right (the OTHER prefix)
+    // If copying TO right, source is left (the OTHER prefix)
+    // currentPrefix is the button's form prefix (target side)
+    // We need the OTHER side's prefix (source side)
+    var sourcePrefix;
+    if (copyTarget === 'left') {
+      // Copying TO left, so source is right
+      sourcePrefix = window.__fhpfRightPrefix;
+    } else {
+      // Copying TO right, so source is left
+      sourcePrefix = window.__fhpfLeftPrefix;
+    }
+
+    // Find all inputs with matching data-field-path
+    var allInputs = document.querySelectorAll('[data-field-path][name^="' + sourcePrefix + '"]');
+    var sourceInputs = Array.from(allInputs).filter(function(el) {
+      var fp = el.getAttribute('data-field-path');
+      return fp === pathPrefix || fp.startsWith(pathPrefix + '.') || fp.startsWith(pathPrefix + '[');
+    });
+
+    sourceInputs.forEach(function(sourceInput) {
+      var fp = sourceInput.getAttribute('data-field-path');
+      var targetInput = document.querySelector('[data-field-path="' + fp + '"]:not([name^="' + sourcePrefix + '"])');
+
+      if (!targetInput) return;
+
+      var tag = sourceInput.tagName.toUpperCase();
+      var type = (sourceInput.type || '').toLowerCase();
+
+      if (type === 'checkbox') {
+        targetInput.checked = sourceInput.checked;
+      } else if (tag === 'SELECT') {
+        targetInput.value = sourceInput.value;
+      } else if (tag === 'UK-SELECT') {
+        var sourceNativeSelect = sourceInput.querySelector('select');
+        var targetNativeSelect = targetInput.querySelector('select');
+        if (sourceNativeSelect && targetNativeSelect) {
+          // Set the value on the native select
+          targetNativeSelect.value = sourceNativeSelect.value;
+
+          // Also need to update the selected option
+          var sourceSelectedOption = sourceNativeSelect.options[sourceNativeSelect.selectedIndex];
+          if (sourceSelectedOption) {
+            // Find matching option in target by value
+            for (var i = 0; i < targetNativeSelect.options.length; i++) {
+              if (targetNativeSelect.options[i].value === sourceSelectedOption.value) {
+                targetNativeSelect.selectedIndex = i;
+                break;
+              }
+            }
+          }
+
+          // Update the button display
+          var sourceButton = sourceInput.querySelector('button');
+          var targetButton = targetInput.querySelector('button');
+          if (sourceButton && targetButton) {
+            targetButton.innerHTML = sourceButton.innerHTML;
+          }
+        }
+      } else if (tag === 'TEXTAREA') {
+        // Just set the value directly, don't clear first
+        targetInput.value = sourceInput.value;
+        targetInput.textContent = sourceInput.value;
+      } else {
+        targetInput.value = sourceInput.value;
+      }
+    });
+
+    // Restore accordion states after a brief delay
+    setTimeout(function() {
+      var restoredCount = 0;
+      accordionStates.forEach(function(state) {
+        if (state.isOpen && !state.element.classList.contains('uk-open')) {
+          // Use UIkit's toggle API to properly open the accordion
+          var accordionParent = state.element.parentElement;
+          if (accordionParent && window.UIkit) {
+            var accordionComponent = UIkit.accordion(accordionParent);
+            if (accordionComponent) {
+              var itemIndex = Array.from(accordionParent.children).indexOf(state.element);
+              accordionComponent.toggle(itemIndex, true);
+              restoredCount++;
+            } else {
+              // Fallback to manual class manipulation
+              state.element.classList.add('uk-open');
+              var content = state.element.querySelector('.uk-accordion-content');
+              if (content) {
+                content.hidden = false;
+                content.style.height = 'auto';
+              }
+            }
+          }
+        }
+      });
+
+      window.__fhpfCopyInProgress = false;
+      if (restoredCount > 0) {
+        console.log('[fhpf] restored', restoredCount, 'accordion(s)');
+      }
+    }, 150);
+
+  } catch (e) {
+    console.error('[fhpf] copy error', e);
+    window.__fhpfCopyInProgress = false;
+  }
+};
+
 window.fhpfInitComparisonSync = function initComparisonSync(){
   // 1) Wait until UIkit and its util are available
   if (!window.UIkit || !UIkit.util) {
     return setTimeout(initComparisonSync, 50);
   }
+
 
   // 2) Sync top-level accordions (BaseModelFieldRenderer)
   UIkit.util.on(
@@ -55,6 +178,11 @@ window.fhpfInitComparisonSync = function initComparisonSync(){
   function mirrorTopLevel(ev) {
     const sourceLi = ev.target.closest('li');
     if (!sourceLi) return;
+
+    // Skip if copy operation is in progress
+    if (window.__fhpfCopyInProgress) {
+      return;
+    }
 
     // Skip if this event is from a select/dropdown element
     if (ev.target.closest('uk-select, select, [uk-select]')) {
@@ -116,12 +244,17 @@ window.fhpfInitComparisonSync = function initComparisonSync(){
   function mirrorNestedListItems(ev) {
     const sourceLi = ev.target.closest('li');
     if (!sourceLi) return;
-    
+
+    // Skip if copy operation is in progress
+    if (window.__fhpfCopyInProgress) {
+      return;
+    }
+
     // Skip if this event is from a select/dropdown element
     if (ev.target.closest('uk-select, select, [uk-select]')) {
       return;
     }
-    
+
     // Skip if this event was triggered by our own sync
     if (sourceLi.dataset.syncDisabled) {
       return;
@@ -235,7 +368,6 @@ window.fhpfInitComparisonSync();
 
 // Re-run after HTMX swaps to maintain sync
 document.addEventListener('htmx:afterSwap', function(event) {
-  // Re-initialize the comparison sync
   window.fhpfInitComparisonSync();
 });
 """)
@@ -536,7 +668,13 @@ class ComparisonForm(Generic[ModelType]):
             id=f"{self.name}-comparison-grid",
         )
 
-        return fh.Div(grid_container, cls="w-full")
+        # Emit prefix globals for the copy registry
+        prefix_script = fh.Script(f"""
+window.__fhpfLeftPrefix = {json.dumps(self.left_form.base_prefix)};
+window.__fhpfRightPrefix = {json.dumps(self.right_form.base_prefix)};
+""")
+
+        return fh.Div(prefix_script, grid_container, cls="w-full")
 
     def register_routes(self, app):
         """
@@ -622,156 +760,8 @@ class ComparisonForm(Generic[ModelType]):
             refresh_handler = create_refresh_handler(form, side, label)
             app.route(refresh_path, methods=["POST"])(refresh_handler)
 
-        # Register copy routes if copy features are enabled
-        if self.copy_left or self.copy_right:
-
-            def create_copy_handler(target: Literal["left", "right"]):
-                """Factory function to create copy handler with proper closure"""
-
-                async def handler(req):
-                    """Copy a value from one side to the other"""
-                    # Determine target and source forms
-                    target_form = (
-                        self.left_form if target == "left" else self.right_form
-                    )
-                    source_form = (
-                        self.right_form if target == "left" else self.left_form
-                    )
-                    target_label = (
-                        self.left_label if target == "left" else self.right_label
-                    )
-
-                    # Extract form data
-                    form_data = dict(await req.form())
-
-                    # Extract the copy path
-                    path = form_data.get("__fhpf_copy_path", "")
-                    if not path:
-                        logger.warning("Copy request missing __fhpf_copy_path")
-                        # Return unchanged target column with warning
-                        start_order = 0 if target == "left" else 1
-                        wrapper = self._render_column(
-                            form=target_form,
-                            header_label=target_label,
-                            start_order=start_order,
-                            wrapper_id=f"{target_form.name}-inputs-wrapper",
-                        )
-                        warning = mui.Alert(
-                            "Copy failed: no field path specified",
-                            cls=mui.AlertT.warning,
-                        )
-                        return fh.Div(warning, wrapper)
-
-                    # Rebuild target's current state from form data (preserves unsaved edits)
-                    try:
-                        target_filtered = target_form._filter_by_prefix(form_data)
-                        target_snapshot = target_form.parse(target_filtered)
-                    except Exception as e:
-                        logger.warning(f"Failed to parse target form data: {e}")
-                        # Fallback to current values_dict
-                        target_snapshot = target_form.values_dict.copy()
-
-                    # Rebuild source snapshot from form data (if enabled) or use values_dict
-                    # If source form is disabled, disabled inputs don't submit, so use values_dict
-                    if source_form.disabled:
-                        # Use the original values_dict directly for disabled forms
-                        source_snapshot = source_form.values_dict.copy()
-                        logger.info(
-                            f"Source form is disabled, using values_dict: {len(source_snapshot)} keys, scheduled_review_time={source_snapshot.get('scheduled_review_time')}, extraction_time={source_snapshot.get('extraction_time')}"
-                        )
-                    else:
-                        # Source form is enabled, parse from submitted form data
-                        try:
-                            source_filtered = source_form._filter_by_prefix(form_data)
-                            logger.info(
-                                f"Source filtered data has {len(source_filtered)} keys: scheduled_review_time={source_filtered.get(f'{source_form.base_prefix}scheduled_review_time')}, extraction_time={source_filtered.get(f'{source_form.base_prefix}extraction_time')}"
-                            )
-                            source_snapshot = source_form.parse(source_filtered)
-                            logger.info(
-                                f"Source parsed from form data: {len(source_snapshot)} keys, scheduled_review_time={source_snapshot.get('scheduled_review_time')}, extraction_time={source_snapshot.get('extraction_time')}"
-                            )
-                        except Exception as e:
-                            logger.warning(f"Source form parsing failed: {e}")
-                            # Fallback to values_dict
-                            source_snapshot = source_form.values_dict.copy()
-                            logger.info(
-                                f"Source using values_dict fallback: {len(source_snapshot)} keys"
-                            )
-
-                    # Get value from source by path
-                    found, source_value = self._get_by_path(source_snapshot, path)
-                    logger.info(
-                        f"Copy operation: path={path}, found={found}, value={source_value}, value_type={type(source_value)}"
-                    )
-                    if not found:
-                        logger.warning(f"Source value not found at path: {path}")
-                        # Return unchanged target column with warning
-                        start_order = 0 if target == "left" else 1
-                        wrapper = self._render_column(
-                            form=target_form,
-                            header_label=target_label,
-                            start_order=start_order,
-                            wrapper_id=f"{target_form.name}-inputs-wrapper",
-                        )
-                        warning = mui.Alert(
-                            f"Copy failed: no value found at {path}",
-                            cls=mui.AlertT.warning,
-                        )
-                        return fh.Div(warning, wrapper)
-
-                    # Set value in target snapshot
-                    try:
-                        self._set_by_path(target_snapshot, path, source_value)
-                    except Exception as e:
-                        logger.error(f"Failed to set value at path {path}: {e}")
-                        # Return unchanged target column with error
-                        start_order = 0 if target == "left" else 1
-                        wrapper = self._render_column(
-                            form=target_form,
-                            header_label=target_label,
-                            start_order=start_order,
-                            wrapper_id=f"{target_form.name}-inputs-wrapper",
-                        )
-                        error = mui.Alert(
-                            f"Copy failed: {str(e)}",
-                            cls=mui.AlertT.error,
-                        )
-                        return fh.Div(error, wrapper)
-
-                    # Update target form with new values
-                    target_form.values_dict = target_snapshot
-
-                    # Debug: Log the updated value
-                    found_after, value_after = self._get_by_path(target_snapshot, path)
-                    logger.info(
-                        f"After copy: path={path}, found={found_after}, value={value_after}, type={type(value_after)}"
-                    )
-
-                    # Instead of re-rendering entire column, just render the specific field
-                    # that was copied and return it with OOB swap to update only that field
-                    # For now, re-render entire column (will optimize later)
-                    # TODO: Implement targeted field update to avoid accordion collapse
-                    start_order = 0 if target == "left" else 1
-                    wrapper = self._render_column(
-                        form=target_form,
-                        header_label=target_label,
-                        start_order=start_order,
-                        wrapper_id=f"{target_form.name}-inputs-wrapper",
-                    )
-                    return wrapper
-
-                return handler
-
-            # Register copy routes
-            if self.copy_left:
-                copy_left_path = f"/compare/{self.name}/left/copy"
-                copy_left_handler = create_copy_handler("left")
-                app.route(copy_left_path, methods=["POST"])(copy_left_handler)
-
-            if self.copy_right:
-                copy_right_path = f"/compare/{self.name}/right/copy"
-                copy_right_handler = create_copy_handler("right")
-                app.route(copy_right_path, methods=["POST"])(copy_right_handler)
+        # Note: Copy routes are not needed - copy is handled entirely in JavaScript
+        # via window.fhpfPerformCopy() function called directly from onclick handlers
 
     def form_wrapper(self, content: FT, form_id: Optional[str] = None) -> FT:
         """
