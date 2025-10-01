@@ -766,6 +766,7 @@ comparison_form = ComparisonForm(
     right_form=generated_form,
     left_label="📝 Annotated Truth (Ground Truth)",
     right_label="🤖 LLM Generated Output",
+    copy_left=True,
 )
 
 

@@ -6,14 +6,18 @@ side-by-side with visual comparison feedback and synchronized accordion states.
 """
 
 import logging
+import re
+from copy import deepcopy
 from typing import (
     Any,
     Dict,
     Generic,
     List,
+    Literal,
     Optional,
     Type,
     TypeVar,
+    Union,
 )
 
 import fasthtml.common as fh
@@ -256,6 +260,8 @@ class ComparisonForm(Generic[ModelType]):
         *,
         left_label: str = "Reference",
         right_label: str = "Generated",
+        copy_left: bool = False,
+        copy_right: bool = False,
     ):
         """
         Initialize the comparison form
@@ -266,6 +272,8 @@ class ComparisonForm(Generic[ModelType]):
             right_form: Pre-constructed PydanticForm for right column
             left_label: Label for left column
             right_label: Label for right column
+            copy_left: If True, show copy buttons in left column to copy from right
+            copy_right: If True, show copy buttons in right column to copy from left
 
         Raises:
             ValueError: If the two forms are not based on the same model class
@@ -283,6 +291,8 @@ class ComparisonForm(Generic[ModelType]):
         self.model_class = left_form.model_class  # Convenience reference
         self.left_label = left_label
         self.right_label = right_label
+        self.copy_left = copy_left
+        self.copy_right = copy_right
 
         # Use spacing from left form (or could add override parameter if needed)
         self.spacing = left_form.spacing
@@ -290,6 +300,103 @@ class ComparisonForm(Generic[ModelType]):
     def _get_field_path_string(self, field_path: List[str]) -> str:
         """Convert field path list to dot-notation string for comparison lookup"""
         return ".".join(field_path)
+
+    def _split_path(self, path: str) -> List[Union[str, int]]:
+        """
+        Split a dot/bracket path string into segments.
+
+        Examples:
+            "author.name" -> ["author", "name"]
+            "addresses[0].street" -> ["addresses", 0, "street"]
+            "experience[2].company" -> ["experience", 2, "company"]
+
+        Args:
+            path: Dot/bracket notation path string
+
+        Returns:
+            List of path segments (strings and ints)
+        """
+        _INDEX = re.compile(r"(.+?)\[(\d+)\]$")
+        parts: List[Union[str, int]] = []
+
+        for segment in path.split("."):
+            m = _INDEX.match(segment)
+            if m:
+                # Segment has bracket notation like "name[3]"
+                parts.append(m.group(1))
+                parts.append(int(m.group(2)))
+            else:
+                parts.append(segment)
+
+        return parts
+
+    def _get_by_path(self, data: Dict[str, Any], path: str) -> tuple[bool, Any]:
+        """
+        Get a value from nested dict/list structure by path.
+
+        Args:
+            data: The data structure to traverse
+            path: Dot/bracket notation path string
+
+        Returns:
+            Tuple of (found, value) where found is True if path exists, False otherwise
+        """
+        cur = data
+        for seg in self._split_path(path):
+            if isinstance(seg, int):
+                if not isinstance(cur, list) or seg >= len(cur):
+                    return (False, None)
+                cur = cur[seg]
+            else:
+                if not isinstance(cur, dict) or seg not in cur:
+                    return (False, None)
+                cur = cur[seg]
+        return (True, deepcopy(cur))
+
+    def _set_by_path(self, data: Dict[str, Any], path: str, value: Any) -> None:
+        """
+        Set a value in nested dict/list structure by path, creating intermediates.
+
+        Args:
+            data: The data structure to modify
+            path: Dot/bracket notation path string
+            value: The value to set
+        """
+        cur = data
+        parts = self._split_path(path)
+
+        for i, seg in enumerate(parts):
+            is_last = i == len(parts) - 1
+
+            if is_last:
+                # Set the final value
+                if isinstance(seg, int):
+                    if not isinstance(cur, list):
+                        raise ValueError("Cannot set list index on non-list parent")
+                    # Extend list if needed
+                    while len(cur) <= seg:
+                        cur.append(None)
+                    cur[seg] = deepcopy(value)
+                else:
+                    if not isinstance(cur, dict):
+                        raise ValueError("Cannot set dict key on non-dict parent")
+                    cur[seg] = deepcopy(value)
+            else:
+                # Navigate or create intermediate containers
+                nxt = parts[i + 1]
+
+                if isinstance(seg, int):
+                    if not isinstance(cur, list):
+                        raise ValueError("Non-list where list expected")
+                    # Extend list if needed
+                    while len(cur) <= seg:
+                        cur.append({} if isinstance(nxt, str) else [])
+                    cur = cur[seg]
+                else:
+                    if seg not in cur or not isinstance(cur[seg], (dict, list)):
+                        # Create appropriate container type
+                        cur[seg] = {} if isinstance(nxt, str) else []
+                    cur = cur[seg]
 
     def _render_column(
         self,
@@ -354,6 +461,18 @@ class ComparisonForm(Generic[ModelType]):
                 else None
             )
 
+            # Determine comparison copy settings
+            # Only enable copy buttons if the TARGET (destination) form is NOT disabled
+            is_left_column = form is self.left_form
+            comparison_copy_target = "left" if is_left_column else "right"
+            target_form = self.left_form if is_left_column else self.right_form
+
+            # Enable copy button if:
+            # 1. The feature is enabled for this side (copy_left or copy_right)
+            # 2. The TARGET form is NOT disabled (you can't copy into a disabled/read-only form)
+            copy_feature_enabled = self.copy_left if is_left_column else self.copy_right
+            comparison_copy_enabled = copy_feature_enabled and not target_form.disabled
+
             # Create renderer
             renderer = renderer_cls(
                 field_name=field_name,
@@ -367,6 +486,9 @@ class ComparisonForm(Generic[ModelType]):
                 label_color=label_color,  # Pass the label color if specified
                 metrics_dict=form.metrics_dict,  # Use form's own metrics
                 refresh_endpoint_override=comparison_refresh,  # Pass comparison-specific refresh endpoint
+                comparison_copy_enabled=comparison_copy_enabled,
+                comparison_copy_target=comparison_copy_target,
+                comparison_name=self.name,
             )
 
             # Render with data-path and order
@@ -499,6 +621,157 @@ class ComparisonForm(Generic[ModelType]):
             refresh_path = f"/compare/{self.name}/{side}/refresh"
             refresh_handler = create_refresh_handler(form, side, label)
             app.route(refresh_path, methods=["POST"])(refresh_handler)
+
+        # Register copy routes if copy features are enabled
+        if self.copy_left or self.copy_right:
+
+            def create_copy_handler(target: Literal["left", "right"]):
+                """Factory function to create copy handler with proper closure"""
+
+                async def handler(req):
+                    """Copy a value from one side to the other"""
+                    # Determine target and source forms
+                    target_form = (
+                        self.left_form if target == "left" else self.right_form
+                    )
+                    source_form = (
+                        self.right_form if target == "left" else self.left_form
+                    )
+                    target_label = (
+                        self.left_label if target == "left" else self.right_label
+                    )
+
+                    # Extract form data
+                    form_data = dict(await req.form())
+
+                    # Extract the copy path
+                    path = form_data.get("__fhpf_copy_path", "")
+                    if not path:
+                        logger.warning("Copy request missing __fhpf_copy_path")
+                        # Return unchanged target column with warning
+                        start_order = 0 if target == "left" else 1
+                        wrapper = self._render_column(
+                            form=target_form,
+                            header_label=target_label,
+                            start_order=start_order,
+                            wrapper_id=f"{target_form.name}-inputs-wrapper",
+                        )
+                        warning = mui.Alert(
+                            "Copy failed: no field path specified",
+                            cls=mui.AlertT.warning,
+                        )
+                        return fh.Div(warning, wrapper)
+
+                    # Rebuild target's current state from form data (preserves unsaved edits)
+                    try:
+                        target_filtered = target_form._filter_by_prefix(form_data)
+                        target_snapshot = target_form.parse(target_filtered)
+                    except Exception as e:
+                        logger.warning(f"Failed to parse target form data: {e}")
+                        # Fallback to current values_dict
+                        target_snapshot = target_form.values_dict.copy()
+
+                    # Rebuild source snapshot from form data (if enabled) or use values_dict
+                    # If source form is disabled, disabled inputs don't submit, so use values_dict
+                    if source_form.disabled:
+                        # Use the original values_dict directly for disabled forms
+                        source_snapshot = source_form.values_dict.copy()
+                        logger.info(
+                            f"Source form is disabled, using values_dict: {len(source_snapshot)} keys, scheduled_review_time={source_snapshot.get('scheduled_review_time')}, extraction_time={source_snapshot.get('extraction_time')}"
+                        )
+                    else:
+                        # Source form is enabled, parse from submitted form data
+                        try:
+                            source_filtered = source_form._filter_by_prefix(form_data)
+                            logger.info(
+                                f"Source filtered data has {len(source_filtered)} keys: scheduled_review_time={source_filtered.get(f'{source_form.base_prefix}scheduled_review_time')}, extraction_time={source_filtered.get(f'{source_form.base_prefix}extraction_time')}"
+                            )
+                            source_snapshot = source_form.parse(source_filtered)
+                            logger.info(
+                                f"Source parsed from form data: {len(source_snapshot)} keys, scheduled_review_time={source_snapshot.get('scheduled_review_time')}, extraction_time={source_snapshot.get('extraction_time')}"
+                            )
+                        except Exception as e:
+                            logger.warning(f"Source form parsing failed: {e}")
+                            # Fallback to values_dict
+                            source_snapshot = source_form.values_dict.copy()
+                            logger.info(
+                                f"Source using values_dict fallback: {len(source_snapshot)} keys"
+                            )
+
+                    # Get value from source by path
+                    found, source_value = self._get_by_path(source_snapshot, path)
+                    logger.info(
+                        f"Copy operation: path={path}, found={found}, value={source_value}, value_type={type(source_value)}"
+                    )
+                    if not found:
+                        logger.warning(f"Source value not found at path: {path}")
+                        # Return unchanged target column with warning
+                        start_order = 0 if target == "left" else 1
+                        wrapper = self._render_column(
+                            form=target_form,
+                            header_label=target_label,
+                            start_order=start_order,
+                            wrapper_id=f"{target_form.name}-inputs-wrapper",
+                        )
+                        warning = mui.Alert(
+                            f"Copy failed: no value found at {path}",
+                            cls=mui.AlertT.warning,
+                        )
+                        return fh.Div(warning, wrapper)
+
+                    # Set value in target snapshot
+                    try:
+                        self._set_by_path(target_snapshot, path, source_value)
+                    except Exception as e:
+                        logger.error(f"Failed to set value at path {path}: {e}")
+                        # Return unchanged target column with error
+                        start_order = 0 if target == "left" else 1
+                        wrapper = self._render_column(
+                            form=target_form,
+                            header_label=target_label,
+                            start_order=start_order,
+                            wrapper_id=f"{target_form.name}-inputs-wrapper",
+                        )
+                        error = mui.Alert(
+                            f"Copy failed: {str(e)}",
+                            cls=mui.AlertT.error,
+                        )
+                        return fh.Div(error, wrapper)
+
+                    # Update target form with new values
+                    target_form.values_dict = target_snapshot
+
+                    # Debug: Log the updated value
+                    found_after, value_after = self._get_by_path(target_snapshot, path)
+                    logger.info(
+                        f"After copy: path={path}, found={found_after}, value={value_after}, type={type(value_after)}"
+                    )
+
+                    # Instead of re-rendering entire column, just render the specific field
+                    # that was copied and return it with OOB swap to update only that field
+                    # For now, re-render entire column (will optimize later)
+                    # TODO: Implement targeted field update to avoid accordion collapse
+                    start_order = 0 if target == "left" else 1
+                    wrapper = self._render_column(
+                        form=target_form,
+                        header_label=target_label,
+                        start_order=start_order,
+                        wrapper_id=f"{target_form.name}-inputs-wrapper",
+                    )
+                    return wrapper
+
+                return handler
+
+            # Register copy routes
+            if self.copy_left:
+                copy_left_path = f"/compare/{self.name}/left/copy"
+                copy_left_handler = create_copy_handler("left")
+                app.route(copy_left_path, methods=["POST"])(copy_left_handler)
+
+            if self.copy_right:
+                copy_right_path = f"/compare/{self.name}/right/copy"
+                copy_right_handler = create_copy_handler("right")
+                app.route(copy_right_path, methods=["POST"])(copy_right_handler)
 
     def form_wrapper(self, content: FT, form_id: Optional[str] = None) -> FT:
         """

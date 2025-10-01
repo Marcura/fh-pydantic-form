@@ -383,6 +383,9 @@ class BaseFieldRenderer(MetricsRendererMixin):
         metrics_dict: Optional[MetricsDict] = None,
         refresh_endpoint_override: Optional[str] = None,
         keep_skip_json_pathset: Optional[set[str]] = None,
+        comparison_copy_enabled: bool = False,
+        comparison_copy_target: Optional[str] = None,
+        comparison_name: Optional[str] = None,
         **kwargs,  # Accept additional kwargs for extensibility
     ):
         """
@@ -401,6 +404,9 @@ class BaseFieldRenderer(MetricsRendererMixin):
             metric_entry: Optional metric entry for visual feedback
             metrics_dict: Optional full metrics dict for auto-lookup
             refresh_endpoint_override: Optional override URL for refresh actions (used in ComparisonForm)
+            comparison_copy_enabled: If True, show copy button for this field
+            comparison_copy_target: "left" or "right" - which side this field is on
+            comparison_name: Name of the ComparisonForm (for copy route URLs)
             **kwargs: Additional keyword arguments for extensibility
         """
         self.field_name = f"{prefix}{field_name}" if prefix else field_name
@@ -425,6 +431,9 @@ class BaseFieldRenderer(MetricsRendererMixin):
         self.metrics_dict = metrics_dict
         self._refresh_endpoint_override = refresh_endpoint_override
         self._keep_skip_json_pathset = keep_skip_json_pathset or set()
+        self._cmp_copy_enabled = comparison_copy_enabled
+        self._cmp_copy_target = comparison_copy_target
+        self._cmp_name = comparison_name
 
         # Initialize metric entry attribute
         self.metric_entry: Optional[MetricEntry] = None
@@ -509,6 +518,42 @@ class BaseFieldRenderer(MetricsRendererMixin):
         """
         return f"text-{color}-600"
 
+    def _render_comparison_copy_button(self) -> Optional[FT]:
+        """
+        Render a copy button for comparison forms.
+
+        Note: Copy buttons are never disabled, even if the field itself is disabled.
+        This allows copying from disabled (read-only) fields to editable fields.
+
+        Returns:
+            A copy button component, or None if not in comparison mode
+        """
+        if not (self._cmp_copy_enabled and self._cmp_copy_target and self._cmp_name):
+            return None
+
+        path = self._build_path_string()
+        arrow = "arrow-left" if self._cmp_copy_target == "left" else "arrow-right"
+        tooltip_text = f"Copy to {self._cmp_copy_target}"
+
+        # Note: We explicitly do NOT pass disabled=self.disabled here
+        # Copy buttons should always be enabled, even in disabled forms
+        return mui.Button(
+            mui.UkIcon(arrow, cls="w-3 h-3"),
+            type="button",
+            hx_post=f"/compare/{self._cmp_name}/{self._cmp_copy_target}/copy",
+            hx_target=f"#{self.explicit_form_name or self.field_name.split('_')[0]}-inputs-wrapper",
+            hx_swap="innerHTML swap:50ms",  # Add small delay for swap
+            hx_include="closest form",
+            hx_vals=f'{{"__fhpf_copy_path": "{path}"}}',
+            uk_tooltip=tooltip_text,
+            cls="uk-button-text uk-button-small",
+            style="all: unset; display: inline-flex; align-items: center; cursor: pointer; padding: 0 0.25rem;",
+            onclick="window.saveAllAccordionStates && window.saveAllAccordionStates()",
+            **{
+                "hx-on::after-swap": "window.restoreAllAccordionStates && window.restoreAllAccordionStates()",
+            },
+        )
+
     def render_label(self) -> FT:
         """
         Render label for the field
@@ -582,15 +627,28 @@ class BaseFieldRenderer(MetricsRendererMixin):
         # 1. Get the label component
         label_component = self.render_label()
 
-        # 2. Render the input field
+        # 2. Get the copy button if enabled
+        copy_button = self._render_comparison_copy_button()
+
+        # 3. If copy button exists, wrap label and button together
+        if copy_button:
+            label_row = fh.Div(
+                label_component,
+                copy_button,
+                cls="flex items-center justify-between gap-2",
+            )
+        else:
+            label_row = label_component
+
+        # 4. Render the input field
         input_component = self.render_input()
 
-        # 3. Choose layout based on spacing theme
+        # 5. Choose layout based on spacing theme
         if self.spacing == SpacingTheme.COMPACT:
             # Horizontal layout for compact mode
             field_element = fh.Div(
                 fh.Div(
-                    label_component,
+                    label_row,
                     input_component,
                     cls=f"flex {spacing('horizontal_gap', self.spacing)} {spacing('label_align', self.spacing)} w-full",
                 ),
@@ -599,12 +657,12 @@ class BaseFieldRenderer(MetricsRendererMixin):
         else:
             # Vertical layout for normal mode (existing behavior)
             field_element = fh.Div(
-                label_component,
+                label_row,
                 input_component,
                 cls=spacing("outer_margin", self.spacing),
             )
 
-        # 4. Apply metrics decoration if available
+        # 6. Apply metrics decoration if available
         return self._decorate_metrics(field_element, self.metric_entry)
 
 
@@ -1152,28 +1210,39 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
         if self.label_color:
             if self._is_inline_color(self.label_color):
                 # Color value - apply as inline style
-                title_component = fh.Span(
+                title_span = fh.Span(
                     label_text,
                     style=f"color: {self.label_color};",
                     cls="text-sm font-medium",
                 )
             else:
                 # CSS class - apply as Tailwind class (includes emerald, amber, rose, teal, indigo, lime, violet, etc.)
-                title_component = fh.Span(
+                title_span = fh.Span(
                     label_text,
                     cls=f"text-sm font-medium {self._get_color_class(self.label_color)}",
                 )
         else:
             # No color specified - use default styling
-            title_component = fh.Span(
-                label_text, cls="text-sm font-medium text-gray-700"
-            )
+            title_span = fh.Span(label_text, cls="text-sm font-medium text-gray-700")
 
         # Add tooltip if description is available
         description = getattr(self.field_info, "description", None)
         if description:
-            title_component.attrs["uk-tooltip"] = description
-            title_component.attrs["title"] = description
+            title_span.attrs["uk-tooltip"] = description
+            title_span.attrs["title"] = description
+
+        # Get copy button if enabled
+        copy_button = self._render_comparison_copy_button()
+
+        # Wrap title and copy button together if copy button exists
+        if copy_button:
+            title_component = fh.Div(
+                title_span,
+                copy_button,
+                cls="flex items-center justify-between gap-2 w-full",
+            )
+        else:
+            title_component = title_span
 
         # Apply metrics decoration to title (bullet only, no border)
         title_component = self._decorate_metrics(
@@ -1500,7 +1569,10 @@ class ListFieldRenderer(BaseFieldRenderer):
 
         # Metric decoration will be applied to the title_component below
 
-        # Only add refresh icon if we have a form name and field is not disabled
+        # Build action buttons row (refresh and copy)
+        action_buttons = []
+
+        # Add refresh icon if we have a form name and field is not disabled
         if form_name and not self.disabled:
             # Create the smaller icon component
             refresh_icon_component = mui.UkIcon(
@@ -1527,7 +1599,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                 hx_include="closest form",  # Include all form fields from the enclosing form
                 hx_preserve="scroll",
                 uk_tooltip="Refresh form display to update list summaries",
-                style="all: unset; display: inline-flex; align-items: center; cursor: pointer; padding: 0 0.5rem; margin-left: 0.5rem;",
+                style="all: unset; display: inline-flex; align-items: center; cursor: pointer; padding: 0 0.5rem;",
                 **{
                     "hx-on::before-request": f"window.saveAccordionState && window.saveAccordionState('{container_id}')"
                 },
@@ -1535,25 +1607,33 @@ class ListFieldRenderer(BaseFieldRenderer):
                     "hx-on::after-swap": f"window.restoreAccordionState && window.restoreAccordionState('{container_id}')"
                 },
             )
+            action_buttons.append(refresh_icon_trigger)
 
-            # Combine label and icon - put refresh icon in a separate div to isolate it
+        # Add copy button if enabled
+        copy_button = self._render_comparison_copy_button()
+        if copy_button:
+            action_buttons.append(copy_button)
+
+        # Build title component with label and action buttons
+        if action_buttons:
+            # Combine label and action buttons
             title_component = fh.Div(
                 fh.Div(
                     label_span,  # Use the properly styled label span
                     cls="flex-1",  # Take up remaining space
                 ),
                 fh.Div(
-                    refresh_icon_trigger,
-                    cls="flex-shrink-0 px-1",  # Don't shrink, add horizontal padding for larger click area
-                    onclick="event.stopPropagation();",  # Isolate the refresh icon area
+                    *action_buttons,
+                    cls="flex-shrink-0 flex items-center gap-1 px-1",  # Don't shrink, add horizontal padding
+                    onclick="event.stopPropagation();",  # Isolate the action buttons area
                 ),
                 cls="flex items-center",
             )
         else:
-            # If no form name, just use the styled label
+            # If no action buttons, just use the styled label
             title_component = fh.Div(
                 label_span,  # Use the properly styled label span
-                cls="flex items-center",  # Remove cursor-pointer and click handler
+                cls="flex items-center",
             )
 
         # Apply metrics decoration to title (bullet only, no border)
@@ -2087,9 +2167,47 @@ class ListFieldRenderer(BaseFieldRenderer):
             )
 
             # Return the accordion item
-            title_component = fh.Span(
+            title_span = fh.Span(
                 item_summary_text, cls="text-gray-700 font-medium pl-3"
             )
+
+            # Get copy button for this specific list item (if enabled)
+            # Create a temporary renderer context with this item's path
+            if self._cmp_copy_enabled and self._cmp_copy_target and self._cmp_name:
+                # Build the path for this specific item
+                item_path_for_copy = self.field_path + [str(idx)]
+                item_path_string = _build_path_string_static(item_path_for_copy)
+                arrow = (
+                    "arrow-left" if self._cmp_copy_target == "left" else "arrow-right"
+                )
+                tooltip_text = f"Copy item to {self._cmp_copy_target}"
+
+                # Note: Copy button is never disabled, even in disabled forms
+                item_copy_button = mui.Button(
+                    mui.UkIcon(arrow, cls="w-3 h-3"),
+                    type="button",
+                    hx_post=f"/compare/{self._cmp_name}/{self._cmp_copy_target}/copy",
+                    hx_target=f"#{self.explicit_form_name or self.field_name.split('_')[0]}-inputs-wrapper",
+                    hx_swap="innerHTML swap:50ms",  # Add small delay for swap
+                    hx_include="closest form",
+                    hx_vals=f'{{"__fhpf_copy_path": "{item_path_string}"}}',
+                    uk_tooltip=tooltip_text,
+                    cls="uk-button-text uk-button-small",
+                    style="all: unset; display: inline-flex; align-items: center; cursor: pointer; padding: 0 0.25rem;",
+                    onclick="window.saveAllAccordionStates && window.saveAllAccordionStates()",
+                    **{
+                        "hx-on::after-swap": "window.restoreAllAccordionStates && window.restoreAllAccordionStates()",
+                    },
+                )
+
+                # Wrap title and copy button together
+                title_component = fh.Div(
+                    title_span,
+                    item_copy_button,
+                    cls="flex items-center justify-between gap-2 w-full",
+                )
+            else:
+                title_component = title_span
 
             # Apply metrics decoration to the title (bullet only)
             title_component = self._decorate_metrics(
