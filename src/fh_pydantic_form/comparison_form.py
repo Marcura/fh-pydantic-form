@@ -153,9 +153,35 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
       }
     });
 
+    // Handle list cleanup - remove excess items from target list
+    // Check if this is a list field by looking for a list container
+    if (pathPrefix && !pathPrefix.includes('[')) {
+      // This is a top-level field (not a list item), check if it's a list field
+      // Try to find list containers for both source and target
+      var targetPrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
+
+      // Build container ID patterns - handle both with and without trailing underscore
+      var sourceContainerIdPattern = sourcePrefix.replace(/_$/, '') + '_' + pathPrefix + '_items_container';
+      var targetContainerIdPattern = targetPrefix.replace(/_$/, '') + '_' + pathPrefix + '_items_container';
+
+      var sourceListContainer = document.getElementById(sourceContainerIdPattern);
+      var targetListContainer = document.getElementById(targetContainerIdPattern);
+
+      if (sourceListContainer && targetListContainer) {
+        // Both containers exist, this is a list field
+        // Count list items in source and target
+        var sourceItemCount = sourceListContainer.querySelectorAll(':scope > li').length;
+        var targetItems = targetListContainer.querySelectorAll(':scope > li');
+
+        // Remove excess items from target (from end backwards)
+        for (var i = targetItems.length - 1; i >= sourceItemCount; i--) {
+          targetItems[i].remove();
+        }
+      }
+    }
+
     // Restore accordion states after a brief delay
     setTimeout(function() {
-      var restoredCount = 0;
       accordionStates.forEach(function(state) {
         if (state.isOpen && !state.element.classList.contains('uk-open')) {
           // Use UIkit's toggle API to properly open the accordion
@@ -165,7 +191,6 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
             if (accordionComponent) {
               var itemIndex = Array.from(accordionParent.children).indexOf(state.element);
               accordionComponent.toggle(itemIndex, true);
-              restoredCount++;
             } else {
               // Fallback to manual class manipulation
               state.element.classList.add('uk-open');
@@ -453,8 +478,8 @@ class ComparisonForm(Generic[ModelType]):
             right_form: Pre-constructed PydanticForm for right column
             left_label: Label for left column
             right_label: Label for right column
-            copy_left: If True, show copy buttons in left column to copy from right
-            copy_right: If True, show copy buttons in right column to copy from left
+            copy_left: If True, show copy buttons in right column to copy to left
+            copy_right: If True, show copy buttons in left column to copy to right
 
         Raises:
             ValueError: If the two forms are not based on the same model class
@@ -643,16 +668,32 @@ class ComparisonForm(Generic[ModelType]):
             )
 
             # Determine comparison copy settings
-            # Only enable copy buttons if the TARGET (destination) form is NOT disabled
+            # Show copy buttons on the SOURCE form (the form you're copying FROM)
             is_left_column = form is self.left_form
-            comparison_copy_target = "left" if is_left_column else "right"
-            target_form = self.left_form if is_left_column else self.right_form
+
+            # If copy_left is enabled, show button on RIGHT form to copy TO left
+            # If copy_right is enabled, show button on LEFT form to copy TO right
+            if is_left_column:
+                # This is the left form
+                # Show copy button if we want to copy TO the right
+                copy_feature_enabled = self.copy_right
+                comparison_copy_target = "right" if copy_feature_enabled else None
+                target_form = self.right_form
+            else:
+                # This is the right form
+                # Show copy button if we want to copy TO the left
+                copy_feature_enabled = self.copy_left
+                comparison_copy_target = "left" if copy_feature_enabled else None
+                target_form = self.left_form
 
             # Enable copy button if:
-            # 1. The feature is enabled for this side (copy_left or copy_right)
+            # 1. The feature is enabled (copy_left or copy_right)
             # 2. The TARGET form is NOT disabled (you can't copy into a disabled/read-only form)
-            copy_feature_enabled = self.copy_left if is_left_column else self.copy_right
-            comparison_copy_enabled = copy_feature_enabled and not target_form.disabled
+            comparison_copy_enabled = (
+                copy_feature_enabled and not target_form.disabled
+                if target_form
+                else False
+            )
 
             # Create renderer
             renderer = renderer_cls(
