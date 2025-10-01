@@ -38,7 +38,7 @@ ModelType = TypeVar("ModelType", bound=BaseModel)
 def comparison_form_js():
     """JavaScript for comparison: sync accordions and handle JS-only copy operations."""
     return fh.Script("""
-// Copy function - no HTMX, pure JS
+// Copy function - pure JS implementation
 window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
   try {
     // Set flag to prevent accordion sync
@@ -53,30 +53,53 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
       });
     });
 
-    // Determine source prefix based on target
-    // If copying TO left, source is right (the OTHER prefix)
-    // If copying TO right, source is left (the OTHER prefix)
-    // currentPrefix is the button's form prefix (target side)
-    // We need the OTHER side's prefix (source side)
-    var sourcePrefix;
-    if (copyTarget === 'left') {
-      // Copying TO left, so source is right
-      sourcePrefix = window.__fhpfRightPrefix;
-    } else {
-      // Copying TO right, so source is left
-      sourcePrefix = window.__fhpfLeftPrefix;
-    }
+    // Determine source prefix based on copy target
+    var sourcePrefix = (copyTarget === 'left') ? window.__fhpfRightPrefix : window.__fhpfLeftPrefix;
 
     // Find all inputs with matching data-field-path
-    var allInputs = document.querySelectorAll('[data-field-path][name^="' + sourcePrefix + '"]');
+    // For uk-select, we need to check the native select's name instead
+    var allInputs = document.querySelectorAll('[data-field-path]');
     var sourceInputs = Array.from(allInputs).filter(function(el) {
       var fp = el.getAttribute('data-field-path');
-      return fp === pathPrefix || fp.startsWith(pathPrefix + '.') || fp.startsWith(pathPrefix + '[');
+      if (!(fp === pathPrefix || fp.startsWith(pathPrefix + '.') || fp.startsWith(pathPrefix + '['))) {
+        return false;
+      }
+
+      // Check if this element belongs to the source form
+      var elementName = null;
+      if (el.tagName === 'UK-SELECT') {
+        var nativeSelect = el.querySelector('select');
+        elementName = nativeSelect ? nativeSelect.name : null;
+      } else {
+        elementName = el.name;
+      }
+
+      return elementName && elementName.startsWith(sourcePrefix);
     });
+
+    // Track updated selects to fire change events later
+    var updatedSelects = [];
 
     sourceInputs.forEach(function(sourceInput) {
       var fp = sourceInput.getAttribute('data-field-path');
-      var targetInput = document.querySelector('[data-field-path="' + fp + '"]:not([name^="' + sourcePrefix + '"])');
+
+      // Find target by data-field-path, then verify it's NOT from the source form
+      var candidates = document.querySelectorAll('[data-field-path="' + fp + '"]');
+      var targetInput = null;
+      for (var i = 0; i < candidates.length; i++) {
+        var candidate = candidates[i];
+        var candidateName = null;
+        if (candidate.tagName === 'UK-SELECT') {
+          var nativeSelect = candidate.querySelector('select');
+          candidateName = nativeSelect ? nativeSelect.name : null;
+        } else {
+          candidateName = candidate.name;
+        }
+        if (candidateName && !candidateName.startsWith(sourcePrefix)) {
+          targetInput = candidate;
+          break;
+        }
+      }
 
       if (!targetInput) return;
 
@@ -87,22 +110,27 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
         targetInput.checked = sourceInput.checked;
       } else if (tag === 'SELECT') {
         targetInput.value = sourceInput.value;
+        updatedSelects.push(targetInput);
       } else if (tag === 'UK-SELECT') {
         var sourceNativeSelect = sourceInput.querySelector('select');
         var targetNativeSelect = targetInput.querySelector('select');
         if (sourceNativeSelect && targetNativeSelect) {
-          // Set the value on the native select
-          targetNativeSelect.value = sourceNativeSelect.value;
+          var sourceValue = sourceNativeSelect.value;
 
-          // Also need to update the selected option
-          var sourceSelectedOption = sourceNativeSelect.options[sourceNativeSelect.selectedIndex];
-          if (sourceSelectedOption) {
-            // Find matching option in target by value
-            for (var i = 0; i < targetNativeSelect.options.length; i++) {
-              if (targetNativeSelect.options[i].value === sourceSelectedOption.value) {
-                targetNativeSelect.selectedIndex = i;
-                break;
-              }
+          // First, clear all selected attributes
+          for (var i = 0; i < targetNativeSelect.options.length; i++) {
+            targetNativeSelect.options[i].removeAttribute('selected');
+            targetNativeSelect.options[i].selected = false;
+          }
+
+          // Find and set the matching option
+          for (var i = 0; i < targetNativeSelect.options.length; i++) {
+            if (targetNativeSelect.options[i].value === sourceValue) {
+              targetNativeSelect.options[i].setAttribute('selected', 'selected');
+              targetNativeSelect.options[i].selected = true;
+              targetNativeSelect.selectedIndex = i;
+              targetNativeSelect.value = sourceValue;
+              break;
             }
           }
 
@@ -112,6 +140,9 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
           if (sourceButton && targetButton) {
             targetButton.innerHTML = sourceButton.innerHTML;
           }
+
+          // Track this select for later event firing
+          updatedSelects.push(targetNativeSelect);
         }
       } else if (tag === 'TEXTAREA') {
         // Just set the value directly, don't clear first
@@ -149,14 +180,18 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
       });
 
       window.__fhpfCopyInProgress = false;
-      if (restoredCount > 0) {
-        console.log('[fhpf] restored', restoredCount, 'accordion(s)');
-      }
+
+      // Fire change events on updated selects AFTER accordion restoration
+      setTimeout(function() {
+        updatedSelects.forEach(function(select) {
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+      }, 50);
     }, 150);
 
   } catch (e) {
-    console.error('[fhpf] copy error', e);
     window.__fhpfCopyInProgress = false;
+    throw e;
   }
 };
 
@@ -165,6 +200,20 @@ window.fhpfInitComparisonSync = function initComparisonSync(){
   if (!window.UIkit || !UIkit.util) {
     return setTimeout(initComparisonSync, 50);
   }
+
+  // Fix native select name attributes (MonsterUI puts name on uk-select, not native select)
+  // IMPORTANT: Remove name from uk-select to avoid duplicate form submission
+  document.querySelectorAll('uk-select[name]').forEach(function(ukSelect) {
+    var nativeSelect = ukSelect.querySelector('select');
+    if (nativeSelect) {
+      var ukSelectName = ukSelect.getAttribute('name');
+      if (!nativeSelect.name && ukSelectName) {
+        nativeSelect.name = ukSelectName;
+        // Remove name from uk-select to prevent duplicate submission
+        ukSelect.removeAttribute('name');
+      }
+    }
+  });
 
 
   // 2) Sync top-level accordions (BaseModelFieldRenderer)

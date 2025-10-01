@@ -217,30 +217,22 @@ window.restoreAccordionState = function(containerId) {
 
 // Save all accordion states in the form (both lists and nested BaseModels)
 window.saveAllAccordionStates = function() {
-    console.log('Saving all accordion states...');
-
     // Save list container states
     document.querySelectorAll('[id$="_items_container"]').forEach(container => {
         window.saveAccordionState(container.id);
     });
 
     // Save all UIkit accordion item states (nested BaseModels, etc.)
-    let savedCount = 0;
     document.querySelectorAll('.uk-accordion > li').forEach(item => {
         if (item.id) {
             const isOpen = item.classList.contains('uk-open');
             sessionStorage.setItem('accordion_state_' + item.id, isOpen ? 'open' : 'closed');
-            console.log('Saved accordion:', item.id, isOpen ? 'open' : 'closed');
-            savedCount++;
         }
     });
-    console.log('Saved', savedCount, 'accordion items');
 };
 
 // Restore all accordion states in the form (both lists and nested BaseModels)
 window.restoreAllAccordionStates = function() {
-    console.log('Restoring all accordion states... (called)');
-
     // Restore list container states
     document.querySelectorAll('[id$="_items_container"]').forEach(container => {
         window.restoreAccordionState(container.id);
@@ -249,34 +241,18 @@ window.restoreAllAccordionStates = function() {
     // Use requestAnimationFrame to ensure DOM has fully updated after swap
     requestAnimationFrame(() => {
         setTimeout(() => {
-            let restoredCount = 0;
-            let foundCount = 0;
-            let leftCount = 0;
-            let rightCount = 0;
-
             // Restore ALL UIkit accordion item states in the entire document (not just swapped area)
             document.querySelectorAll('.uk-accordion > li').forEach(item => {
-                foundCount++;
                 if (item.id) {
-                    // Count left vs right
-                    if (item.id.startsWith('annotated_truth')) leftCount++;
-                    if (item.id.startsWith('generated_output')) rightCount++;
-
                     const savedState = sessionStorage.getItem('accordion_state_' + item.id);
 
                     if (savedState === 'open' && !item.classList.contains('uk-open')) {
-                        // Need to open this item - add the class directly
                         item.classList.add('uk-open');
-                        restoredCount++;
                     } else if (savedState === 'closed' && item.classList.contains('uk-open')) {
-                        // Need to close this item - remove the class
                         item.classList.remove('uk-open');
-                        restoredCount++;
                     }
                 }
             });
-            console.log('Restored', restoredCount, 'accordion items');
-            console.log('Found:', foundCount, 'total (left:', leftCount, ', right:', rightCount, ') - expected 37');
         }, 150);
     });
 };
