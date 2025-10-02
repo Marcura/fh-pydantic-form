@@ -57,40 +57,6 @@ function extractListIndex(pathPrefix) {
   return match ? parseInt(match[1]) : null;
 }
 
-function findListRefreshButton(listFieldPath, targetSide) {
-  // Find the refresh button for a specific list field
-  // Parameters:
-  //   - listFieldPath: The field path (e.g., "tags", "addresses")
-  //   - targetSide: "left" or "right"
-  // Returns: DOM element or null
-
-  var targetPrefix = (targetSide === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
-
-  // Construct the wrapper accordion ID based on the target form prefix and field path
-  // The pattern is: {prefix}{field_name}_wrapper_accordion
-  var wrapperId = targetPrefix.replace(/_$/, '') + '_' + listFieldPath + '_wrapper_accordion';
-  var wrapperElement = document.getElementById(wrapperId);
-
-  if (!wrapperElement) {
-    return null;
-  }
-
-  // Look for the refresh button within the wrapper (identified by refresh-ccw icon)
-  var refreshButtons = wrapperElement.querySelectorAll('button');
-  for (var i = 0; i < refreshButtons.length; i++) {
-    var btn = refreshButtons[i];
-    // Check if button contains refresh icon
-    var hasRefreshIcon = btn.querySelector('[data-lucide="refresh-ccw"]') ||
-                         btn.querySelector('.lucide-refresh-ccw') ||
-                         btn.innerHTML.includes('refresh-ccw');
-    if (hasRefreshIcon) {
-      return btn;
-    }
-  }
-
-  return null;
-}
-
 // Copy function - pure JS implementation
 window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
   try {
@@ -308,94 +274,70 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
                 // Use the actual placeholder index from the name attribute
                 var newPathPrefix = listFieldPath + '[' + actualPlaceholderIdx + ']';
 
-                // Store the new item's ID for later operations
-                var newItemId = newItem.id;
-
                 // Now perform the standard copy operation with the new path
                 performStandardCopy(pathPrefix, newPathPrefix, sourcePrefix, copyTarget, accordionStates);
 
-                // Wait for copy to complete, then trigger refresh BEFORE opening accordion
+                // Wait for copy to complete, then open accordion and highlight
+                // Note: We skip automatic refresh because the temporary item ID doesn't persist after refresh
+                // User can manually click the refresh button to update counts/summaries if needed
                 var waitForCopyComplete = function() {
                   if (!window.__fhpfCopyInProgress) {
-                    // Copy is complete, now save ALL accordion states before refreshing
-                    if (window.saveAllAccordionStates) {
-                      window.saveAllAccordionStates();
-                    }
+                    // Copy operation is complete, now open and highlight the new item
+                    setTimeout(function() {
+                      // Re-find the item (it might have been affected by accordion restoration)
+                      var copiedItem = document.getElementById(newItem.id);
 
-                    // Trigger refresh to update list count and summaries
-                    var refreshButton = findListRefreshButton(listFieldPath, copyTarget);
-                    if (refreshButton) {
-                      // Listen for the refresh to complete, then open accordion and highlight
-                      document.body.addEventListener('htmx:afterSwap', function onAfterSwap(evt) {
-                        // Check if this swap is from our refresh button
-                        if (evt.detail.target && evt.detail.target.id && evt.detail.target.id.includes('inputs-wrapper')) {
-                          document.body.removeEventListener('htmx:afterSwap', onAfterSwap);
-
-                          // Wait a moment for DOM to settle after refresh
-                          setTimeout(function() {
-                            // Restore all accordion states (but NOT the new item yet)
-                            if (window.restoreAllAccordionStates) {
-                              window.restoreAllAccordionStates();
+                      if (copiedItem && window.UIkit) {
+                        // Open the newly created accordion item
+                        if (!copiedItem.classList.contains('uk-open')) {
+                          var accordionParent = copiedItem.parentElement;
+                          if (accordionParent && accordionParent.hasAttribute('uk-accordion')) {
+                            var accordionComponent = UIkit.accordion(accordionParent);
+                            if (accordionComponent) {
+                              var itemIndex = Array.from(accordionParent.children).indexOf(copiedItem);
+                              accordionComponent.toggle(itemIndex, false);  // false = don't animate
                             }
-
-                            // Re-find the new item by ID (it's been replaced by the refresh)
-                            var refreshedItem = document.getElementById(newItemId);
-                            if (refreshedItem && window.UIkit) {
-                              // Now open the newly created accordion item
-                              if (!refreshedItem.classList.contains('uk-open')) {
-                                var accordionParent = refreshedItem.parentElement;
-                                if (accordionParent && accordionParent.hasAttribute('uk-accordion')) {
-                                  var accordionComponent = UIkit.accordion(accordionParent);
-                                  if (accordionComponent) {
-                                    var itemIndex = Array.from(accordionParent.children).indexOf(refreshedItem);
-                                    accordionComponent.toggle(itemIndex, false);  // false = don't animate, just open
-                                  }
-                                } else {
-                                  // Manual fallback
-                                  refreshedItem.classList.add('uk-open');
-                                  var content = refreshedItem.querySelector('.uk-accordion-content');
-                                  if (content) {
-                                    content.hidden = false;
-                                    content.style.display = '';
-                                  }
-                                }
-                              }
-
-                              // Apply visual highlight after opening
-                              setTimeout(function() {
-                                refreshedItem.style.transition = 'all 0.3s ease-in-out';
-                                refreshedItem.style.backgroundColor = '#dbeafe'; // Light blue background
-                                refreshedItem.style.borderLeft = '4px solid #3b82f6'; // Blue left border
-                                refreshedItem.style.borderRadius = '4px';
-
-                                // Scroll the new item into view
-                                refreshedItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
-                                // Fade out the highlight after 3 seconds
-                                setTimeout(function() {
-                                  refreshedItem.style.backgroundColor = '';
-                                  refreshedItem.style.borderLeft = '';
-                                  // Remove inline styles after transition
-                                  setTimeout(function() {
-                                    refreshedItem.style.transition = '';
-                                    refreshedItem.style.borderRadius = '';
-                                  }, 300);
-                                }, 3000);
-                              }, 100);
+                          } else {
+                            // Manual fallback
+                            copiedItem.classList.add('uk-open');
+                            var content = copiedItem.querySelector('.uk-accordion-content');
+                            if (content) {
+                              content.hidden = false;
+                              content.style.display = '';
                             }
-                          }, 100);
+                          }
                         }
-                      }, { once: false }); // Don't use once: true since we manually remove it
 
-                      refreshButton.click();
-                    }
+                        // Apply visual highlight
+                        setTimeout(function() {
+                          copiedItem.style.transition = 'all 0.3s ease-in-out';
+                          copiedItem.style.backgroundColor = '#dbeafe'; // Light blue background
+                          copiedItem.style.borderLeft = '4px solid #3b82f6'; // Blue left border
+                          copiedItem.style.borderRadius = '4px';
+
+                          // Scroll into view
+                          copiedItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+                          // Fade out the highlight after 3 seconds
+                          setTimeout(function() {
+                            copiedItem.style.backgroundColor = '';
+                            copiedItem.style.borderLeft = '';
+                            // Remove inline styles after transition
+                            setTimeout(function() {
+                              copiedItem.style.transition = '';
+                              copiedItem.style.borderRadius = '';
+                            }, 300);
+                          }, 3000);
+                        }, 100);
+                      }
+                    }, 100);
                   } else {
                     // Still in progress, check again in 50ms
                     setTimeout(waitForCopyComplete, 50);
                   }
                 };
 
-                // Start checking after a small delay to ensure performStandardCopy has started
+                // Start checking after a small delay
                 setTimeout(waitForCopyComplete, 100);
 
               } else if (attempts < maxAttempts) {
