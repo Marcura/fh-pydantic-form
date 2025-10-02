@@ -878,9 +878,9 @@ comparison_form.register_routes(app)
 - **Form Validation**: Standard validation works with either form
 - **Intelligent List Copying**: Copy lists between forms with automatic length adjustment
 
-### Copying Lists Between Forms
+### Copying Between Forms
 
-The ComparisonForm includes intelligent list copying that automatically handles lists with different lengths. When you enable copy buttons (via `copy_left=True` or `copy_right=True`), you can copy entire list fields between forms with automatic adjustment:
+The ComparisonForm provides granular copy functionality at multiple levels. When you enable copy buttons (via `copy_left=True` or `copy_right=True`), each field, nested model, and list item gets its own copy button for maximum flexibility:
 
 ```python
 # Enable copy buttons (copy FROM right TO left)
@@ -894,7 +894,47 @@ comparison_form = ComparisonForm(
 )
 ```
 
-**Automatic Length Handling:**
+**Copy Granularity Levels:**
+
+The copy feature works at five different levels of granularity:
+
+1. **Individual Fields** - Copy a single field value (e.g., `name`, `price`, `status`)
+   ```python
+   # Example: Copy just the "title" field from right to left
+   # Click the copy button next to the title field
+   ```
+
+2. **Nested BaseModel (Entire Object)** - Copy all fields within a nested model at once
+   ```python
+   # Example Model
+   class Product(BaseModel):
+       name: str
+       details: ProductDetails  # Nested model
+
+   # Click copy button on "details" label → copies all fields in ProductDetails
+   # (manufacturer, warranty, specifications, etc.)
+   ```
+
+3. **Individual Fields in Nested Models** - Copy a specific field within a nested object
+   ```python
+   # Example: Copy just the "street" field from address.street
+   # Useful when most address fields are correct but one needs updating
+   ```
+
+4. **Full List Fields** - Copy entire lists with automatic length adjustment
+   ```python
+   # Example: Copy all addresses from right form to left form
+   # Automatically handles different list lengths (see below)
+   ```
+
+5. **Individual List Items** - Add a single item from one list to another
+   ```python
+   # Example: Copy addresses[2] from right form, adding it to left form's list
+   # The item is inserted at the appropriate position and highlighted
+   # Useful for cherry-picking specific items during review
+   ```
+
+**Full List Copying - Automatic Length Handling:**
 
 The copy operation intelligently handles three scenarios:
 
@@ -921,25 +961,38 @@ After copying a list, the form automatically:
 - **Preserves accordion states** (open/closed)
 - **Restores UI state** smoothly without page reload
 
-**Example Use Cases:**
+**Example Workflows:**
 
 ```python
-# Copy LLM-extracted addresses to ground truth for correction
-# - LLM extracted 3 addresses
-# - Ground truth has 1 address
-# → Result: Ground truth will have 3 addresses with copied values
+# Workflow 1: Partial correction of LLM extraction
+# - LLM got the product name wrong but details are correct
+# → Copy just the "details" nested object, manually fix "name"
 
-# Copy reviewed list items back to working set
-# - Reviewed set has 7 items (with corrections)
-# - Working set has 10 items (originals)
-# → Result: Working set will have 7 items with reviewed values
+# Workflow 2: Full list synchronization
+# - LLM extracted 5 features, ground truth has 2
+# → Copy entire "features" list (automatically adds 3 items)
+
+# Workflow 3: Cherry-picking list items
+# - LLM extracted 10 reviews, but only reviews[2], [5], [7] are good
+# → Copy those individual items to ground truth list
+
+# Workflow 4: Field-level corrections in nested lists
+# - addresses[0] is mostly correct, but "postal_code" is wrong
+# → Copy just the "postal_code" field from that specific address
+
+# Workflow 5: Bulk object copy
+# - All address fields in addresses[1] are correct
+# → Copy the entire addresses[1] object to ground truth
 ```
 
-This makes it easy to:
-- **Correct LLM extractions** by copying to editable forms
-- **Sync annotation sets** with different item counts
-- **Transfer validated data** between comparison forms
-- **Streamline review workflows** for list-based data
+**Real-World Scenarios:**
+
+- **LLM Extraction Review**: Copy correct fields, manually fix incorrect ones
+- **Annotation Correction**: Start with automated extraction, selectively copy good parts
+- **Data Validation**: Compare manual vs automated, copy validated sections
+- **Iterative Refinement**: Copy base data, make incremental corrections
+- **Quality Assurance**: Review item-by-item, copy approved items
+- **Hybrid Workflows**: Combine automated extraction with human curation
 
 ### Common Patterns
 
