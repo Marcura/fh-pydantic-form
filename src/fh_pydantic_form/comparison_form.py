@@ -374,13 +374,266 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
     }
 
     // Non-list-item copy: standard behavior
-    performStandardCopy(pathPrefix, pathPrefix, sourcePrefix, copyTarget, accordionStates);
+    // (Handle full list copy with length alignment before performing copy)
+    (function() {
+      // Detect if this is a "full list copy" of a list field:
+      // we treat it as a list if both sides have containers like "<prefix>_<path>_items_container"
+      var targetPrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
+
+      var baseIdPart = pathPrefix; // e.g. "addresses" or "key_features"
+      var sourceContainerId = sourcePrefix.replace(/_$/, '') + '_' + baseIdPart + '_items_container';
+      var targetContainerId = targetPrefix.replace(/_$/, '') + '_' + baseIdPart + '_items_container';
+
+      var sourceListContainer = document.getElementById(sourceContainerId);
+      var targetListContainer = document.getElementById(targetContainerId);
+
+      // Only do length alignment if BOTH containers exist (i.e., this field is a list on both sides)
+      if (sourceListContainer && targetListContainer) {
+        var sourceCount = sourceListContainer.querySelectorAll(':scope > li').length;
+        var targetCount = targetListContainer.querySelectorAll(':scope > li').length;
+
+        // If source has more items, add missing ones BEFORE copying values (case 3)
+        if (sourceCount > targetCount) {
+          var addBtn = targetListContainer.parentElement.querySelector('button[hx-post*="/list/add/"]');
+          if (addBtn) {
+            var addUrl = addBtn.getAttribute('hx-post');
+            var toAdd = sourceCount - targetCount;
+
+            // Queue the required number of additions at the END
+            // We'll use htmx.ajax with target=container and swap=beforeend
+            // Then wait for HTMX to settle and for the DOM to reflect the new length.
+            var added = 0;
+            var addOne = function(cb) {
+              htmx.ajax('POST', addUrl, {
+                target: '#' + targetContainerId,
+                swap: 'beforeend',
+                values: {} // no-op
+              });
+              added += 1;
+              cb && cb();
+            };
+
+            // Fire additions synchronously; HTMX will queue them
+            for (var i = 0; i < toAdd; i++) addOne();
+
+            // Wait for afterSettle AND correct length, then perform the copy
+            var attempts = 0, maxAttempts = 120; // ~6s @ 50ms backoff
+            var settled = false;
+
+            // Capture settle event once
+            var onSettle = function onSettleOnce() {
+              settled = true;
+              document.body.removeEventListener('htmx:afterSettle', onSettleOnce);
+            };
+            document.body.addEventListener('htmx:afterSettle', onSettle);
+
+            var waitAndCopy = function() {
+              attempts++;
+              var delay = Math.min(50 * Math.pow(1.15, attempts), 250);
+
+              var currentCount = targetListContainer.querySelectorAll(':scope > li').length;
+              if (settled && currentCount >= sourceCount) {
+                // Proceed with list copy by DOM position
+                performListCopyByPosition(sourceListContainer, targetListContainer, sourcePrefix, copyTarget, accordionStates, pathPrefix);
+                return;
+              }
+              if (attempts >= maxAttempts) {
+                console.error('Timeout aligning list lengths for full-list copy');
+                // Still do a best-effort copy
+                performListCopyByPosition(sourceListContainer, targetListContainer, sourcePrefix, copyTarget, accordionStates, pathPrefix);
+                return;
+              }
+              setTimeout(waitAndCopy, delay);
+            };
+
+            setTimeout(waitAndCopy, 50);
+            return; // Defer to waitAndCopy; don't fall through
+          } else {
+            console.warn('Full-list copy: add button not found on target; proceeding without length alignment.');
+          }
+        } else {
+          // Source has same or fewer items - use position-based copy for lists
+          performListCopyByPosition(sourceListContainer, targetListContainer, sourcePrefix, copyTarget, accordionStates, pathPrefix);
+          return;
+        }
+      }
+
+      // Default path (non-list fields or already aligned lists)
+      performStandardCopy(pathPrefix, pathPrefix, sourcePrefix, copyTarget, accordionStates);
+    })();
 
   } catch (e) {
     window.__fhpfCopyInProgress = false;
     throw e;
   }
 };
+
+// Copy list items by DOM position (handles different indices in source/target)
+function performListCopyByPosition(sourceListContainer, targetListContainer, sourcePrefix, copyTarget, accordionStates, listFieldPath) {
+  try {
+    var sourceItems = sourceListContainer.querySelectorAll(':scope > li');
+    var targetItems = targetListContainer.querySelectorAll(':scope > li');
+    var targetPrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
+
+    // Copy each source item to corresponding target item by position
+    for (var i = 0; i < sourceItems.length && i < targetItems.length; i++) {
+      var sourceItem = sourceItems[i];
+      var targetItem = targetItems[i];
+
+      // Find all inputs within this source item
+      var sourceInputs = sourceItem.querySelectorAll('[data-field-path]');
+
+      Array.from(sourceInputs).forEach(function(sourceInput) {
+        var sourceFp = sourceInput.getAttribute('data-field-path');
+
+        // Extract the field path relative to the list item
+        // e.g., "addresses[0].street" -> ".street"
+        // or "tags[0]" -> ""
+        var listItemPattern = new RegExp('^' + listFieldPath.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + '\\\\[[^\\\\]]+\\\\]');
+        var relativePath = sourceFp.replace(listItemPattern, '');
+
+        // Find the corresponding input in the target item by looking for the same relative path
+        var targetInputs = targetItem.querySelectorAll('[data-field-path]');
+        var targetInput = null;
+
+        for (var j = 0; j < targetInputs.length; j++) {
+          var targetFp = targetInputs[j].getAttribute('data-field-path');
+          var targetRelativePath = targetFp.replace(listItemPattern, '');
+
+          if (targetRelativePath === relativePath) {
+            // Verify it belongs to the target form
+            var candidateName = null;
+            if (targetInputs[j].tagName === 'UK-SELECT') {
+              var nativeSelect = targetInputs[j].querySelector('select');
+              candidateName = nativeSelect ? nativeSelect.name : null;
+            } else {
+              candidateName = targetInputs[j].name;
+            }
+
+            if (candidateName && !candidateName.startsWith(sourcePrefix)) {
+              targetInput = targetInputs[j];
+              break;
+            }
+          }
+        }
+
+        if (!targetInput) {
+          return;
+        }
+
+        // Copy the value
+        var tag = sourceInput.tagName.toUpperCase();
+        var type = (sourceInput.type || '').toLowerCase();
+
+        if (type === 'checkbox') {
+          targetInput.checked = sourceInput.checked;
+        } else if (tag === 'SELECT') {
+          targetInput.value = sourceInput.value;
+        } else if (tag === 'UK-SELECT') {
+          var sourceNativeSelect = sourceInput.querySelector('select');
+          var targetNativeSelect = targetInput.querySelector('select');
+          if (sourceNativeSelect && targetNativeSelect) {
+            var sourceValue = sourceNativeSelect.value;
+
+            // Clear all selected attributes
+            for (var k = 0; k < targetNativeSelect.options.length; k++) {
+              targetNativeSelect.options[k].removeAttribute('selected');
+              targetNativeSelect.options[k].selected = false;
+            }
+
+            // Find and set the matching option
+            for (var k = 0; k < targetNativeSelect.options.length; k++) {
+              if (targetNativeSelect.options[k].value === sourceValue) {
+                targetNativeSelect.options[k].setAttribute('selected', 'selected');
+                targetNativeSelect.options[k].selected = true;
+                targetNativeSelect.selectedIndex = k;
+                targetNativeSelect.value = sourceValue;
+                break;
+              }
+            }
+
+            // Update the button display
+            var sourceButton = sourceInput.querySelector('button');
+            var targetButton = targetInput.querySelector('button');
+            if (sourceButton && targetButton) {
+              targetButton.innerHTML = sourceButton.innerHTML;
+            }
+          }
+        } else if (tag === 'TEXTAREA') {
+          var valueToSet = sourceInput.value;
+          targetInput.value = '';
+          targetInput.textContent = '';
+          targetInput.innerHTML = '';
+          targetInput.value = valueToSet;
+          targetInput.textContent = valueToSet;
+          targetInput.innerHTML = valueToSet;
+          targetInput.setAttribute('value', valueToSet);
+
+          var inputEvent = new Event('input', { bubbles: true });
+          var changeEvent = new Event('change', { bubbles: true });
+          targetInput.dispatchEvent(inputEvent);
+          targetInput.dispatchEvent(changeEvent);
+
+          try {
+            targetInput.focus();
+            targetInput.blur();
+          } catch (e) {
+            // Ignore errors
+          }
+        } else {
+          targetInput.value = sourceInput.value;
+          targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+          targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      });
+    }
+
+    // Remove excess items from target if source has fewer items
+    for (var i = targetItems.length - 1; i >= sourceItems.length; i--) {
+      targetItems[i].remove();
+    }
+
+    // Restore accordion states
+    setTimeout(function() {
+      accordionStates.forEach(function(state) {
+        if (state.isOpen && !state.element.classList.contains('uk-open')) {
+          var accordionParent = state.element.parentElement;
+          if (accordionParent && window.UIkit) {
+            var accordionComponent = UIkit.accordion(accordionParent);
+            if (accordionComponent) {
+              var itemIndex = Array.from(accordionParent.children).indexOf(state.element);
+              accordionComponent.toggle(itemIndex, true);
+            } else {
+              state.element.classList.add('uk-open');
+              var content = state.element.querySelector('.uk-accordion-content');
+              if (content) {
+                content.hidden = false;
+                content.style.height = 'auto';
+              }
+            }
+          }
+        }
+      });
+
+      window.__fhpfCopyInProgress = false;
+
+      // Trigger a refresh on the target list field to update counts and titles
+      // Find the refresh button for the target list field
+      var targetListFieldWrapper = targetListContainer.closest('[data-path]');
+      if (targetListFieldWrapper) {
+        var refreshButton = targetListFieldWrapper.querySelector('button[hx-post*="/refresh"]');
+        if (refreshButton && window.htmx) {
+          // Trigger the HTMX refresh
+          htmx.trigger(refreshButton, 'click');
+        }
+      }
+    }, 150);
+
+  } catch (e) {
+    window.__fhpfCopyInProgress = false;
+    throw e;
+  }
+}
 
 // Extracted standard copy logic to allow reuse
 function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, copyTarget, accordionStates) {
