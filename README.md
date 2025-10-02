@@ -876,6 +876,70 @@ comparison_form.register_routes(app)
 - **Metrics Integration**: Right side typically shows LLM output quality scores
 - **Flexible Layout**: Responsive design works on desktop and mobile
 - **Form Validation**: Standard validation works with either form
+- **Intelligent List Copying**: Copy lists between forms with automatic length adjustment
+
+### Copying Lists Between Forms
+
+The ComparisonForm includes intelligent list copying that automatically handles lists with different lengths. When you enable copy buttons (via `copy_left=True` or `copy_right=True`), you can copy entire list fields between forms with automatic adjustment:
+
+```python
+# Enable copy buttons (copy FROM right TO left)
+comparison_form = ComparisonForm(
+    name="extraction_evaluation",
+    left_form=left_form,
+    right_form=right_form,
+    left_label="Ground Truth",
+    right_label="LLM Output",
+    copy_left=True,  # Show copy buttons on right form to copy TO left
+)
+```
+
+**Automatic Length Handling:**
+
+The copy operation intelligently handles three scenarios:
+
+1. **Equal lengths** (e.g., both have 3 items)
+   - Direct position-based copy of all fields
+   - Each item copies to its corresponding position
+
+2. **Source has fewer items** (e.g., copying 2 items to a list with 5)
+   - Copies the available items by position
+   - Automatically removes excess items from target
+   - Target list ends up with same length as source
+
+3. **Source has more items** (e.g., copying 5 items to a list with 2)
+   - Automatically adds missing items to target list via HTMX
+   - Waits for DOM to settle (with exponential backoff)
+   - Copies all items by position once lengths match
+   - Handles temporary placeholder IDs from dynamically added items
+
+**After Copy Actions:**
+
+After copying a list, the form automatically:
+- **Updates item counts** in the list field label
+- **Refreshes card titles** for each list item
+- **Preserves accordion states** (open/closed)
+- **Restores UI state** smoothly without page reload
+
+**Example Use Cases:**
+
+```python
+# Copy LLM-extracted addresses to ground truth for correction
+# - LLM extracted 3 addresses
+# - Ground truth has 1 address
+# → Result: Ground truth will have 3 addresses with copied values
+
+# Copy reviewed list items back to working set
+# - Reviewed set has 7 items (with corrections)
+# - Working set has 10 items (originals)
+# → Result: Working set will have 7 items with reviewed values
+```
+
+This makes it easy to:
+- **Correct LLM extractions** by copying to editable forms
+- **Sync annotation sets** with different item counts
+- **Transfer validated data** between comparison forms
+- **Streamline review workflows** for list-based data
 
 ### Common Patterns
 
