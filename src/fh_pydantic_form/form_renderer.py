@@ -215,17 +215,45 @@ window.restoreAccordionState = function(containerId) {
     }
 };
 
-// Save all accordion states in the form
+// Save all accordion states in the form (both lists and nested BaseModels)
 window.saveAllAccordionStates = function() {
+    // Save list container states
     document.querySelectorAll('[id$="_items_container"]').forEach(container => {
         window.saveAccordionState(container.id);
     });
+
+    // Save all UIkit accordion item states (nested BaseModels, etc.)
+    document.querySelectorAll('.uk-accordion > li').forEach(item => {
+        if (item.id) {
+            const isOpen = item.classList.contains('uk-open');
+            sessionStorage.setItem('accordion_state_' + item.id, isOpen ? 'open' : 'closed');
+        }
+    });
 };
 
-// Restore all accordion states in the form
+// Restore all accordion states in the form (both lists and nested BaseModels)
 window.restoreAllAccordionStates = function() {
+    // Restore list container states
     document.querySelectorAll('[id$="_items_container"]').forEach(container => {
         window.restoreAccordionState(container.id);
+    });
+
+    // Use requestAnimationFrame to ensure DOM has fully updated after swap
+    requestAnimationFrame(() => {
+        setTimeout(() => {
+            // Restore ALL UIkit accordion item states in the entire document (not just swapped area)
+            document.querySelectorAll('.uk-accordion > li').forEach(item => {
+                if (item.id) {
+                    const savedState = sessionStorage.getItem('accordion_state_' + item.id);
+
+                    if (savedState === 'open' && !item.classList.contains('uk-open')) {
+                        item.classList.add('uk-open');
+                    } else if (savedState === 'closed' && item.classList.contains('uk-open')) {
+                        item.classList.remove('uk-open');
+                    }
+                }
+            });
+        }, 150);
     });
 };
 
@@ -235,8 +263,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('[id$="_items_container"]').forEach(container => {
         updateMoveButtons(container);
     });
-    
-    // Now it's safe to attach the HTMX event listener to document.body
+
+    // Attach HTMX event listener to document.body for list operations
     document.body.addEventListener('htmx:afterSwap', function(event) {
         // Check if this is an insert (afterend swap)
         const targetElement = event.detail.target;

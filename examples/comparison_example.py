@@ -766,6 +766,8 @@ comparison_form = ComparisonForm(
     right_form=generated_form,
     left_label="📝 Annotated Truth (Ground Truth)",
     right_label="🤖 LLM Generated Output",
+    copy_left=True,  # show arrows on the right form to copy values to the left form
+    copy_right=True,  # will not show as the right side is disabled
 )
 
 

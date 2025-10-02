@@ -876,6 +876,38 @@ comparison_form.register_routes(app)
 - **Metrics Integration**: Right side typically shows LLM output quality scores
 - **Flexible Layout**: Responsive design works on desktop and mobile
 - **Form Validation**: Standard validation works with either form
+- **Intelligent List Copying**: Copy lists between forms with automatic length adjustment
+
+### Copying Between Forms
+
+The ComparisonForm provides granular copy functionality at multiple levels. When you enable copy buttons (via `copy_left=True` or `copy_right=True`), each field, nested model, and list item gets its own copy button for maximum flexibility:
+
+```python
+# Enable copy buttons (copy FROM right TO left)
+comparison_form = ComparisonForm(
+    name="extraction_evaluation",
+    left_form=left_form,
+    right_form=right_form,
+    left_label="Ground Truth",
+    right_label="LLM Output",
+    copy_left=True,  # Show copy buttons on right form to copy TO left
+)
+```
+
+**Copy Granularity Levels:**
+
+The copy feature works at five different levels of granularity:
+
+1. **Individual Fields** - Copy a single field value (e.g., `name`, `price`, `status`)
+
+2. **Nested BaseModel (Entire Object)** - Copy all fields within a nested model at once
+
+3. **Individual Fields in Nested Models** - Copy a specific field within a nested object
+
+4. **Full List Fields** - Copy entire lists with automatic length adjustment
+
+5. **Individual List Items** - Add a single item from one list to another
+
 
 ### Common Patterns
 

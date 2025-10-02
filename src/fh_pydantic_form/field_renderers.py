@@ -383,6 +383,9 @@ class BaseFieldRenderer(MetricsRendererMixin):
         metrics_dict: Optional[MetricsDict] = None,
         refresh_endpoint_override: Optional[str] = None,
         keep_skip_json_pathset: Optional[set[str]] = None,
+        comparison_copy_enabled: bool = False,
+        comparison_copy_target: Optional[str] = None,
+        comparison_name: Optional[str] = None,
         **kwargs,  # Accept additional kwargs for extensibility
     ):
         """
@@ -401,6 +404,9 @@ class BaseFieldRenderer(MetricsRendererMixin):
             metric_entry: Optional metric entry for visual feedback
             metrics_dict: Optional full metrics dict for auto-lookup
             refresh_endpoint_override: Optional override URL for refresh actions (used in ComparisonForm)
+            comparison_copy_enabled: If True, show copy button for this field
+            comparison_copy_target: "left" or "right" - which side this field is on
+            comparison_name: Name of the ComparisonForm (for copy route URLs)
             **kwargs: Additional keyword arguments for extensibility
         """
         self.field_name = f"{prefix}{field_name}" if prefix else field_name
@@ -425,6 +431,9 @@ class BaseFieldRenderer(MetricsRendererMixin):
         self.metrics_dict = metrics_dict
         self._refresh_endpoint_override = refresh_endpoint_override
         self._keep_skip_json_pathset = keep_skip_json_pathset or set()
+        self._cmp_copy_enabled = comparison_copy_enabled
+        self._cmp_copy_target = comparison_copy_target
+        self._cmp_name = comparison_name
 
         # Initialize metric entry attribute
         self.metric_entry: Optional[MetricEntry] = None
@@ -509,6 +518,38 @@ class BaseFieldRenderer(MetricsRendererMixin):
         """
         return f"text-{color}-600"
 
+    def _render_comparison_copy_button(self) -> Optional[FT]:
+        """
+        Render a copy button for comparison forms.
+
+        Note: Copy buttons are never disabled, even if the field itself is disabled.
+        This allows copying from disabled (read-only) fields to editable fields.
+
+        Returns:
+            A copy button component, or None if not in comparison mode
+        """
+        if not (self._cmp_copy_enabled and self._cmp_copy_target and self._cmp_name):
+            return None
+
+        path = self._build_path_string()
+        # Use arrow pointing in the direction of the copy (towards target)
+        arrow = "arrow-left" if self._cmp_copy_target == "left" else "arrow-right"
+        tooltip_text = f"Copy to {self._cmp_copy_target}"
+
+        # Note: We explicitly do NOT pass disabled=self.disabled here
+        # Copy buttons should always be enabled, even in disabled forms
+        #
+        # Pure JS copy: Bypass HTMX entirely to avoid accordion collapse
+        # Button is on SOURCE side, arrow points to TARGET side
+        return mui.Button(
+            mui.UkIcon(arrow, cls="w-4 h-4 text-gray-500 hover:text-blue-600"),
+            type="button",
+            onclick=f"window.fhpfPerformCopy('{path}', '{self.prefix}', '{self._cmp_copy_target}'); return false;",
+            uk_tooltip=tooltip_text,
+            cls="uk-button-text uk-button-small flex-shrink-0",
+            style="all: unset; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0.25rem; min-width: 1.5rem;",
+        )
+
     def render_label(self) -> FT:
         """
         Render label for the field
@@ -579,13 +620,16 @@ class BaseFieldRenderer(MetricsRendererMixin):
         Returns:
             A FastHTML component containing the complete field
         """
-        # 1. Get the label component
+        # 1. Get the label component (without copy button)
         label_component = self.render_label()
 
         # 2. Render the input field
         input_component = self.render_input()
 
-        # 3. Choose layout based on spacing theme
+        # 3. Get the copy button if enabled
+        copy_button = self._render_comparison_copy_button()
+
+        # 4. Choose layout based on spacing theme
         if self.spacing == SpacingTheme.COMPACT:
             # Horizontal layout for compact mode
             field_element = fh.Div(
@@ -597,15 +641,25 @@ class BaseFieldRenderer(MetricsRendererMixin):
                 cls=f"{spacing('outer_margin', self.spacing)} w-full",
             )
         else:
-            # Vertical layout for normal mode (existing behavior)
+            # Vertical layout for normal mode
             field_element = fh.Div(
                 label_component,
                 input_component,
                 cls=spacing("outer_margin", self.spacing),
             )
 
-        # 4. Apply metrics decoration if available
-        return self._decorate_metrics(field_element, self.metric_entry)
+        # 5. Apply metrics decoration if available
+        decorated_field = self._decorate_metrics(field_element, self.metric_entry)
+
+        # 6. If copy button exists, wrap the entire decorated field with copy button on the right
+        if copy_button:
+            return fh.Div(
+                decorated_field,
+                copy_button,
+                cls="flex items-start gap-2 w-full",
+            )
+        else:
+            return decorated_field
 
 
 # ---- Specific Field Renderers ----
@@ -662,6 +716,7 @@ class StringFieldRenderer(BaseFieldRenderer):
             "cls": " ".join(input_cls_parts),
             "rows": rows,
             "style": "resize: vertical; min-height: 2.5rem; padding: 0.5rem; line-height: 1.25;",
+            "data-field-path": self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -719,6 +774,7 @@ class NumberFieldRenderer(BaseFieldRenderer):
             if self.field_info.annotation is float
             or get_origin(self.field_info.annotation) is float
             else "1",
+            "data-field-path": self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -779,6 +835,7 @@ class DecimalFieldRenderer(BaseFieldRenderer):
             "required": is_field_required,
             "cls": " ".join(input_cls_parts),
             "step": "any",  # Allow arbitrary decimal precision
+            "data-field-path": self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -806,6 +863,7 @@ class BooleanFieldRenderer(BaseFieldRenderer):
             "id": self.field_name,
             "name": self.field_name,
             "checked": bool(self.value),
+            "data-field-path": self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -829,6 +887,9 @@ class BooleanFieldRenderer(BaseFieldRenderer):
         # Get the checkbox component
         checkbox_component = self.render_input()
 
+        # Get the copy button if enabled
+        copy_button = self._render_comparison_copy_button()
+
         # Create a flex container to place label and checkbox side by side
         field_element = fh.Div(
             fh.Div(
@@ -840,9 +901,19 @@ class BooleanFieldRenderer(BaseFieldRenderer):
         )
 
         # Apply metrics decoration if available (border only, as bullet is in the label)
-        return self._decorate_metrics(
+        decorated_field = self._decorate_metrics(
             field_element, self.metric_entry, scope=DecorationScope.BORDER
         )
+
+        # If copy button exists, wrap the entire decorated field with copy button on the right
+        if copy_button:
+            return fh.Div(
+                decorated_field,
+                copy_button,
+                cls="flex items-start gap-2 w-full",
+            )
+        else:
+            return decorated_field
 
 
 class DateFieldRenderer(BaseFieldRenderer):
@@ -891,6 +962,7 @@ class DateFieldRenderer(BaseFieldRenderer):
             "placeholder": placeholder_text,
             "required": is_field_required,
             "cls": " ".join(input_cls_parts),
+            "data-field-path": self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -955,6 +1027,7 @@ class TimeFieldRenderer(BaseFieldRenderer):
             "placeholder": placeholder_text,
             "required": is_field_required,
             "cls": " ".join(input_cls_parts),
+            "data-field-path": self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -1032,6 +1105,7 @@ class LiteralFieldRenderer(BaseFieldRenderer):
             "required": is_field_required,
             "placeholder": placeholder_text,
             "cls": " ".join(select_cls_parts),
+            "data-field-path": self._build_path_string(),
         }
 
         if self.disabled:
@@ -1120,6 +1194,7 @@ class EnumFieldRenderer(BaseFieldRenderer):
                 "w-full",
                 f"{spacing('input_size', self.spacing)} {spacing('input_padding', self.spacing)}".strip(),
             ),
+            "data-field-path": self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -1152,33 +1227,44 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
         if self.label_color:
             if self._is_inline_color(self.label_color):
                 # Color value - apply as inline style
-                title_component = fh.Span(
+                title_span = fh.Span(
                     label_text,
                     style=f"color: {self.label_color};",
                     cls="text-sm font-medium",
                 )
             else:
                 # CSS class - apply as Tailwind class (includes emerald, amber, rose, teal, indigo, lime, violet, etc.)
-                title_component = fh.Span(
+                title_span = fh.Span(
                     label_text,
                     cls=f"text-sm font-medium {self._get_color_class(self.label_color)}",
                 )
         else:
             # No color specified - use default styling
-            title_component = fh.Span(
-                label_text, cls="text-sm font-medium text-gray-700"
-            )
+            title_span = fh.Span(label_text, cls="text-sm font-medium text-gray-700")
 
         # Add tooltip if description is available
         description = getattr(self.field_info, "description", None)
         if description:
-            title_component.attrs["uk-tooltip"] = description
-            title_component.attrs["title"] = description
+            title_span.attrs["uk-tooltip"] = description
+            title_span.attrs["title"] = description
 
         # Apply metrics decoration to title (bullet only, no border)
-        title_component = self._decorate_metrics(
-            title_component, self.metric_entry, scope=DecorationScope.BULLET
+        title_with_metrics = self._decorate_metrics(
+            title_span, self.metric_entry, scope=DecorationScope.BULLET
         )
+
+        # Get copy button if enabled - add it AFTER metrics decoration
+        copy_button = self._render_comparison_copy_button()
+
+        # Wrap title (with metrics) and copy button together if copy button exists
+        if copy_button:
+            title_component = fh.Div(
+                title_with_metrics,
+                copy_button,
+                cls="flex items-center justify-between gap-2 w-full",
+            )
+        else:
+            title_component = title_with_metrics
 
         # Compute border color for the top-level BaseModel card
         border_color = self._metric_border_color(self.metric_entry)
@@ -1321,6 +1407,9 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
                     metrics_dict=self.metrics_dict,  # Pass down the metrics dict
                     refresh_endpoint_override=self._refresh_endpoint_override,  # Propagate refresh override
                     keep_skip_json_pathset=self._keep_skip_json_pathset,  # Propagate keep paths
+                    comparison_copy_enabled=self._cmp_copy_enabled,  # Propagate comparison copy settings
+                    comparison_copy_target=self._cmp_copy_target,
+                    comparison_name=self._cmp_name,
                 )
 
                 nested_inputs.append(renderer.render())
@@ -1500,7 +1589,10 @@ class ListFieldRenderer(BaseFieldRenderer):
 
         # Metric decoration will be applied to the title_component below
 
-        # Only add refresh icon if we have a form name and field is not disabled
+        # Build action buttons row (refresh only, NOT copy - copy goes after metrics)
+        action_buttons = []
+
+        # Add refresh icon if we have a form name and field is not disabled
         if form_name and not self.disabled:
             # Create the smaller icon component
             refresh_icon_component = mui.UkIcon(
@@ -1527,7 +1619,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                 hx_include="closest form",  # Include all form fields from the enclosing form
                 hx_preserve="scroll",
                 uk_tooltip="Refresh form display to update list summaries",
-                style="all: unset; display: inline-flex; align-items: center; cursor: pointer; padding: 0 0.5rem; margin-left: 0.5rem;",
+                style="all: unset; display: inline-flex; align-items: center; cursor: pointer; padding: 0 0.5rem;",
                 **{
                     "hx-on::before-request": f"window.saveAccordionState && window.saveAccordionState('{container_id}')"
                 },
@@ -1535,31 +1627,46 @@ class ListFieldRenderer(BaseFieldRenderer):
                     "hx-on::after-swap": f"window.restoreAccordionState && window.restoreAccordionState('{container_id}')"
                 },
             )
+            action_buttons.append(refresh_icon_trigger)
 
-            # Combine label and icon - put refresh icon in a separate div to isolate it
-            title_component = fh.Div(
+        # Build title component with label and action buttons (excluding copy button)
+        if action_buttons:
+            # Combine label and action buttons
+            title_base = fh.Div(
                 fh.Div(
                     label_span,  # Use the properly styled label span
                     cls="flex-1",  # Take up remaining space
                 ),
                 fh.Div(
-                    refresh_icon_trigger,
-                    cls="flex-shrink-0 px-1",  # Don't shrink, add horizontal padding for larger click area
-                    onclick="event.stopPropagation();",  # Isolate the refresh icon area
+                    *action_buttons,
+                    cls="flex-shrink-0 flex items-center gap-1 px-1",  # Don't shrink, add horizontal padding
+                    onclick="event.stopPropagation();",  # Isolate the action buttons area
                 ),
                 cls="flex items-center",
             )
         else:
-            # If no form name, just use the styled label
-            title_component = fh.Div(
+            # If no action buttons, just use the styled label
+            title_base = fh.Div(
                 label_span,  # Use the properly styled label span
-                cls="flex items-center",  # Remove cursor-pointer and click handler
+                cls="flex items-center",
             )
 
         # Apply metrics decoration to title (bullet only, no border)
-        title_component = self._decorate_metrics(
-            title_component, self.metric_entry, scope=DecorationScope.BULLET
+        title_with_metrics = self._decorate_metrics(
+            title_base, self.metric_entry, scope=DecorationScope.BULLET
         )
+
+        # Add copy button AFTER metrics decoration
+        copy_button = self._render_comparison_copy_button()
+        if copy_button:
+            # Wrap title (with metrics) and copy button together
+            title_component = fh.Div(
+                title_with_metrics,
+                copy_button,
+                cls="flex items-center justify-between gap-2 w-full",
+            )
+        else:
+            title_component = title_with_metrics
 
         # Compute border color for the wrapper accordion
         border_color = self._metric_border_color(self.metric_entry)
@@ -1875,6 +1982,9 @@ class ListFieldRenderer(BaseFieldRenderer):
                         metrics_dict=self.metrics_dict,  # Pass down the metrics dict
                         refresh_endpoint_override=self._refresh_endpoint_override,  # Propagate refresh override
                         keep_skip_json_pathset=self._keep_skip_json_pathset,  # Propagate keep paths
+                        comparison_copy_enabled=self._cmp_copy_enabled,  # Propagate comparison copy settings
+                        comparison_copy_target=self._cmp_copy_target,
+                        comparison_name=self._cmp_name,
                     )
                     # Add the rendered input to content elements
                     item_content_elements.append(item_renderer.render_input())
@@ -1945,6 +2055,9 @@ class ListFieldRenderer(BaseFieldRenderer):
                                 metrics_dict=self.metrics_dict,  # Pass down the metrics dict
                                 refresh_endpoint_override=self._refresh_endpoint_override,  # Propagate refresh override
                                 keep_skip_json_pathset=self._keep_skip_json_pathset,  # Propagate keep paths
+                                comparison_copy_enabled=self._cmp_copy_enabled,  # Propagate comparison copy settings
+                                comparison_copy_target=self._cmp_copy_target,
+                                comparison_name=self._cmp_name,
                             )
 
                             # Add rendered field to valid fields
@@ -2087,14 +2200,45 @@ class ListFieldRenderer(BaseFieldRenderer):
             )
 
             # Return the accordion item
-            title_component = fh.Span(
+            title_span = fh.Span(
                 item_summary_text, cls="text-gray-700 font-medium pl-3"
             )
 
-            # Apply metrics decoration to the title (bullet only)
-            title_component = self._decorate_metrics(
-                title_component, item_metric_entry, scope=DecorationScope.BULLET
+            # Apply metrics decoration to the title span FIRST (bullet only)
+            title_with_metrics = self._decorate_metrics(
+                title_span, item_metric_entry, scope=DecorationScope.BULLET
             )
+
+            # Get copy button for this specific list item (if enabled) - add AFTER metrics
+            # Create a temporary renderer context with this item's path
+            if self._cmp_copy_enabled and self._cmp_copy_target and self._cmp_name:
+                # Build the path for this specific item
+                item_path_for_copy = self.field_path + [str(idx)]
+                item_path_string = _build_path_string_static(item_path_for_copy)
+                arrow = (
+                    "arrow-left" if self._cmp_copy_target == "left" else "arrow-right"
+                )
+                tooltip_text = f"Copy item to {self._cmp_copy_target}"
+
+                # Note: Copy button is never disabled, even in disabled forms
+                # Pure JS copy: Bypass HTMX entirely to avoid accordion collapse
+                item_copy_button = mui.Button(
+                    mui.UkIcon(arrow, cls="w-4 h-4 text-gray-500 hover:text-blue-600"),
+                    type="button",
+                    onclick=f"window.fhpfPerformCopy('{item_path_string}', '{self.prefix}', '{self._cmp_copy_target}'); return false;",
+                    uk_tooltip=tooltip_text,
+                    cls="uk-button-text uk-button-small flex-shrink-0",
+                    style="all: unset; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0.25rem; min-width: 1.5rem;",
+                )
+
+                # Wrap title (with metrics) and copy button together
+                title_component = fh.Div(
+                    title_with_metrics,
+                    item_copy_button,
+                    cls="flex items-center justify-between gap-2 w-full",
+                )
+            else:
+                title_component = title_with_metrics
 
             # Prepare li attributes with optional border styling
             li_attrs = {"id": full_card_id}
