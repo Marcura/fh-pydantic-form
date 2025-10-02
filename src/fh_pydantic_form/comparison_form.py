@@ -335,34 +335,62 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
                       }
                     }
 
-                    // Add visual indicator to highlight the newly created item
-                    var originalStyle = newItem.style.cssText;
-                    newItem.style.transition = 'all 0.3s ease-in-out';
-                    newItem.style.backgroundColor = '#dbeafe'; // Light blue background
-                    newItem.style.borderLeft = '4px solid #3b82f6'; // Blue left border
-                    newItem.style.borderRadius = '4px';
-
-                    // Scroll the new item into view
-                    newItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
-                    // Fade out the highlight after 3 seconds
-                    setTimeout(function() {
-                      newItem.style.backgroundColor = '';
-                      newItem.style.borderLeft = '';
-                      // Restore original style after transition completes
-                      setTimeout(function() {
-                        newItem.style.cssText = originalStyle;
-                      }, 300);
-                    }, 3000);
+                    // Store the new item's ID for highlighting after refresh
+                    var newItemId = newItem.id;
                   }
 
                   // Trigger refresh AFTER all copy operations are complete (including accordion restoration)
                   // Wait for __fhpfCopyInProgress to become false, then trigger refresh
                   var waitForCopyComplete = function() {
                     if (!window.__fhpfCopyInProgress) {
-                      // Copy is complete, now trigger refresh
+                      // Copy is complete, now save ALL accordion states before refreshing
+                      if (window.saveAllAccordionStates) {
+                        window.saveAllAccordionStates();
+                      }
+
+                      // Trigger refresh
                       var refreshButton = findListRefreshButton(listFieldPath, copyTarget);
                       if (refreshButton) {
+                        // Listen for the refresh to complete, then highlight the new item
+                        document.body.addEventListener('htmx:afterSwap', function onAfterSwap(evt) {
+                          // Check if this swap is from our refresh button
+                          if (evt.detail.target && evt.detail.target.id && evt.detail.target.id.includes('inputs-wrapper')) {
+                            document.body.removeEventListener('htmx:afterSwap', onAfterSwap);
+
+                            // Wait a moment for accordion restoration to complete
+                            setTimeout(function() {
+                              // Restore all accordion states
+                              if (window.restoreAllAccordionStates) {
+                                window.restoreAllAccordionStates();
+                              }
+
+                              // Re-find the item by ID (it's been replaced by the refresh)
+                              var highlightedItem = document.getElementById(newItemId);
+                              if (highlightedItem) {
+                                // Add visual indicator to highlight the newly created item
+                                highlightedItem.style.transition = 'all 0.3s ease-in-out';
+                                highlightedItem.style.backgroundColor = '#dbeafe'; // Light blue background
+                                highlightedItem.style.borderLeft = '4px solid #3b82f6'; // Blue left border
+                                highlightedItem.style.borderRadius = '4px';
+
+                                // Scroll the new item into view
+                                highlightedItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+                                // Fade out the highlight after 3 seconds
+                                setTimeout(function() {
+                                  highlightedItem.style.backgroundColor = '';
+                                  highlightedItem.style.borderLeft = '';
+                                  // Remove inline styles after transition
+                                  setTimeout(function() {
+                                    highlightedItem.style.transition = '';
+                                    highlightedItem.style.borderRadius = '';
+                                  }, 300);
+                                }, 3000);
+                              }
+                            }, 100);
+                          }
+                        }, { once: false }); // Don't use once: true since we manually remove it
+
                         refreshButton.click();
                       }
                     } else {
