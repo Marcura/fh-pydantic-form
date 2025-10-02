@@ -417,8 +417,10 @@ class TestSkipJsonSchemaIntegration:
         form = PydanticForm("test_fail", FailingModel)
         parsed = form.parse({"test_fail_name": "Test"})
 
-        # Should not have the failing field
-        assert "failing_skip" not in parsed
+        # With Policy B, failing factories for SkipJsonSchema fields fall back to sensible defaults
+        # For str, that's an empty string
+        assert "failing_skip" in parsed
+        assert parsed["failing_skip"] == ""  # Sensible default for SkipJsonSchema[str]
 
         # Should log warning about failed factory
         mock_logger.warning.assert_called()
@@ -551,11 +553,11 @@ class TestSkipJsonSchemaIntegration:
         assert parsed["id"] == "id-override"
         assert parsed["internal_notes"] == ["Retained Note"]
 
-        # Verify that non-kept SkipJsonSchema fields get defaults
+        # Verify that non-kept SkipJsonSchema fields get initial_values (Policy B)
         assert "created_at" in parsed
         assert "updated_at" in parsed
-        assert parsed["version"] == 1  # Default value
-        assert parsed["metadata"] == {}  # Default value
+        assert parsed["version"] == 2  # From initial_values (not model default)
+        assert parsed["metadata"] == {}  # Default value (not in initial_values)
 
         # Verify regular fields are parsed correctly
         assert parsed["title"] == "Updated Title"
