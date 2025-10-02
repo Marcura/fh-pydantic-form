@@ -753,7 +753,7 @@ generated_form = PydanticForm(
     form_name="generated_output",
     model_class=ExtractedProduct,
     initial_values=generated_output,
-    disabled=True,  # Cannot be edited
+    # disabled=True,  # Cannot be edited
     spacing="compact",
     exclude_fields=["extracted_at", "source_url"],
     metrics_dict=eval_metrics,  # Metrics show on generated side
@@ -767,6 +767,7 @@ comparison_form = ComparisonForm(
     left_label="📝 Annotated Truth (Ground Truth)",
     right_label="🤖 LLM Generated Output",
     copy_left=True,
+    copy_right=True,
 )
 
 
