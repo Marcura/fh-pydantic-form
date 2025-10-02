@@ -899,100 +899,15 @@ comparison_form = ComparisonForm(
 The copy feature works at five different levels of granularity:
 
 1. **Individual Fields** - Copy a single field value (e.g., `name`, `price`, `status`)
-   ```python
-   # Example: Copy just the "title" field from right to left
-   # Click the copy button next to the title field
-   ```
 
 2. **Nested BaseModel (Entire Object)** - Copy all fields within a nested model at once
-   ```python
-   # Example Model
-   class Product(BaseModel):
-       name: str
-       details: ProductDetails  # Nested model
-
-   # Click copy button on "details" label → copies all fields in ProductDetails
-   # (manufacturer, warranty, specifications, etc.)
-   ```
 
 3. **Individual Fields in Nested Models** - Copy a specific field within a nested object
-   ```python
-   # Example: Copy just the "street" field from address.street
-   # Useful when most address fields are correct but one needs updating
-   ```
 
 4. **Full List Fields** - Copy entire lists with automatic length adjustment
-   ```python
-   # Example: Copy all addresses from right form to left form
-   # Automatically handles different list lengths (see below)
-   ```
 
 5. **Individual List Items** - Add a single item from one list to another
-   ```python
-   # Example: Copy addresses[2] from right form, adding it to left form's list
-   # The item is inserted at the appropriate position and highlighted
-   # Useful for cherry-picking specific items during review
-   ```
 
-**Full List Copying - Automatic Length Handling:**
-
-The copy operation intelligently handles three scenarios:
-
-1. **Equal lengths** (e.g., both have 3 items)
-   - Direct position-based copy of all fields
-   - Each item copies to its corresponding position
-
-2. **Source has fewer items** (e.g., copying 2 items to a list with 5)
-   - Copies the available items by position
-   - Automatically removes excess items from target
-   - Target list ends up with same length as source
-
-3. **Source has more items** (e.g., copying 5 items to a list with 2)
-   - Automatically adds missing items to target list via HTMX
-   - Waits for DOM to settle (with exponential backoff)
-   - Copies all items by position once lengths match
-   - Handles temporary placeholder IDs from dynamically added items
-
-**After Copy Actions:**
-
-After copying a list, the form automatically:
-- **Updates item counts** in the list field label
-- **Refreshes card titles** for each list item
-- **Preserves accordion states** (open/closed)
-- **Restores UI state** smoothly without page reload
-
-**Example Workflows:**
-
-```python
-# Workflow 1: Partial correction of LLM extraction
-# - LLM got the product name wrong but details are correct
-# → Copy just the "details" nested object, manually fix "name"
-
-# Workflow 2: Full list synchronization
-# - LLM extracted 5 features, ground truth has 2
-# → Copy entire "features" list (automatically adds 3 items)
-
-# Workflow 3: Cherry-picking list items
-# - LLM extracted 10 reviews, but only reviews[2], [5], [7] are good
-# → Copy those individual items to ground truth list
-
-# Workflow 4: Field-level corrections in nested lists
-# - addresses[0] is mostly correct, but "postal_code" is wrong
-# → Copy just the "postal_code" field from that specific address
-
-# Workflow 5: Bulk object copy
-# - All address fields in addresses[1] are correct
-# → Copy the entire addresses[1] object to ground truth
-```
-
-**Real-World Scenarios:**
-
-- **LLM Extraction Review**: Copy correct fields, manually fix incorrect ones
-- **Annotation Correction**: Start with automated extraction, selectively copy good parts
-- **Data Validation**: Compare manual vs automated, copy validated sections
-- **Iterative Refinement**: Copy base data, make incremental corrections
-- **Quality Assurance**: Review item-by-item, copy approved items
-- **Hybrid Workflows**: Combine automated extraction with human curation
 
 ### Common Patterns
 
