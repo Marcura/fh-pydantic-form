@@ -308,99 +308,95 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
                 // Use the actual placeholder index from the name attribute
                 var newPathPrefix = listFieldPath + '[' + actualPlaceholderIdx + ']';
 
+                // Store the new item's ID for later operations
+                var newItemId = newItem.id;
+
                 // Now perform the standard copy operation with the new path
                 performStandardCopy(pathPrefix, newPathPrefix, sourcePrefix, copyTarget, accordionStates);
 
-                // Open the newly created accordion item so the copied values are visible
-                setTimeout(function() {
-                  if (newItem && window.UIkit) {
-                    // Check if this item is in a closed accordion
-                    if (!newItem.classList.contains('uk-open')) {
-                      // Find the accordion parent
-                      var accordionParent = newItem.parentElement;
-                      if (accordionParent && accordionParent.hasAttribute('uk-accordion')) {
-                        var accordionComponent = UIkit.accordion(accordionParent);
-                        if (accordionComponent) {
-                          var itemIndex = Array.from(accordionParent.children).indexOf(newItem);
-                          accordionComponent.toggle(itemIndex, false);  // false = don't animate, just open
-                        }
-                      } else {
-                        // Manual fallback
-                        newItem.classList.add('uk-open');
-                        var content = newItem.querySelector('.uk-accordion-content');
-                        if (content) {
-                          content.hidden = false;
-                          content.style.display = '';
-                        }
-                      }
+                // Wait for copy to complete, then trigger refresh BEFORE opening accordion
+                var waitForCopyComplete = function() {
+                  if (!window.__fhpfCopyInProgress) {
+                    // Copy is complete, now save ALL accordion states before refreshing
+                    if (window.saveAllAccordionStates) {
+                      window.saveAllAccordionStates();
                     }
 
-                    // Store the new item's ID for highlighting after refresh
-                    var newItemId = newItem.id;
-                  }
+                    // Trigger refresh to update list count and summaries
+                    var refreshButton = findListRefreshButton(listFieldPath, copyTarget);
+                    if (refreshButton) {
+                      // Listen for the refresh to complete, then open accordion and highlight
+                      document.body.addEventListener('htmx:afterSwap', function onAfterSwap(evt) {
+                        // Check if this swap is from our refresh button
+                        if (evt.detail.target && evt.detail.target.id && evt.detail.target.id.includes('inputs-wrapper')) {
+                          document.body.removeEventListener('htmx:afterSwap', onAfterSwap);
 
-                  // Trigger refresh AFTER all copy operations are complete (including accordion restoration)
-                  // Wait for __fhpfCopyInProgress to become false, then trigger refresh
-                  var waitForCopyComplete = function() {
-                    if (!window.__fhpfCopyInProgress) {
-                      // Copy is complete, now save ALL accordion states before refreshing
-                      if (window.saveAllAccordionStates) {
-                        window.saveAllAccordionStates();
-                      }
+                          // Wait a moment for DOM to settle after refresh
+                          setTimeout(function() {
+                            // Restore all accordion states (but NOT the new item yet)
+                            if (window.restoreAllAccordionStates) {
+                              window.restoreAllAccordionStates();
+                            }
 
-                      // Trigger refresh
-                      var refreshButton = findListRefreshButton(listFieldPath, copyTarget);
-                      if (refreshButton) {
-                        // Listen for the refresh to complete, then highlight the new item
-                        document.body.addEventListener('htmx:afterSwap', function onAfterSwap(evt) {
-                          // Check if this swap is from our refresh button
-                          if (evt.detail.target && evt.detail.target.id && evt.detail.target.id.includes('inputs-wrapper')) {
-                            document.body.removeEventListener('htmx:afterSwap', onAfterSwap);
-
-                            // Wait a moment for accordion restoration to complete
-                            setTimeout(function() {
-                              // Restore all accordion states
-                              if (window.restoreAllAccordionStates) {
-                                window.restoreAllAccordionStates();
+                            // Re-find the new item by ID (it's been replaced by the refresh)
+                            var refreshedItem = document.getElementById(newItemId);
+                            if (refreshedItem && window.UIkit) {
+                              // Now open the newly created accordion item
+                              if (!refreshedItem.classList.contains('uk-open')) {
+                                var accordionParent = refreshedItem.parentElement;
+                                if (accordionParent && accordionParent.hasAttribute('uk-accordion')) {
+                                  var accordionComponent = UIkit.accordion(accordionParent);
+                                  if (accordionComponent) {
+                                    var itemIndex = Array.from(accordionParent.children).indexOf(refreshedItem);
+                                    accordionComponent.toggle(itemIndex, false);  // false = don't animate, just open
+                                  }
+                                } else {
+                                  // Manual fallback
+                                  refreshedItem.classList.add('uk-open');
+                                  var content = refreshedItem.querySelector('.uk-accordion-content');
+                                  if (content) {
+                                    content.hidden = false;
+                                    content.style.display = '';
+                                  }
+                                }
                               }
 
-                              // Re-find the item by ID (it's been replaced by the refresh)
-                              var highlightedItem = document.getElementById(newItemId);
-                              if (highlightedItem) {
-                                // Add visual indicator to highlight the newly created item
-                                highlightedItem.style.transition = 'all 0.3s ease-in-out';
-                                highlightedItem.style.backgroundColor = '#dbeafe'; // Light blue background
-                                highlightedItem.style.borderLeft = '4px solid #3b82f6'; // Blue left border
-                                highlightedItem.style.borderRadius = '4px';
+                              // Apply visual highlight after opening
+                              setTimeout(function() {
+                                refreshedItem.style.transition = 'all 0.3s ease-in-out';
+                                refreshedItem.style.backgroundColor = '#dbeafe'; // Light blue background
+                                refreshedItem.style.borderLeft = '4px solid #3b82f6'; // Blue left border
+                                refreshedItem.style.borderRadius = '4px';
 
                                 // Scroll the new item into view
-                                highlightedItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                                refreshedItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
                                 // Fade out the highlight after 3 seconds
                                 setTimeout(function() {
-                                  highlightedItem.style.backgroundColor = '';
-                                  highlightedItem.style.borderLeft = '';
+                                  refreshedItem.style.backgroundColor = '';
+                                  refreshedItem.style.borderLeft = '';
                                   // Remove inline styles after transition
                                   setTimeout(function() {
-                                    highlightedItem.style.transition = '';
-                                    highlightedItem.style.borderRadius = '';
+                                    refreshedItem.style.transition = '';
+                                    refreshedItem.style.borderRadius = '';
                                   }, 300);
                                 }, 3000);
-                              }
-                            }, 100);
-                          }
-                        }, { once: false }); // Don't use once: true since we manually remove it
+                              }, 100);
+                            }
+                          }, 100);
+                        }
+                      }, { once: false }); // Don't use once: true since we manually remove it
 
-                        refreshButton.click();
-                      }
-                    } else {
-                      // Still in progress, check again in 50ms
-                      setTimeout(waitForCopyComplete, 50);
+                      refreshButton.click();
                     }
-                  };
-                  // Start checking after a small delay to ensure performStandardCopy has set the flag
-                  setTimeout(waitForCopyComplete, 100);
-                }, 50);
+                  } else {
+                    // Still in progress, check again in 50ms
+                    setTimeout(waitForCopyComplete, 50);
+                  }
+                };
+
+                // Start checking after a small delay to ensure performStandardCopy has started
+                setTimeout(waitForCopyComplete, 100);
 
               } else if (attempts < maxAttempts) {
                 // Not ready yet, try again with exponential backoff
