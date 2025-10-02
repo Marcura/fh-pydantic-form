@@ -736,13 +736,14 @@ class PydanticForm(Generic[ModelType]):
 
     def _inject_missing_defaults(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Ensures all model fields with defaults are present in data if missing.
-        Handles excluded fields, SkipJsonSchema fields, and any other fields
-        not rendered in the form.
+        Ensure missing fields are filled following precedence:
+        1) form value (already in `data`)
+        2) initial_values
+        3) model/default_factory
+        4) sensible default (for SkipJsonSchema fields only)
 
-        Priority order:
-        1. initial_values (if provided during form creation)
-        2. model defaults/default_factory
+        For required fields without defaults or initial_values, they are left missing
+        so that Pydantic validation can properly surface the error.
 
         Args:
             data: Dictionary to modify in-place
@@ -750,43 +751,20 @@ class PydanticForm(Generic[ModelType]):
         Returns:
             The same dictionary instance for method chaining
         """
-        # Process ALL model fields, not just excluded ones
         for field_name, field_info in self.model_class.model_fields.items():
-            # Special handling for SkipJsonSchema fields
-            if _is_skip_json_schema_field(field_info):
-                # If keep_skip_json_fields was specified and this field is not kept, always use defaults
-                if self.keep_skip_json_fields and not self._is_kept_skip_field(
-                    [field_name]
-                ):
-                    # Remove any existing value and inject default
-                    if field_name in data:
-                        del data[field_name]
-                    # Fall through to default injection logic below
-                elif field_name in data:
-                    # This is either a kept SkipJsonSchema field or no keep list was specified, keep it
-                    continue
-                # If it's a kept field but not in data, fall through to default injection
-            else:
-                # Skip if already present in parsed data (normal fields)
-                if field_name in data:
-                    continue
+            # 1) Respect any value already parsed from the form (top priority)
+            if field_name in data:
+                continue
 
-            # First priority: check if initial_values_dict has this field
-            # Use initial values for non-SkipJsonSchema fields, or SkipJsonSchema fields that are kept,
-            # or SkipJsonSchema fields when no keep_skip_json_fields list was specified
-            if field_name in self.initial_values_dict and (
-                not _is_skip_json_schema_field(field_info)
-                or not self.keep_skip_json_fields
-                or self._is_kept_skip_field([field_name])
-            ):
+            # 2) Prefer initial_values for ANY missing field (including hidden SkipJsonSchema fields)
+            if field_name in self.initial_values_dict:
                 initial_val = self.initial_values_dict[field_name]
-                # If the initial value is a BaseModel, convert to dict for consistency
                 if hasattr(initial_val, "model_dump"):
                     initial_val = initial_val.model_dump()
                 data[field_name] = initial_val
                 continue
 
-            # Second priority: use model defaults
+            # 3) Use model/default_factory if available
             default_val = get_default(field_info)
             if default_val is not _UNSET:
                 # If the default is a BaseModel, convert to dict for consistency
@@ -794,12 +772,11 @@ class PydanticForm(Generic[ModelType]):
                     default_val = default_val.model_dump()
                 data[field_name] = default_val
             else:
-                # Check if this is a SkipJsonSchema field
+                # 4) For SkipJsonSchema fields without defaults, provide sensible defaults
+                # For regular required fields, leave them missing so validation catches them
                 if _is_skip_json_schema_field(field_info):
-                    pass  # Skip fields don't need defaults
-                else:
-                    # No default → leave missing; validation will surface error
-                    pass
+                    data[field_name] = default_for_annotation(field_info.annotation)
+                # else: leave missing, let validation fail
 
         return data
 
