@@ -57,6 +57,40 @@ function extractListIndex(pathPrefix) {
   return match ? parseInt(match[1]) : null;
 }
 
+function findListRefreshButton(listFieldPath, targetSide) {
+  // Find the refresh button for a specific list field
+  // Parameters:
+  //   - listFieldPath: The field path (e.g., "tags", "addresses")
+  //   - targetSide: "left" or "right"
+  // Returns: DOM element or null
+
+  var targetPrefix = (targetSide === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
+
+  // Construct the wrapper accordion ID based on the target form prefix and field path
+  // The pattern is: {prefix}{field_name}_wrapper_accordion
+  var wrapperId = targetPrefix.replace(/_$/, '') + '_' + listFieldPath + '_wrapper_accordion';
+  var wrapperElement = document.getElementById(wrapperId);
+
+  if (!wrapperElement) {
+    return null;
+  }
+
+  // Look for the refresh button within the wrapper (identified by refresh-ccw icon)
+  var refreshButtons = wrapperElement.querySelectorAll('button');
+  for (var i = 0; i < refreshButtons.length; i++) {
+    var btn = refreshButtons[i];
+    // Check if button contains refresh icon
+    var hasRefreshIcon = btn.querySelector('[data-lucide="refresh-ccw"]') ||
+                         btn.querySelector('.lucide-refresh-ccw') ||
+                         btn.innerHTML.includes('refresh-ccw');
+    if (hasRefreshIcon) {
+      return btn;
+    }
+  }
+
+  return null;
+}
+
 // Copy function - pure JS implementation
 window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
   try {
@@ -301,6 +335,23 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
                       }
                     }
                   }
+
+                  // Trigger refresh AFTER all copy operations are complete (including accordion restoration)
+                  // Wait for __fhpfCopyInProgress to become false, then trigger refresh
+                  var waitForCopyComplete = function() {
+                    if (!window.__fhpfCopyInProgress) {
+                      // Copy is complete, now trigger refresh
+                      var refreshButton = findListRefreshButton(listFieldPath, copyTarget);
+                      if (refreshButton) {
+                        refreshButton.click();
+                      }
+                    } else {
+                      // Still in progress, check again in 50ms
+                      setTimeout(waitForCopyComplete, 50);
+                    }
+                  };
+                  // Start checking after a small delay to ensure performStandardCopy has set the flag
+                  setTimeout(waitForCopyComplete, 100);
                 }, 50);
 
               } else if (attempts < maxAttempts) {
