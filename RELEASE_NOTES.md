@@ -1,5 +1,26 @@
 # Release Notes
 
+## Version 0.3.8 (2025-10-02)
+
+### 🎉 New Features
+
+#### Intelligent Copying in ComparisonForm
+- **NEW**: Comprehensive copy functionality at multiple granularity levels
+  - Individual field copying
+  - Full nested BaseModel object copying
+  - Individual fields within nested models
+  - **Full list field copying with automatic length alignment**
+  - Individual list item copying with smart insertion
+
+
+### 🔧 Bug Fixes & Improvements
+
+#### SkipJsonSchema Field Handling
+- **FIXED**: SkipJsonSchema fields now properly preserve initial values when provided
+- **IMPROVED**: Better handling of skip fields with default values
+- **ENHANCED**: More robust field introspection for SkipJsonSchema annotation
+
+
 ## Version 0.3.7 (2025-09-19)
 
 ### 🎉 New Features
