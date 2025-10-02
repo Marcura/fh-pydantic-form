@@ -334,6 +334,26 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
                         }
                       }
                     }
+
+                    // Add visual indicator to highlight the newly created item
+                    var originalStyle = newItem.style.cssText;
+                    newItem.style.transition = 'all 0.3s ease-in-out';
+                    newItem.style.backgroundColor = '#dbeafe'; // Light blue background
+                    newItem.style.borderLeft = '4px solid #3b82f6'; // Blue left border
+                    newItem.style.borderRadius = '4px';
+
+                    // Scroll the new item into view
+                    newItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+                    // Fade out the highlight after 3 seconds
+                    setTimeout(function() {
+                      newItem.style.backgroundColor = '';
+                      newItem.style.borderLeft = '';
+                      // Restore original style after transition completes
+                      setTimeout(function() {
+                        newItem.style.cssText = originalStyle;
+                      }, 300);
+                    }, 3000);
                   }
 
                   // Trigger refresh AFTER all copy operations are complete (including accordion restoration)
