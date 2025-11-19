@@ -27,7 +27,11 @@ from pydantic import BaseModel
 
 from fh_pydantic_form.form_renderer import PydanticForm
 from fh_pydantic_form.registry import FieldRendererRegistry
-from fh_pydantic_form.type_helpers import MetricEntry, MetricsDict
+from fh_pydantic_form.type_helpers import (
+    MetricEntry,
+    MetricsDict,
+    _is_skip_json_schema_field,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1280,6 +1284,12 @@ class ComparisonForm(Generic[ModelType]):
             if field_name in (form.exclude_fields or []):
                 continue
 
+            # Skip SkipJsonSchema fields unless explicitly kept
+            if _is_skip_json_schema_field(field_info) and not form._is_kept_skip_field(
+                [field_name]
+            ):
+                continue
+
             # Get value from form
             value = form.values_dict.get(field_name)
 
@@ -1343,6 +1353,7 @@ class ComparisonForm(Generic[ModelType]):
                 form_name=form.name,
                 label_color=label_color,  # Pass the label color if specified
                 metrics_dict=form.metrics_dict,  # Use form's own metrics
+                keep_skip_json_pathset=form._keep_skip_json_pathset,  # Pass keep_skip_json configuration
                 refresh_endpoint_override=comparison_refresh,  # Pass comparison-specific refresh endpoint
                 comparison_copy_enabled=comparison_copy_enabled,
                 comparison_copy_target=comparison_copy_target,
