@@ -1,5 +1,23 @@
 # Release Notes
 
+## Version 0.3.9 (2025-11-19)
+
+### 🔧 Bug Fixes
+
+#### ComparisonForm SkipJsonSchema Fields
+- **FIXED**: Nested SkipJsonSchema fields now render correctly in ComparisonForm when included in `keep_skip_json_fields`
+- **FIXED**: Both nested BaseModel fields (e.g., `main_address.internal_id`) and List[BaseModel] fields (e.g., `other_addresses.audit_notes`) now work properly
+- **ENHANCED**: ComparisonForm now correctly passes `keep_skip_json_pathset` to field renderers
+
+### 🧪 Testing
+- **NEW**: Comprehensive test suite for SkipJsonSchema fields in ComparisonForm (8 tests)
+- **NEW**: Example demonstrating ComparisonForm with different `keep_skip_json_fields` configurations
+
+### 📦 Dependencies
+- **UPDATED**: Migrated from deprecated `tool.uv.dev-dependencies` to `dependency-groups.dev` in pyproject.toml
+
+---
+
 ## Version 0.3.8 (2025-10-02)
 
 ### 🎉 New Features
