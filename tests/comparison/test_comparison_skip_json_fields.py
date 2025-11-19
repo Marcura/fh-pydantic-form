@@ -1,7 +1,7 @@
 """Comprehensive tests for SkipJsonSchema field handling in ComparisonForm."""
 
 import datetime
-from typing import List, Optional, Type
+from typing import List, Type
 from uuid import uuid4
 
 import pytest
@@ -22,7 +22,9 @@ class TestComparisonFormSkipJsonSchema:
             street: str = "123 Main St"
             city: str = "Anytown"
             is_billing: bool = False
-            tags: List[str] = Field(default=["tag1"], description="Tags for the address")
+            tags: List[str] = Field(
+                default=["tag1"], description="Tags for the address"
+            )
             # SkipJsonSchema fields - normally hidden but can be selectively shown
             internal_id: SkipJsonSchema[str] = Field(  # type: ignore
                 default_factory=lambda: f"addr_{uuid4().hex[:8]}",
@@ -64,7 +66,8 @@ class TestComparisonFormSkipJsonSchema:
 
             # Nested models with SkipJsonSchema fields
             main_address: address_model = Field(  # type: ignore
-                default_factory=address_model, description="Main address"  # type: ignore
+                default_factory=address_model,
+                description="Main address",  # type: ignore
             )
             other_addresses: List[address_model] = Field(  # type: ignore
                 default_factory=list, description="Other addresses"
@@ -274,9 +277,9 @@ class TestComparisonFormSkipJsonSchema:
         # other_addresses.audit_notes should ONLY be in right form
         # This is the key test that's failing!
         assert 'name="left_other_addresses_0_audit_notes_0"' not in rendered_str
-        assert (
-            'name="right_other_addresses_0_audit_notes_0"' in rendered_str
-        ), "BUG: other_addresses.audit_notes not showing up in right form!"
+        assert 'name="right_other_addresses_0_audit_notes_0"' in rendered_str, (
+            "BUG: other_addresses.audit_notes not showing up in right form!"
+        )
 
         # main_address.audit_notes should be in NEITHER form
         assert 'name="left_main_address_audit_notes_0"' not in rendered_str
@@ -400,11 +403,8 @@ class TestComparisonFormSkipJsonSchema:
             keep_skip_json_fields=["document_id", "main_address.internal_id"],
         )
 
-        comparison = ComparisonForm(
-            name="test_parsing",
-            left_form=left_form,
-            right_form=right_form,
-        )
+        # Test parsing behavior of forms with different keep_skip_json_fields
+        # (ComparisonForm not needed for this parsing test)
 
         # Simulate form submission for left form
         left_form_data = {
@@ -571,8 +571,14 @@ class TestComparisonFormSkipJsonSchema:
 
         # Skip fields that are kept should also have data-path
         # These will appear in only one column but shouldn't break grid
-        assert 'data-path="document_id"' in rendered_str or 'name="left_document_id"' in rendered_str
-        assert 'data-path="version"' in rendered_str or 'name="right_version"' in rendered_str
+        assert (
+            'data-path="document_id"' in rendered_str
+            or 'name="left_document_id"' in rendered_str
+        )
+        assert (
+            'data-path="version"' in rendered_str
+            or 'name="right_version"' in rendered_str
+        )
 
     def test_comparison_with_both_forms_keeping_same_fields(
         self, customer_model: Type[BaseModel]
