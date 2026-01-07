@@ -409,7 +409,11 @@ class BaseFieldRenderer(MetricsRendererMixin):
             comparison_name: Name of the ComparisonForm (for copy route URLs)
             **kwargs: Additional keyword arguments for extensibility
         """
-        self.field_name = f"{prefix}{field_name}" if prefix else field_name
+        # Sanitize prefix: replace dots with underscores for valid CSS selectors in IDs
+        sanitized_prefix = prefix.replace(".", "_") if prefix else prefix
+        self.field_name = (
+            f"{sanitized_prefix}{field_name}" if sanitized_prefix else field_name
+        )
         self.original_field_name = field_name
         self.field_info = field_info
         # Normalize PydanticUndefined → None so it never renders as text
@@ -1278,8 +1282,10 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
         input_component = self.render_input()
 
         # 3. Define unique IDs for potential targeting
-        item_id = f"{self.field_name}_item"
-        accordion_id = f"{self.field_name}_accordion"
+        # Sanitize field_name: replace dots and slashes with underscores for valid CSS selectors
+        sanitized_field_name = self.field_name.replace(".", "_").replace("/", "_")
+        item_id = f"{sanitized_field_name}_item"
+        accordion_id = f"{sanitized_field_name}_accordion"
 
         # 4. Create the AccordionItem using the MonsterUI component
         accordion_item = mui.AccordionItem(
@@ -1501,9 +1507,15 @@ class ListFieldRenderer(BaseFieldRenderer):
         Format: <formname>_<hierarchy>_items_container
         Example:  main_form_compact_tags_items_container
         """
-        base = "_".join(self.field_path)  # tags  or  main_address_tags
+        # Sanitize field path segments: replace dots and slashes with underscores for valid CSS selectors
+        sanitized_path = [
+            seg.replace(".", "_").replace("/", "_") for seg in self.field_path
+        ]
+        base = "_".join(sanitized_path)  # tags  or  main_address_tags
         if self._form_name:  # already resolved in property
-            return f"{self._form_name}_{base}_items_container"
+            # Sanitize form name: replace dots with underscores for valid CSS selectors
+            sanitized_form_name = self._form_name.replace(".", "_")
+            return f"{sanitized_form_name}_{base}_items_container"
         return f"{base}_items_container"  # fallback (shouldn't happen)
 
     @property
@@ -1680,8 +1692,10 @@ class ListFieldRenderer(BaseFieldRenderer):
         list_content = self.render_input()
 
         # Define unique IDs for the wrapper accordion
-        wrapper_item_id = f"{self.field_name}_wrapper_item"
-        wrapper_accordion_id = f"{self.field_name}_wrapper_accordion"
+        # Sanitize field_name: replace dots and slashes with underscores for valid CSS selectors
+        sanitized_field_name = self.field_name.replace(".", "_").replace("/", "_")
+        wrapper_item_id = f"{sanitized_field_name}_wrapper_item"
+        wrapper_accordion_id = f"{sanitized_field_name}_wrapper_accordion"
 
         # Create the wrapper AccordionItem
         wrapper_accordion_item = mui.AccordionItem(
@@ -1824,6 +1838,17 @@ class ListFieldRenderer(BaseFieldRenderer):
 
         # Return the complete component (minimal styling since it's now wrapped in an accordion)
         t = self.spacing
+
+        # If list is empty, ensure the accordion container exists for HTMX target
+        if not items:
+            # Create an empty UL with the container ID and UIkit accordion attributes
+            # so HTMX can target it when adding new items
+            accordion = fh.Ul(
+                id=container_id,
+                cls="uk-accordion " + accordion_cls.strip(),
+                uk_accordion="multiple: true; collapsible: true",
+            )
+
         return fh.Div(
             accordion,
             empty_state,
