@@ -1,5 +1,16 @@
 # Release Notes
 
+## Version 0.3.10 (2026-01-07)
+
+### 🔧 Bug Fixes
+
+#### Field Renderer ID Sanitization
+- **FIXED**: Field names containing dots or slashes now generate valid CSS selector IDs
+- **IMPROVED**: Sanitizes dots and slashes to underscores in field renderers for proper HTMX targeting
+- **ENHANCED**: Affects BaseModelFieldRenderer, ListFieldRenderer, and form name handling
+
+---
+
 ## Version 0.3.9 (2025-11-19)
 
 ### 🔧 Bug Fixes
