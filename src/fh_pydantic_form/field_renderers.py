@@ -2145,8 +2145,12 @@ class ListFieldRenderer(BaseFieldRenderer):
             )
 
             # Use the full ID (with prefix) for targeting
+            # Sanitize prefix: replace dots with underscores for valid CSS selectors in IDs
+            sanitized_prefix = self.prefix.replace(".", "_") if self.prefix else ""
             full_card_id = (
-                f"{self.prefix}{item_card_id}" if self.prefix else item_card_id
+                f"{sanitized_prefix}{item_card_id}"
+                if sanitized_prefix
+                else item_card_id
             )
 
             # Create attribute dictionaries for buttons
