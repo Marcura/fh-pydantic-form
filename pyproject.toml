@@ -1,6 +1,6 @@
 [project]
 name = "fh-pydantic-form"
-version = "0.3.10"
+version = "0.3.11"
 description = "a library to turn any pydantic BaseModel object into a fasthtml/monsterui input form"
 readme = "README.md"
 requires-python = ">=3.10"
