@@ -1,5 +1,14 @@
 # Release Notes
 
+## Version 0.3.11 (2026-01-08)
+
+### 🔧 Bug Fixes
+
+#### Field Renderer ID Sanitization
+- **FIXED**: Sanitize self.prefix in full_card_id as well
+
+---
+
 ## Version 0.3.10 (2026-01-07)
 
 ### 🔧 Bug Fixes
