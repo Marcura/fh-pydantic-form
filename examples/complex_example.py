@@ -164,6 +164,18 @@ class ComplexSchema(BaseModel):
         default_factory=lambda: ["tag1", "tag2"], description="Tags of the customer"
     )
 
+    # List[Literal] - renders as pills with dropdown (NEW!)
+    selected_regions: List[Literal["EMEA", "APAC", "AMERICAS", "OTHER"]] = Field(
+        default_factory=lambda: ["EMEA"],
+        description="Selected regions for the customer (pill/tag selector)",
+    )
+
+    # List[Enum] - also renders as pills with dropdown (NEW!)
+    active_priorities: List[PriorityIntEnum] = Field(
+        default_factory=list,
+        description="Active priority levels (pill/tag selector)",
+    )
+
     # Nested model
     main_address: Address = Field(
         default_factory=lambda: Address(), description="Main address of the customer"
@@ -232,6 +244,9 @@ initial_values = ComplexSchema(
     status="PENDING",
     optional_status=None,
     tags=["tag1", "tag2", "tag3"],
+    # NEW: List[Literal] and List[Enum] fields for pill/tag selector demo
+    selected_regions=["EMEA", "APAC"],
+    active_priorities=[PriorityIntEnum.HIGH, PriorityIntEnum.MEDIUM],
     main_address=Address(
         street="123 Main St",
         city="Anytown",
@@ -307,6 +322,9 @@ form_renderer_normal = PydanticForm(
         "optional_status": "lime",
         # List fields
         "tags": "amber",
+        # NEW: List[Literal] and List[Enum] pill/tag fields
+        "selected_regions": "sky",
+        "active_priorities": "fuchsia",
         # Nested model fields
         "main_address": "emerald",
         "other_addresses": "red",
@@ -351,6 +369,9 @@ form_renderer_compact = PydanticForm(
         "optional_status": "lime",
         # List fields
         "tags": "amber",
+        # NEW: List[Literal] and List[Enum] pill/tag fields
+        "selected_regions": "sky",
+        "active_priorities": "fuchsia",
         # Nested model fields
         "main_address": "emerald",
         "other_addresses": "red",
@@ -404,6 +425,9 @@ form_renderer_skip_demo = PydanticForm(
         "optional_status": "lime",
         # List fields
         "tags": "amber",
+        # NEW: List[Literal] and List[Enum] pill/tag fields
+        "selected_regions": "sky",
+        "active_priorities": "fuchsia",
         # Nested model fields
         "main_address": "emerald",
         "other_addresses": "red",

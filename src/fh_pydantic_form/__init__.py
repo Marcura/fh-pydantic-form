@@ -1,7 +1,7 @@
 import datetime
 import decimal
 from enum import Enum
-from typing import Literal, get_origin
+from typing import Literal, get_args, get_origin
 
 from pydantic import BaseModel
 
@@ -20,11 +20,15 @@ from fh_pydantic_form.field_renderers import (
     DateFieldRenderer,
     DecimalFieldRenderer,
     EnumFieldRenderer,
+    ListChoiceFieldRenderer,
     ListFieldRenderer,
+    ListLiteralFieldRenderer,
     LiteralFieldRenderer,
     NumberFieldRenderer,
     StringFieldRenderer,
     TimeFieldRenderer,
+    list_choice_js,
+    list_literal_js,
 )
 from fh_pydantic_form.form_renderer import PydanticForm, list_manipulation_js
 from fh_pydantic_form.registry import FieldRendererRegistry
@@ -88,7 +92,43 @@ def register_default_renderers() -> None:
         is_literal_field, LiteralFieldRenderer
     )
 
-    # Register list renderer for List[*] types
+    # Register List[Literal] and List[Enum] renderer BEFORE generic list renderer
+    def is_list_choice_field(field_info):
+        """Check if field is List[Literal[...]] or List[Enum]"""
+        annotation = getattr(field_info, "annotation", None)
+        if annotation is None:
+            return False
+
+        # Unwrap Optional if present
+        underlying_type = _get_underlying_type_if_optional(annotation)
+
+        # Must be a list type
+        if get_origin(underlying_type) is not list:
+            return False
+
+        # Get the item type
+        list_args = get_args(underlying_type)
+        if not list_args:
+            return False
+
+        item_type = list_args[0]
+        item_type_base = _get_underlying_type_if_optional(item_type)
+
+        # Check for Literal item type
+        if get_origin(item_type_base) is Literal:
+            return True
+
+        # Check for Enum item type
+        if isinstance(item_type_base, type) and issubclass(item_type_base, Enum):
+            return True
+
+        return False
+
+    FieldRendererRegistry.register_type_renderer_with_predicate(
+        is_list_choice_field, ListChoiceFieldRenderer
+    )
+
+    # Register list renderer for List[*] types (generic fallback)
     def is_list_field(field_info):
         """Check if field is a list type, including Optional[List[...]]"""
         annotation = getattr(field_info, "annotation", None)
@@ -129,6 +169,8 @@ __all__ = [
     "PydanticForm",
     "FieldRendererRegistry",
     "list_manipulation_js",
+    "list_choice_js",
+    "list_literal_js",
     "SpacingTheme",
     "SpacingValue",
     "spacing",
@@ -140,4 +182,6 @@ __all__ = [
     "MetricsDict",
     "comparison_form_js",
     "simple_diff_metrics",
+    "ListChoiceFieldRenderer",
+    "ListLiteralFieldRenderer",
 ]

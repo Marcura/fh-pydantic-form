@@ -1,6 +1,9 @@
 import sys
+from pathlib import Path
 
-sys.path.insert(0, "/Users/oege/projects/fh-pydantic-form/src")
+# Insert the src directory from the current project
+_project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(_project_root / "src"))
 
 
 import datetime
