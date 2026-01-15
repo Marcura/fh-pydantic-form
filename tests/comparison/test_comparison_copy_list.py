@@ -9,7 +9,7 @@ import re
 from typing import List, Optional
 
 import pytest
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup
 from pydantic import BaseModel, Field
 import fasthtml.common as fh
 import monsterui.all as mui
@@ -137,7 +137,9 @@ def htmx_headers():
 class TestCopyButtonRendering:
     """Tests for copy button rendering in ComparisonForm with List[BaseModel]."""
 
-    def test_list_item_copy_button_has_correct_path(self, review_comparison_client, soup):
+    def test_list_item_copy_button_has_correct_path(
+        self, review_comparison_client, soup
+    ):
         """
         Test that copy buttons on List[BaseModel] items have the correct path.
 
@@ -169,7 +171,9 @@ class TestCopyButtonRendering:
         item_paths = [p for p in paths if re.match(r"reviews\[\d+\]$", p)]
         assert len(item_paths) > 0, f"Expected paths like 'reviews[0]', got {paths}"
 
-    def test_full_list_copy_button_has_correct_path(self, review_comparison_client, soup):
+    def test_full_list_copy_button_has_correct_path(
+        self, review_comparison_client, soup
+    ):
         """
         Test that the copy button for the full reviews list has path "reviews".
         """
@@ -189,7 +193,9 @@ class TestCopyButtonRendering:
             "Expected copy buttons for reviews field on both sides"
         )
 
-    def test_data_field_path_set_on_list_item_inputs(self, review_comparison_client, soup):
+    def test_data_field_path_set_on_list_item_inputs(
+        self, review_comparison_client, soup
+    ):
         """
         Test that data-field-path is correctly set on inputs within list items.
 
@@ -204,14 +210,18 @@ class TestCopyButtonRendering:
         dom = soup(response.text)
 
         # Find all elements with data-field-path containing reviews[
-        path_elements = dom.find_all(attrs={"data-field-path": re.compile(r"reviews\[")})
+        path_elements = dom.find_all(
+            attrs={"data-field-path": re.compile(r"reviews\[")}
+        )
 
         # Extract paths
         paths = [el["data-field-path"] for el in path_elements]
 
         # Should have paths for nested fields
         nested_paths = [p for p in paths if "." in p]
-        assert len(nested_paths) > 0, f"Expected nested paths like 'reviews[0].rating', got {paths}"
+        assert len(nested_paths) > 0, (
+            f"Expected nested paths like 'reviews[0].rating', got {paths}"
+        )
 
         # Verify specific patterns exist
         rating_paths = [p for p in paths if ".rating" in p]
@@ -300,7 +310,9 @@ class TestCopyListItemBehavior:
                 f"Input {inp.get('name')} missing data-field-path"
             )
             path = inp["data-field-path"]
-            assert "reviews[new_" in path, f"Expected path with new_ placeholder, got {path}"
+            assert "reviews[new_" in path, (
+                f"Expected path with new_ placeholder, got {path}"
+            )
 
 
 class TestCopyFullListBehavior:
@@ -332,7 +344,9 @@ class TestCopyFullListBehavior:
         right_container = dom.find(id="right_form_reviews_items_container")
 
         assert left_container is not None, "Expected left_form_reviews_items_container"
-        assert right_container is not None, "Expected right_form_reviews_items_container"
+        assert right_container is not None, (
+            "Expected right_form_reviews_items_container"
+        )
 
     def test_list_items_have_correct_index_in_data_field_path(
         self, review_comparison_client, soup
@@ -367,21 +381,27 @@ class TestCopyFullListBehavior:
                 right_paths.append(path)
 
         # Left should have indices 0 and 1
-        left_indices = set(
-            re.search(r"reviews\[(\d+)\]", p).group(1)
-            for p in left_paths
-            if re.search(r"reviews\[\d+\]", p)
+        left_indices: set[str] = set()
+        for p in left_paths:
+            m = re.search(r"reviews\[(\d+)\]", p)
+            if m:
+                left_indices.add(m.group(1))
+        assert "0" in left_indices, (
+            f"Expected index 0 in left paths, got {left_indices}"
         )
-        assert "0" in left_indices, f"Expected index 0 in left paths, got {left_indices}"
-        assert "1" in left_indices, f"Expected index 1 in left paths, got {left_indices}"
+        assert "1" in left_indices, (
+            f"Expected index 1 in left paths, got {left_indices}"
+        )
 
         # Right should have index 0
-        right_indices = set(
-            re.search(r"reviews\[(\d+)\]", p).group(1)
-            for p in right_paths
-            if re.search(r"reviews\[\d+\]", p)
+        right_indices: set[str] = set()
+        for p in right_paths:
+            m = re.search(r"reviews\[(\d+)\]", p)
+            if m:
+                right_indices.add(m.group(1))
+        assert "0" in right_indices, (
+            f"Expected index 0 in right paths, got {right_indices}"
         )
-        assert "0" in right_indices, f"Expected index 0 in right paths, got {right_indices}"
 
     def test_relative_path_extraction_pattern_for_list_items(self):
         """
@@ -514,12 +534,8 @@ class TestCopyLeftIntegration:
         assert "__fhpfRightPrefix" in all_scripts, (
             "Expected __fhpfRightPrefix to be set in script"
         )
-        assert '"left_form_"' in all_scripts, (
-            "Expected left_form_ prefix in script"
-        )
-        assert '"right_form_"' in all_scripts, (
-            "Expected right_form_ prefix in script"
-        )
+        assert '"left_form_"' in all_scripts, "Expected left_form_ prefix in script"
+        assert '"right_form_"' in all_scripts, "Expected right_form_ prefix in script"
 
 
 class TestCopyListItemJavaScriptLogic:
@@ -540,8 +556,8 @@ class TestCopyListItemJavaScriptLogic:
         The new item gets a placeholder ID like "new_1234567890".
         All nested fields should be mapped correctly.
         """
-        source_prefix = "right_form_"
-        target_prefix = "left_form_"
+        # Prefixes documented for context:
+        # source_prefix = "right_form_", target_prefix = "left_form_"
         source_path_prefix = "reviews[0]"
         target_placeholder = "new_1234567890"
         target_path_prefix = f"reviews[{target_placeholder}]"
@@ -710,7 +726,9 @@ class TestAddItemButtonForCopy:
         dom = soup(response.text)
 
         # Find add buttons for reviews list
-        add_buttons = dom.find_all("button", attrs={"hx-post": re.compile(r"/list/add/reviews")})
+        add_buttons = dom.find_all(
+            "button", attrs={"hx-post": re.compile(r"/list/add/reviews")}
+        )
 
         # Should have add buttons for both left and right forms
         assert len(add_buttons) >= 2, (
@@ -745,7 +763,9 @@ class TestAddItemButtonForCopy:
         assert parent is not None, "Container should have a parent element"
 
         # Find add button from parent
-        add_button = parent.find("button", attrs={"hx-post": re.compile(r"/list/add/reviews")})
+        add_button = parent.find(
+            "button", attrs={"hx-post": re.compile(r"/list/add/reviews")}
+        )
         assert add_button is not None, (
             "Add button should be findable from container's parent"
         )
@@ -811,9 +831,7 @@ class TestHTMXAddItemForCopy:
         # All paths should contain new_TIMESTAMP placeholder
         for elem in path_elements:
             path = elem["data-field-path"]
-            assert "new_" in path, (
-                f"Expected 'new_' placeholder in path, got: {path}"
-            )
+            assert "new_" in path, f"Expected 'new_' placeholder in path, got: {path}"
             # Verify pattern: reviews[new_TIMESTAMP].field or reviews[new_TIMESTAMP]
             assert re.match(r"reviews\[new_\d+\]", path), (
                 f"Expected reviews[new_TIMESTAMP]... pattern, got: {path}"
@@ -893,8 +911,12 @@ class TestCopyPathMappingEdgeCases:
             ],
         )
 
-        left_form = PydanticForm("nested_left", PersonWithAddresses, initial_values=left_values)
-        right_form = PydanticForm("nested_right", PersonWithAddresses, initial_values=right_values)
+        left_form = PydanticForm(
+            "nested_left", PersonWithAddresses, initial_values=left_values
+        )
+        right_form = PydanticForm(
+            "nested_right", PersonWithAddresses, initial_values=right_values
+        )
 
         comp = ComparisonForm(
             "nested_test",
@@ -987,7 +1009,8 @@ class TestContainerIdConstruction:
             # Simulate JavaScript's replace(/_$/, '')
             # In Python: rstrip doesn't work the same, need regex
             import re
-            result = re.sub(r'_$', '', prefix)
+
+            result = re.sub(r"_$", "", prefix)
             assert result == expected, (
                 f"Prefix '{prefix}' should become '{expected}', got '{result}'"
             )
@@ -1076,7 +1099,7 @@ class TestJavaScriptRegexPatterns:
             assert match is not None, f"Pattern should match {full_path}"
 
             # Extract relative path
-            relative = full_path[match.end():]
+            relative = full_path[match.end() :]
             assert relative == expected_relative, (
                 f"Expected relative '{expected_relative}' from '{full_path}', got '{relative}'"
             )
@@ -1100,11 +1123,11 @@ class TestJavaScriptRegexPatterns:
         """
         # In Python, '\\\\' in a regular string literal gives us '\\'
         # Let's verify with a raw string comparison
-        python_source_fragment = '\\\\[[^\\\\]]+\\\\]'
+        python_source_fragment = "\\\\[[^\\\\]]+\\\\]"
 
         # The actual string value (what gets sent to browser)
         # Each pair of backslashes becomes one
-        assert python_source_fragment == r'\\[[^\\]]+\\]', (
+        assert python_source_fragment == r"\\[[^\\]]+\\]", (
             "Python string should have escaped backslashes"
         )
 
@@ -1118,12 +1141,16 @@ class TestJavaScriptRegexPatterns:
         import re
 
         # This is what the JavaScript regex effectively does
-        js_equivalent_pattern = r'\[[^\]]+\]'
+        js_equivalent_pattern = r"\[[^\]]+\]"
 
         # Test it works
         assert re.match(js_equivalent_pattern, "[0]"), "Pattern should match [0]"
-        assert re.match(js_equivalent_pattern, "[new_123]"), "Pattern should match [new_123]"
-        assert not re.match(js_equivalent_pattern, "[]"), "Pattern should not match empty brackets"
+        assert re.match(js_equivalent_pattern, "[new_123]"), (
+            "Pattern should match [new_123]"
+        )
+        assert not re.match(js_equivalent_pattern, "[]"), (
+            "Pattern should not match empty brackets"
+        )
 
 
 class TestJavaScriptPatternBugs:
@@ -1194,11 +1221,11 @@ class TestJavaScriptPatternBugs:
         import re
 
         # Characters that should be escaped for regex
-        special_chars = r'.*+?^${}()|[]\\'
+        special_chars = r".*+?^${}()|[]\\"
 
         # Build a Python pattern that matches these characters
         # (Note: Python regex character classes have different escaping rules)
-        py_pattern = r'[.*+?^${}()|[\]\\]'
+        py_pattern = r"[.*+?^${}()|[\]\\]"
 
         for char in special_chars:
             # Each special char should match the pattern
@@ -1226,7 +1253,7 @@ class TestIsListItemPathBug:
         import re
 
         # The JavaScript pattern: /\[\d+\]/
-        pattern = r'\[\d+\]'
+        pattern = r"\[\d+\]"
 
         # These should match (and do)
         assert re.search(pattern, "reviews[0]")
@@ -1249,7 +1276,7 @@ class TestIsListItemPathBug:
         import re
 
         # The JavaScript pattern: /\[\d+\]/
-        current_pattern = r'\[\d+\]'
+        current_pattern = r"\[\d+\]"
 
         # These should match but DON'T with the current pattern
         # This is the bug!
@@ -1271,7 +1298,7 @@ class TestIsListItemPathBug:
         import re
 
         # Correct pattern that matches both numeric and new_ placeholders
-        correct_pattern = r'\[(\d+|new_\d+)\]'
+        correct_pattern = r"\[(\d+|new_\d+)\]"
 
         # Numeric indices
         assert re.search(correct_pattern, "reviews[0]")
@@ -1298,13 +1325,15 @@ class TestExtractListFieldPathBug:
         import re
 
         # The JavaScript pattern: /\[\d+\].*$/
-        pattern = r'\[\d+\].*$'
+        pattern = r"\[\d+\].*$"
 
         # Test extraction
-        assert re.sub(pattern, '', "reviews[0]") == "reviews"
-        assert re.sub(pattern, '', "addresses[0].street") == "addresses"
+        assert re.sub(pattern, "", "reviews[0]") == "reviews"
+        assert re.sub(pattern, "", "addresses[0].street") == "addresses"
 
-    @pytest.mark.xfail(reason="BUG: extractListFieldPath doesn't handle new_ placeholders")
+    @pytest.mark.xfail(
+        reason="BUG: extractListFieldPath doesn't handle new_ placeholders"
+    )
     def test_extractListFieldPath_should_work_for_new_placeholders(self):
         """
         FAILING TEST: extractListFieldPath should work for new_ placeholders.
@@ -1315,10 +1344,10 @@ class TestExtractListFieldPathBug:
         import re
 
         # The JavaScript pattern: /\[\d+\].*$/
-        current_pattern = r'\[\d+\].*$'
+        current_pattern = r"\[\d+\].*$"
 
         # These should extract "reviews" but DON'T
-        result = re.sub(current_pattern, '', "reviews[new_1234567890]")
+        result = re.sub(current_pattern, "", "reviews[new_1234567890]")
         assert result == "reviews", (
             f"BUG: Expected 'reviews', got '{result}' - pattern doesn't handle new_ placeholders"
         )
@@ -1330,15 +1359,15 @@ class TestExtractListFieldPathBug:
         import re
 
         # Correct pattern that handles both numeric and placeholder indices
-        correct_pattern = r'\[(\d+|new_\d+)\].*$'
+        correct_pattern = r"\[(\d+|new_\d+)\].*$"
 
         # Numeric
-        assert re.sub(correct_pattern, '', "reviews[0]") == "reviews"
-        assert re.sub(correct_pattern, '', "addresses[5].street") == "addresses"
+        assert re.sub(correct_pattern, "", "reviews[0]") == "reviews"
+        assert re.sub(correct_pattern, "", "addresses[5].street") == "addresses"
 
         # Placeholder
-        assert re.sub(correct_pattern, '', "reviews[new_1234567890]") == "reviews"
-        assert re.sub(correct_pattern, '', "addresses[new_123].street") == "addresses"
+        assert re.sub(correct_pattern, "", "reviews[new_1234567890]") == "reviews"
+        assert re.sub(correct_pattern, "", "addresses[new_123].street") == "addresses"
 
 
 class TestExtractListIndexBug:
@@ -1357,7 +1386,7 @@ class TestExtractListIndexBug:
         import re
 
         # The JavaScript pattern: /\[(\d+)\]/
-        pattern = r'\[(\d+)\]'
+        pattern = r"\[(\d+)\]"
 
         # Should extract the number
         match = re.search(pattern, "reviews[5]")
@@ -1366,7 +1395,9 @@ class TestExtractListIndexBug:
         match = re.search(pattern, "addresses[0].street")
         assert match and match.group(1) == "0"
 
-    @pytest.mark.xfail(reason="BUG: extractListIndex returns None for new_ placeholders")
+    @pytest.mark.xfail(
+        reason="BUG: extractListIndex returns None for new_ placeholders"
+    )
     def test_extractListIndex_should_work_for_new_placeholders(self):
         """
         FAILING TEST: extractListIndex should return something useful for placeholders.
@@ -1377,7 +1408,7 @@ class TestExtractListIndexBug:
         import re
 
         # The JavaScript pattern: /\[(\d+)\]/
-        current_pattern = r'\[(\d+)\]'
+        current_pattern = r"\[(\d+)\]"
 
         # For placeholders, this returns None
         match = re.search(current_pattern, "reviews[new_1234567890]")
@@ -1414,9 +1445,7 @@ class TestCopyNewlyAddedItemBug:
         dom = soup(response.text)
 
         # Find copy buttons in the new item
-        copy_buttons = dom.find_all(
-            "button", onclick=re.compile(r"fhpfPerformCopy")
-        )
+        copy_buttons = dom.find_all("button", onclick=re.compile(r"fhpfPerformCopy"))
 
         # The copy button path should contain new_ placeholder
         for btn in copy_buttons:
@@ -1444,7 +1473,7 @@ class TestCopyNewlyAddedItemBug:
         import re
 
         # The current JavaScript pattern
-        current_pattern = r'\[\d+\]'
+        current_pattern = r"\[\d+\]"
 
         # This path would be passed to isListItemPath after adding an item
         new_item_path = "reviews[new_1234567890]"
@@ -1519,7 +1548,7 @@ class TestFullListCopyBug:
         import re
 
         # What the pattern SHOULD match (all regex special chars)
-        special_chars_to_escape = r'.*+?^${}()|[]\\'
+        special_chars_to_escape = r".*+?^${}()|[]\\"
 
         # What the JavaScript pattern ACTUALLY creates due to escaping issues
         # In JavaScript, /[.*+?^${}()|[\\]\\\\]/ parses as:
@@ -1528,13 +1557,11 @@ class TestFullListCopyBug:
 
         # This test verifies the INTENDED behavior works
         # The correct Python equivalent pattern
-        correct_pattern = r'[.*+?^${}()|[\]\\]'
+        correct_pattern = r"[.*+?^${}()|[\]\\]"
 
         for char in special_chars_to_escape:
             match = re.search(correct_pattern, char)
-            assert match is not None, (
-                f"Pattern should match special char '{char}'"
-            )
+            assert match is not None, f"Pattern should match special char '{char}'"
 
         # Now test if the ACTUAL JavaScript pattern would work
         # We can't directly test JS, but we can document the expected failure
@@ -1596,35 +1623,37 @@ class TestPerformStandardCopyPathMapping:
 
         # Paths that should match
         should_match = [
-            "reviews[0]",           # Exact match
-            "reviews[0].rating",    # Starts with prefix + '.'
+            "reviews[0]",  # Exact match
+            "reviews[0].rating",  # Starts with prefix + '.'
             "reviews[0].comment",
             # Note: reviews[0][something] would also match (starts with prefix + '[')
         ]
 
         # Paths that should NOT match
         should_not_match = [
-            "reviews[1]",           # Different index
+            "reviews[1]",  # Different index
             "reviews[1].rating",
-            "reviews",              # No index
-            "other[0]",             # Different field
+            "reviews",  # No index
+            "other[0]",  # Different field
         ]
 
         for path in should_match:
             matches = (
-                path == source_path_prefix or
-                path.startswith(source_path_prefix + '.') or
-                path.startswith(source_path_prefix + '[')
+                path == source_path_prefix
+                or path.startswith(source_path_prefix + ".")
+                or path.startswith(source_path_prefix + "[")
             )
             assert matches, f"Path '{path}' should match prefix '{source_path_prefix}'"
 
         for path in should_not_match:
             matches = (
-                path == source_path_prefix or
-                path.startswith(source_path_prefix + '.') or
-                path.startswith(source_path_prefix + '[')
+                path == source_path_prefix
+                or path.startswith(source_path_prefix + ".")
+                or path.startswith(source_path_prefix + "[")
             )
-            assert not matches, f"Path '{path}' should NOT match prefix '{source_path_prefix}'"
+            assert not matches, (
+                f"Path '{path}' should NOT match prefix '{source_path_prefix}'"
+            )
 
     def test_path_remapping_from_numeric_to_placeholder(self):
         """
@@ -1647,10 +1676,10 @@ class TestPerformStandardCopyPathMapping:
             # Simulate the JavaScript logic
             if source_fp == source_path_prefix:
                 target_fp = target_path_prefix
-            elif source_fp.startswith(source_path_prefix + '.'):
-                target_fp = target_path_prefix + source_fp[len(source_path_prefix):]
-            elif source_fp.startswith(source_path_prefix + '['):
-                target_fp = target_path_prefix + source_fp[len(source_path_prefix):]
+            elif source_fp.startswith(source_path_prefix + "."):
+                target_fp = target_path_prefix + source_fp[len(source_path_prefix) :]
+            elif source_fp.startswith(source_path_prefix + "["):
+                target_fp = target_path_prefix + source_fp[len(source_path_prefix) :]
             else:
                 target_fp = source_fp
 
@@ -1743,7 +1772,7 @@ class TestCopySubfieldVsFullItemBug:
         """
         import re
 
-        pattern = r'\[\d+\]'
+        pattern = r"\[\d+\]"
 
         # Full item path
         assert re.search(pattern, "reviews[0]"), "Full item should match"
@@ -1762,7 +1791,7 @@ class TestCopySubfieldVsFullItemBug:
         import re
 
         # Full item pattern: ends with [index]
-        full_item_pattern = r'\[\d+\]$'
+        full_item_pattern = r"\[\d+\]$"
 
         # Test cases
         full_items = ["reviews[0]", "addresses[1]", "items[99]"]
@@ -1778,7 +1807,9 @@ class TestCopySubfieldVsFullItemBug:
                 f"'{path}' should NOT be detected as full item (it's a subfield)"
             )
 
-    @pytest.mark.xfail(reason="BUG: Subfield copy creates new item instead of updating existing")
+    @pytest.mark.xfail(
+        reason="BUG: Subfield copy creates new item instead of updating existing"
+    )
     def test_subfield_copy_should_not_add_new_item(self):
         """
         FAILING TEST: Copying a subfield should update existing item, not add new.
@@ -1796,7 +1827,7 @@ class TestCopySubfieldVsFullItemBug:
         import re
 
         # Current detection pattern
-        current_pattern = r'\[\d+\]'
+        current_pattern = r"\[\d+\]"
 
         # Subfield path
         subfield_path = "reviews[0].rating"
@@ -1809,8 +1840,8 @@ class TestCopySubfieldVsFullItemBug:
         # The code should check if path ends with ] or has more after ]
 
         # Correct logic would be:
-        is_full_item = bool(re.search(r'\[\d+\]$', subfield_path))
-        is_subfield = bool(re.search(r'\[\d+\]\.', subfield_path))
+        is_full_item = bool(re.search(r"\[\d+\]$", subfield_path))
+        is_subfield = bool(re.search(r"\[\d+\]\.", subfield_path))
 
         # This test expects the JavaScript to distinguish these cases
         # But currently it doesn't, so this fails
@@ -1837,8 +1868,7 @@ class TestCopySubfieldVsFullItemBug:
 
         # Find copy buttons for subfields (paths containing both [index] and .)
         subfield_copy_buttons = dom.find_all(
-            "button",
-            onclick=re.compile(r"fhpfPerformCopy\('reviews\[\d+\]\.[^']+',")
+            "button", onclick=re.compile(r"fhpfPerformCopy\('reviews\[\d+\]\.[^']+',")
         )
 
         # Should have copy buttons for subfields like reviews[0].rating
@@ -1853,7 +1883,7 @@ class TestCopySubfieldVsFullItemBug:
             if match:
                 path = match.group(1)
                 # Should be a subfield path
-                assert re.search(r'\[\d+\]\.', path), (
+                assert re.search(r"\[\d+\]\.", path), (
                     f"Expected subfield path with [index]., got: {path}"
                 )
 
@@ -1877,10 +1907,10 @@ class TestCopySubfieldVsFullItemBug:
         def get_copy_behavior(path: str) -> str:
             """Determine correct copy behavior based on path structure."""
             # Check if path ends with [index] (full item)
-            if re.search(r'\[\d+\]$', path):
+            if re.search(r"\[\d+\]$", path):
                 return "add_new_item"
             # Check if path has [index] followed by more content (subfield)
-            elif re.search(r'\[\d+\]\.', path):
+            elif re.search(r"\[\d+\]\.", path):
                 return "update_existing_subfield"
             # No index at all (full list or scalar field)
             else:
@@ -1938,8 +1968,14 @@ class TestSubfieldCopyPathMapping:
         expected_target = {"reviews": [{"rating": 5, "comment": "OK"}]}
 
         # Only rating changed, comment stays the same
-        assert expected_target["reviews"][0]["rating"] == source_values["reviews"][0]["rating"]
-        assert expected_target["reviews"][0]["comment"] == target_values["reviews"][0]["comment"]
+        assert (
+            expected_target["reviews"][0]["rating"]
+            == source_values["reviews"][0]["rating"]
+        )
+        assert (
+            expected_target["reviews"][0]["comment"]
+            == target_values["reviews"][0]["comment"]
+        )
 
     def test_subfield_copy_when_target_item_missing(self):
         """
@@ -1956,7 +1992,9 @@ class TestSubfieldCopyPathMapping:
         # For now, document that it's undefined behavior
         pass
 
-    @pytest.mark.xfail(reason="BUG: isListItemPath doesn't distinguish full item from subfield")
+    @pytest.mark.xfail(
+        reason="BUG: isListItemPath doesn't distinguish full item from subfield"
+    )
     def test_isListItemPath_should_return_false_for_subfields(self):
         """
         FAILING TEST: isListItemPath should only return true for FULL item paths.
@@ -1970,13 +2008,15 @@ class TestSubfieldCopyPathMapping:
         import re
 
         # Current pattern - matches both
-        current_pattern = r'\[\d+\]'
+        current_pattern = r"\[\d+\]"
 
         # Correct pattern for FULL items only
-        correct_full_item_pattern = r'\[\d+\]$'
+        correct_full_item_pattern = r"\[\d+\]$"
 
         # Full item - should return True
-        assert re.search(correct_full_item_pattern, "reviews[0]"), "Full item should match"
+        assert re.search(correct_full_item_pattern, "reviews[0]"), (
+            "Full item should match"
+        )
 
         # Subfield - should return False (but current impl returns True)
         assert not re.search(correct_full_item_pattern, "reviews[0].rating"), (
@@ -2015,9 +2055,8 @@ class TestListItemVsSubfieldDetection:
         ]
 
         # Patterns for detection
-        full_item_pattern = r'\[(\d+|new_\d+)\]$'  # Ends with [index]
-        subfield_pattern = r'\[(\d+|new_\d+)\]\.'   # Has [index] followed by .
-        list_field_pattern = r'^[a-zA-Z_][a-zA-Z0-9_]*$'  # Simple field name (could be list)
+        full_item_pattern = r"\[(\d+|new_\d+)\]$"  # Ends with [index]
+        subfield_pattern = r"\[(\d+|new_\d+)\]\."  # Has [index] followed by .
 
         for path, is_full_item, is_subfield, is_list_field, desc in test_cases:
             detected_full = bool(re.search(full_item_pattern, path))
@@ -2052,21 +2091,23 @@ class TestListItemVsSubfieldDetection:
         """
         import re
 
-        # Current buggy pattern
-        buggy_pattern = r'\[\d+\]'
-
+        # Current buggy pattern (documented): r'\[\d+\]'
         # Fixed pattern for full items only
-        fixed_full_item_pattern = r'\[(\d+|new_\d+)\]$'
+        fixed_full_item_pattern = r"\[(\d+|new_\d+)\]$"
 
         # New pattern for subfields
-        subfield_pattern = r'\[(\d+|new_\d+)\]\.'
+        subfield_pattern = r"\[(\d+|new_\d+)\]\."
 
         # Test full items
         for path in ["reviews[0]", "reviews[1]", "items[new_123]"]:
             assert re.search(fixed_full_item_pattern, path), f"Should match: {path}"
-            assert not re.search(subfield_pattern, path), f"Should not match subfield: {path}"
+            assert not re.search(subfield_pattern, path), (
+                f"Should not match subfield: {path}"
+            )
 
         # Test subfields
         for path in ["reviews[0].rating", "items[new_123].name"]:
-            assert not re.search(fixed_full_item_pattern, path), f"Should not match full: {path}"
+            assert not re.search(fixed_full_item_pattern, path), (
+                f"Should not match full: {path}"
+            )
             assert re.search(subfield_pattern, path), f"Should match subfield: {path}"

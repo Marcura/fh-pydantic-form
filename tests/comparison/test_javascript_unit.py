@@ -17,15 +17,16 @@ pytestmark = [pytest.mark.comparison, pytest.mark.integration]
 
 def find_node_binary() -> str | None:
     """Find Node.js binary on the system."""
-    # Check common locations
-    candidates = [
-        # Homebrew
+    # Check common locations - string paths
+    str_candidates = [
         "/usr/local/bin/node",
         "/opt/homebrew/bin/node",
-        # System
         "/usr/bin/node",
         "/usr/bin/nodejs",
-        # Conductor bundled (if available)
+    ]
+
+    # Path candidates
+    path_candidates: list[Path] = [
         Path.home()
         / "Library"
         / "Application Support"
@@ -34,12 +35,14 @@ def find_node_binary() -> str | None:
         / "node",
     ]
 
-    for candidate in candidates:
-        if isinstance(candidate, Path):
-            if candidate.exists():
-                return str(candidate)
-        elif shutil.which(candidate):
-            return candidate
+    for str_candidate in str_candidates:
+        result = shutil.which(str_candidate)
+        if result:
+            return result
+
+    for path_candidate in path_candidates:
+        if path_candidate.exists():
+            return str(path_candidate)
 
     # Fall back to PATH
     node = shutil.which("node") or shutil.which("nodejs")
@@ -95,7 +98,7 @@ class TestJavaScriptUnit:
         total = test_results.get("total", 0)
 
         # Print summary
-        print(f"\nJavaScript Test Results:")
+        print("\nJavaScript Test Results:")
         print(f"  Passed:  {passed}")
         print(f"  Failed:  {failed}")
         print(f"  XFailed: {xfailed} (expected failures documenting bugs)")
@@ -104,9 +107,7 @@ class TestJavaScriptUnit:
         # Check for unexpected failures
         failures = test_results.get("failures", [])
         if failures:
-            failure_msgs = "\n".join(
-                f"  - {f['name']}: {f['error']}" for f in failures
-            )
+            failure_msgs = "\n".join(f"  - {f['name']}: {f['error']}" for f in failures)
             pytest.fail(f"JavaScript tests had unexpected failures:\n{failure_msgs}")
 
         # Check for unexpected passes (xfail tests that now pass)

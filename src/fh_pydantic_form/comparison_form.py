@@ -43,22 +43,45 @@ def comparison_form_js():
     """JavaScript for comparison: sync accordions and handle JS-only copy operations."""
     return fh.Script("""
 // Helper functions for list item path detection
+// FIXED: Now matches both numeric indices AND new_ placeholder indices
+// FIXED: Only matches FULL list items (path ends with ]), not subfields
 function isListItemPath(pathPrefix) {
-  // Check if path contains array index pattern like [0], [1], etc.
-  return /\[\d+\]/.test(pathPrefix);
+  // Check if path is a full list item: ends with [index] where index is numeric or new_*
+  // e.g., "reviews[0]" or "reviews[new_123]" -> true
+  // e.g., "reviews[0].rating" or "reviews" -> false
+  return /\[(\d+|new_\d+)\]$/.test(pathPrefix);
+}
+
+// NEW: Check if path is a subfield of a list item (has content after [index])
+function isListSubfieldPath(pathPrefix) {
+  // e.g., "reviews[0].rating" or "reviews[new_123].comment" -> true
+  // e.g., "reviews[0]" or "reviews" -> false
+  return /\[(\d+|new_\d+)\]\./.test(pathPrefix);
+}
+
+// FIXED: Check if path contains ANY list index (for general list detection)
+function hasListIndex(pathPrefix) {
+  return /\[(\d+|new_\d+)\]/.test(pathPrefix);
 }
 
 function extractListFieldPath(pathPrefix) {
   // Extract the list field path without the index
   // e.g., "addresses[0]" -> "addresses"
-  return pathPrefix.replace(/\[\d+\].*$/, '');
+  // e.g., "addresses[new_123].street" -> "addresses"
+  // FIXED: Now handles new_ placeholder indices
+  return pathPrefix.replace(/\[(\d+|new_\d+)\].*$/, '');
 }
 
 function extractListIndex(pathPrefix) {
   // Extract the index from path
   // e.g., "addresses[0].street" -> 0
-  var match = pathPrefix.match(/\[(\d+)\]/);
-  return match ? parseInt(match[1]) : null;
+  // e.g., "addresses[new_123]" -> "new_123"
+  // FIXED: Now handles new_ placeholder indices
+  var match = pathPrefix.match(/\[(\d+|new_\d+)\]/);
+  if (!match) return null;
+  var indexStr = match[1];
+  // Return numeric index as number, placeholder as string
+  return /^\d+$/.test(indexStr) ? parseInt(indexStr) : indexStr;
 }
 
 // Copy function - pure JS implementation
@@ -79,18 +102,173 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
     // Determine source prefix based on copy target
     var sourcePrefix = (copyTarget === 'left') ? window.__fhpfRightPrefix : window.__fhpfLeftPrefix;
 
-    // Check if this is a list item copy operation
-    var isListItem = isListItemPath(pathPrefix);
+    // Determine copy behavior based on path structure:
+    // 1. Full list item (e.g., "reviews[0]") -> add new item to target list
+    // 2. Subfield of list item (e.g., "reviews[0].rating") -> update existing subfield
+    // 3. Regular field (e.g., "name" or "reviews") -> standard copy
+    var isFullListItem = isListItemPath(pathPrefix);
+    var isSubfield = isListSubfieldPath(pathPrefix);
     var listFieldPath = null;
     var listIndex = null;
 
-    if (isListItem) {
+    if (isFullListItem || isSubfield) {
       listFieldPath = extractListFieldPath(pathPrefix);
       listIndex = extractListIndex(pathPrefix);
     }
 
-    // Special handling for list item copies: add new item instead of overwriting
-    if (isListItem) {
+    // CASE 2: Subfield copy - update existing item's subfield (NOT create new item)
+    // This is the fix for the bug where copying reviews[0].rating created a new item
+    if (isSubfield) {
+      // For subfield copies, we need to find the corresponding target field by position
+      // and perform a direct value copy (standard copy behavior)
+      var targetPrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
+
+      // Extract the relative path (e.g., ".rating" from "reviews[0].rating")
+      // Find the closing bracket after listFieldPath and extract what comes after
+      var bracketStart = pathPrefix.indexOf('[', listFieldPath.length);
+      var bracketEnd = pathPrefix.indexOf(']', bracketStart);
+      var relativePath = (bracketEnd >= 0) ? pathPrefix.substring(bracketEnd + 1) : '';
+
+      // Find source and target list containers to map by position
+      var sourceContainerId = sourcePrefix.replace(/_$/, '') + '_' + listFieldPath + '_items_container';
+      var targetContainerId = targetPrefix.replace(/_$/, '') + '_' + listFieldPath + '_items_container';
+
+      var sourceListContainer = document.getElementById(sourceContainerId);
+      var targetListContainer = document.getElementById(targetContainerId);
+
+      if (sourceListContainer && targetListContainer) {
+        var sourceItems = sourceListContainer.querySelectorAll(':scope > li');
+        var targetItems = targetListContainer.querySelectorAll(':scope > li');
+
+        // Find the position of the source item
+        var sourcePosition = -1;
+        if (typeof listIndex === 'number') {
+          sourcePosition = listIndex;
+        } else if (typeof listIndex === 'string' && listIndex.startsWith('new_')) {
+          // For placeholder indices, find by searching for the element with this path
+          for (var i = 0; i < sourceItems.length; i++) {
+            var inputs = sourceItems[i].querySelectorAll('[data-field-path^="' + pathPrefix.replace(/\.[^.]+$/, '') + '"]');
+            if (inputs.length > 0) {
+              sourcePosition = i;
+              break;
+            }
+          }
+        }
+
+        // If we found a valid source position and target has that position, perform the copy
+        if (sourcePosition >= 0 && sourcePosition < targetItems.length) {
+          var sourceItem = sourceItems[sourcePosition];
+          var targetItem = targetItems[sourcePosition];
+
+          // Find the source input with this exact path
+          var sourceInput = sourceItem.querySelector('[data-field-path="' + pathPrefix + '"]');
+
+          // Find the target input with matching relative path
+          var targetInputs = targetItem.querySelectorAll('[data-field-path]');
+          var targetInput = null;
+
+          for (var j = 0; j < targetInputs.length; j++) {
+            var targetFp = targetInputs[j].getAttribute('data-field-path');
+            var tBracketStart = targetFp.indexOf('[', listFieldPath.length);
+            var tBracketEnd = targetFp.indexOf(']', tBracketStart);
+            var targetRelative = (tBracketEnd >= 0) ? targetFp.substring(tBracketEnd + 1) : '';
+
+            if (targetRelative === relativePath) {
+              // Verify it belongs to target form
+              var candidateName = null;
+              if (targetInputs[j].tagName === 'UK-SELECT') {
+                var nativeSelect = targetInputs[j].querySelector('select');
+                candidateName = nativeSelect ? nativeSelect.name : null;
+              } else {
+                candidateName = targetInputs[j].name;
+              }
+
+              if (candidateName && !candidateName.startsWith(sourcePrefix)) {
+                targetInput = targetInputs[j];
+                break;
+              }
+            }
+          }
+
+          if (sourceInput && targetInput) {
+            // Copy the value directly
+            var tag = sourceInput.tagName.toUpperCase();
+            var type = (sourceInput.type || '').toLowerCase();
+
+            if (type === 'checkbox') {
+              targetInput.checked = sourceInput.checked;
+            } else if (tag === 'SELECT') {
+              targetInput.value = sourceInput.value;
+              targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+            } else if (tag === 'UK-SELECT') {
+              var srcSelect = sourceInput.querySelector('select');
+              var tgtSelect = targetInput.querySelector('select');
+              if (srcSelect && tgtSelect) {
+                var srcVal = srcSelect.value;
+                for (var k = 0; k < tgtSelect.options.length; k++) {
+                  tgtSelect.options[k].removeAttribute('selected');
+                  tgtSelect.options[k].selected = false;
+                }
+                for (var k = 0; k < tgtSelect.options.length; k++) {
+                  if (tgtSelect.options[k].value === srcVal) {
+                    tgtSelect.options[k].setAttribute('selected', 'selected');
+                    tgtSelect.options[k].selected = true;
+                    tgtSelect.selectedIndex = k;
+                    tgtSelect.value = srcVal;
+                    break;
+                  }
+                }
+                var srcBtn = sourceInput.querySelector('button');
+                var tgtBtn = targetInput.querySelector('button');
+                if (srcBtn && tgtBtn) {
+                  tgtBtn.innerHTML = srcBtn.innerHTML;
+                }
+                tgtSelect.dispatchEvent(new Event('change', { bubbles: true }));
+              }
+            } else if (tag === 'TEXTAREA') {
+              targetInput.value = sourceInput.value;
+              targetInput.textContent = sourceInput.value;
+              targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+              targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+            } else {
+              targetInput.value = sourceInput.value;
+              targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+              targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            // Highlight the target field briefly
+            targetInput.style.transition = 'background-color 0.3s';
+            targetInput.style.backgroundColor = '#dbeafe';
+            setTimeout(function() {
+              targetInput.style.backgroundColor = '';
+              setTimeout(function() {
+                targetInput.style.transition = '';
+              }, 300);
+            }, 1500);
+          }
+        }
+      }
+
+      // Restore accordion states
+      setTimeout(function() {
+        accordionStates.forEach(function(state) {
+          if (state.isOpen && !state.element.classList.contains('uk-open')) {
+            state.element.classList.add('uk-open');
+            var content = state.element.querySelector('.uk-accordion-content');
+            if (content) {
+              content.hidden = false;
+              content.style.height = 'auto';
+            }
+          }
+        });
+        window.__fhpfCopyInProgress = false;
+      }, 100);
+
+      return;  // Exit early - subfield copy is complete
+    }
+
+    // CASE 1: Full list item copy - add new item to target list
+    if (isFullListItem) {
       // Find target list container
       var targetPrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
       var targetContainerId = targetPrefix.replace(/_$/, '') + '_' + listFieldPath + '_items_container';
@@ -493,8 +671,10 @@ function performListCopyByPosition(sourceListContainer, targetListContainer, sou
         // Extract the field path relative to the list item
         // e.g., "addresses[0].street" -> ".street"
         // or "tags[0]" -> ""
-        var listItemPattern = new RegExp('^' + listFieldPath.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + '\\\\[[^\\\\]]+\\\\]');
-        var relativePath = sourceFp.replace(listItemPattern, '');
+        // Find the closing bracket after listFieldPath and extract what comes after
+        var bracketStart = sourceFp.indexOf('[', listFieldPath.length);
+        var bracketEnd = sourceFp.indexOf(']', bracketStart);
+        var relativePath = (bracketEnd >= 0) ? sourceFp.substring(bracketEnd + 1) : '';
 
         // Find the corresponding input in the target item by looking for the same relative path
         var targetInputs = targetItem.querySelectorAll('[data-field-path]');
@@ -502,7 +682,9 @@ function performListCopyByPosition(sourceListContainer, targetListContainer, sou
 
         for (var j = 0; j < targetInputs.length; j++) {
           var targetFp = targetInputs[j].getAttribute('data-field-path');
-          var targetRelativePath = targetFp.replace(listItemPattern, '');
+          var tBracketStart = targetFp.indexOf('[', listFieldPath.length);
+          var tBracketEnd = targetFp.indexOf(']', tBracketStart);
+          var targetRelativePath = (tBracketEnd >= 0) ? targetFp.substring(tBracketEnd + 1) : '';
 
           if (targetRelativePath === relativePath) {
             // Verify it belongs to the target form
