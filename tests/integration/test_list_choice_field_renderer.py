@@ -362,13 +362,7 @@ class TestListChoiceFieldRendererCommon:
 
         html = to_html(renderer.render_input())
 
-        # Count pill elements
-        pill_count = html.count("_pill")
-        # Account for container _pills suffix
-        actual_pills = pill_count - 1 if "_pills" in html else pill_count
-        # Each pill has an id like "field_N_pill"
-        # We need to count individual pills, not occurrences of "_pill"
-        # Better approach: count hidden inputs
+        # Count hidden inputs (one per selected pill)
         hidden_input_count = html.count('type="hidden"') if 'type="hidden"' in html else html.count("'type': 'hidden'")
         assert hidden_input_count == expected_pills
 

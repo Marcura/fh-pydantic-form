@@ -5,20 +5,19 @@ from pathlib import Path
 _project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(_project_root / "src"))
 
+import datetime  # noqa: E402
+from enum import Enum, IntEnum  # noqa: E402
+from typing import List, Literal, Optional  # noqa: E402
 
-import datetime
-from enum import Enum, IntEnum
-from typing import List, Literal, Optional
-
-import fasthtml.common as fh  # type: ignore
-import monsterui.all as mui  # type: ignore
-import pytest
-from pydantic import BaseModel, Field, ValidationError
-from pydantic.json_schema import SkipJsonSchema
-from starlette.testclient import TestClient
+import fasthtml.common as fh  # type: ignore  # noqa: E402
+import monsterui.all as mui  # type: ignore  # noqa: E402
+import pytest  # noqa: E402
+from pydantic import BaseModel, Field, ValidationError  # noqa: E402
+from pydantic.json_schema import SkipJsonSchema  # noqa: E402
+from starlette.testclient import TestClient  # noqa: E402
 
 # Remove imports from examples
-from fh_pydantic_form import PydanticForm, list_manipulation_js
+from fh_pydantic_form import PydanticForm, list_manipulation_js  # noqa: E402
 
 
 # --- E2E ComparisonForm fixture ---
