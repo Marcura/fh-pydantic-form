@@ -824,6 +824,159 @@ function performListCopyByPosition(sourceListContainer, targetListContainer, sou
 // Extracted standard copy logic to allow reuse
 function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, copyTarget, accordionStates) {
   try {
+    // Check if this is a pill field (List[Literal] or List[Enum])
+    var sourcePillContainer = document.querySelector(
+      '[data-field-path="' + sourcePathPrefix + '"][data-pill-field="true"]'
+    );
+
+    if (sourcePillContainer) {
+      // Find corresponding target pill container
+      var targetPrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
+      var targetPillContainer = null;
+
+      // Find target by data-field-path that belongs to target form (not source)
+      var pillCandidates = document.querySelectorAll('[data-field-path="' + targetPathPrefix + '"][data-pill-field="true"]');
+      for (var i = 0; i < pillCandidates.length; i++) {
+        var candidateId = pillCandidates[i].id;
+        // Check if this container belongs to target form by checking ID prefix
+        if (candidateId && !candidateId.startsWith(sourcePrefix.replace(/_$/, ''))) {
+          targetPillContainer = pillCandidates[i];
+          break;
+        }
+      }
+
+      if (targetPillContainer) {
+        // Get source selected values from pills
+        var sourcePillsContainer = sourcePillContainer.querySelector('[id$="_pills"]');
+        var sourceValues = [];
+        if (sourcePillsContainer) {
+          var sourcePills = sourcePillsContainer.querySelectorAll('[data-value]');
+          sourcePills.forEach(function(pill) {
+            var hiddenInput = pill.querySelector('input[type="hidden"]');
+            if (hiddenInput) {
+              sourceValues.push({
+                value: pill.dataset.value,
+                display: pill.querySelector('span.mr-1') ? pill.querySelector('span.mr-1').textContent : pill.dataset.value
+              });
+            }
+          });
+        }
+
+        // Clear target pills
+        var targetPillsContainer = targetPillContainer.querySelector('[id$="_pills"]');
+        var targetDropdown = targetPillContainer.querySelector('select');
+        var targetFieldName = targetPillContainer.dataset.fieldName;
+        var targetContainerId = targetPillContainer.id;
+
+        if (targetPillsContainer) {
+          targetPillsContainer.innerHTML = '';
+        }
+
+        // Recreate pills in target with source values
+        sourceValues.forEach(function(item, idx) {
+          var pillId = targetFieldName + '_' + idx + '_pill';
+          var inputName = targetFieldName + '_' + idx;
+
+          // Create hidden input
+          var input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = inputName;
+          input.value = item.value;
+
+          // Create label span
+          var label = document.createElement('span');
+          label.className = 'mr-1';
+          label.textContent = item.display;
+
+          // Create remove button
+          var removeBtn = document.createElement('button');
+          removeBtn.type = 'button';
+          removeBtn.className = 'ml-1 text-xs hover:text-red-600 font-bold cursor-pointer';
+          removeBtn.textContent = '×';
+          removeBtn.onclick = function() {
+            window.fhpfRemoveChoicePill(pillId, item.value, targetContainerId);
+          };
+
+          // Create pill span
+          var pill = document.createElement('span');
+          pill.id = pillId;
+          pill.dataset.value = item.value;
+          pill.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800';
+          pill.appendChild(input);
+          pill.appendChild(label);
+          pill.appendChild(removeBtn);
+
+          targetPillsContainer.appendChild(pill);
+        });
+
+        // Rebuild the target dropdown to show remaining options
+        if (targetDropdown && typeof fhpfRebuildChoiceDropdown === 'function') {
+          // Use internal rebuild function if available
+          fhpfRebuildChoiceDropdown(targetContainerId);
+        } else if (targetDropdown) {
+          // Manual dropdown rebuild
+          var allChoicesJson = targetPillContainer.dataset.allChoices || '[]';
+          var allChoices = [];
+          try {
+            allChoices = JSON.parse(allChoicesJson);
+          } catch (e) {
+            console.error('Failed to parse pill choices:', e);
+          }
+
+          var selectedValues = new Set(sourceValues.map(function(v) { return v.value; }));
+          var remaining = allChoices.filter(function(choice) {
+            return !selectedValues.has(choice.value);
+          });
+
+          // Rebuild dropdown options
+          targetDropdown.innerHTML = '';
+          var placeholder = document.createElement('option');
+          placeholder.value = '';
+          placeholder.textContent = 'Add...';
+          placeholder.selected = true;
+          placeholder.disabled = true;
+          targetDropdown.appendChild(placeholder);
+
+          remaining.forEach(function(choice) {
+            var opt = document.createElement('option');
+            opt.value = choice.value;
+            opt.textContent = choice.display;
+            opt.dataset.display = choice.display;
+            targetDropdown.appendChild(opt);
+          });
+
+          targetDropdown.style.display = remaining.length > 0 ? 'inline-block' : 'none';
+        }
+
+        // Highlight the target container briefly
+        targetPillContainer.style.transition = 'background-color 0.3s';
+        targetPillContainer.style.backgroundColor = '#dbeafe';
+        setTimeout(function() {
+          targetPillContainer.style.backgroundColor = '';
+          setTimeout(function() {
+            targetPillContainer.style.transition = '';
+          }, 300);
+        }, 1500);
+
+        // Restore accordion states
+        setTimeout(function() {
+          accordionStates.forEach(function(state) {
+            if (state.isOpen && !state.element.classList.contains('uk-open')) {
+              state.element.classList.add('uk-open');
+              var content = state.element.querySelector('.uk-accordion-content');
+              if (content) {
+                content.hidden = false;
+                content.style.height = 'auto';
+              }
+            }
+          });
+          window.__fhpfCopyInProgress = false;
+        }, 100);
+
+        return; // Pill copy complete
+      }
+    }
+
     // Find all inputs with matching data-field-path from source
     var allInputs = document.querySelectorAll('[data-field-path]');
     var sourceInputs = Array.from(allInputs).filter(function(el) {
