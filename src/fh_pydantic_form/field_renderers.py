@@ -1266,6 +1266,7 @@ class ListChoiceFieldRenderer(BaseFieldRenderer):
             "id": container_id,
             "cls": "flex flex-wrap gap-2 items-center",
             "data-field-name": self.field_name,
+            "data-input-prefix": self.prefix,
             "data-field-path": self._build_path_string(),
             "data-all-choices": all_choices_json,
             "data-pill-field": "true",  # Marker for copy JS to identify pill fields

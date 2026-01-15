@@ -41,7 +41,7 @@ ModelType = TypeVar("ModelType", bound=BaseModel)
 
 def comparison_form_js():
     """JavaScript for comparison: sync accordions and handle JS-only copy operations."""
-    return fh.Script("""
+    return fh.Script(r"""
 // Helper functions for list item path detection
 // FIXED: Now matches both numeric indices AND new_ placeholder indices
 // FIXED: Only matches FULL list items (path ends with ]), not subfields
@@ -457,7 +457,7 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
                 var newPathPrefix = listFieldPath + '[' + actualPlaceholderIdx + ']';
 
                 // Now perform the standard copy operation with the new path
-                performStandardCopy(pathPrefix, newPathPrefix, sourcePrefix, copyTarget, accordionStates);
+                performStandardCopy(pathPrefix, newPathPrefix, sourcePrefix, copyTarget, accordionStates, currentPrefix);
 
                 // Wait for copy to complete, then open accordion and highlight
                 // Note: We skip automatic refresh because the temporary item ID doesn't persist after refresh
@@ -641,7 +641,7 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
       }
 
       // Default path (non-list fields or already aligned lists)
-      performStandardCopy(pathPrefix, pathPrefix, sourcePrefix, copyTarget, accordionStates);
+      performStandardCopy(pathPrefix, pathPrefix, sourcePrefix, copyTarget, accordionStates, currentPrefix);
     })();
 
   } catch (e) {
@@ -822,36 +822,57 @@ function performListCopyByPosition(sourceListContainer, targetListContainer, sou
 }
 
 // Extracted standard copy logic to allow reuse
-function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, copyTarget, accordionStates) {
+function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, copyTarget, accordionStates, currentPrefix) {
   try {
     // Check if this is a pill field (List[Literal] or List[Enum])
     // Must find the container that belongs to the SOURCE form (by prefix)
+    function normalizePrefix(prefix) {
+      if (!prefix) return prefix;
+      return prefix.replace(/\\./g, '_').replace(/_$/, '');
+    }
+
+    function findPillContainer(candidates, matchPrefix) {
+      if (!matchPrefix) return null;
+      var normalizedPrefix = normalizePrefix(matchPrefix);
+      for (var i = 0; i < candidates.length; i++) {
+        var candidate = candidates[i];
+        var dataPrefix = candidate.dataset.inputPrefix;
+        if (dataPrefix && dataPrefix === matchPrefix) {
+          return candidate;
+        }
+        var candidateId = candidate.id;
+        if (candidateId && normalizedPrefix && candidateId.startsWith(normalizedPrefix)) {
+          return candidate;
+        }
+      }
+      return null;
+    }
+
+    var targetBasePrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
+    var sourceMatchPrefix = currentPrefix || sourcePrefix;
+    var targetMatchPrefix = targetBasePrefix;
+    if (currentPrefix && sourcePrefix && currentPrefix.startsWith(sourcePrefix)) {
+      targetMatchPrefix = targetBasePrefix + currentPrefix.substring(sourcePrefix.length);
+    }
+
     var sourcePillCandidates = document.querySelectorAll(
       '[data-field-path="' + sourcePathPrefix + '"][data-pill-field="true"]'
     );
-    var sourcePillContainer = null;
-    for (var i = 0; i < sourcePillCandidates.length; i++) {
-      var candidateId = sourcePillCandidates[i].id;
-      // Check if this container belongs to source form by checking ID starts with source prefix
-      if (candidateId && candidateId.startsWith(sourcePrefix.replace(/_$/, ''))) {
-        sourcePillContainer = sourcePillCandidates[i];
-        break;
-      }
-    }
+    var sourcePillContainer = findPillContainer(sourcePillCandidates, sourceMatchPrefix);
 
     if (sourcePillContainer) {
       // Find corresponding target pill container
-      var targetPrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
       var targetPillContainer = null;
 
       // Find target by data-field-path that belongs to target form (not source)
       var pillCandidates = document.querySelectorAll('[data-field-path="' + targetPathPrefix + '"][data-pill-field="true"]');
-      for (var i = 0; i < pillCandidates.length; i++) {
-        var candidateId = pillCandidates[i].id;
-        // Check if this container belongs to target form by checking ID prefix
-        if (candidateId && !candidateId.startsWith(sourcePrefix.replace(/_$/, ''))) {
-          targetPillContainer = pillCandidates[i];
-          break;
+      targetPillContainer = findPillContainer(pillCandidates, targetMatchPrefix);
+      if (!targetPillContainer && sourcePillContainer && pillCandidates.length > 1) {
+        for (var i = 0; i < pillCandidates.length; i++) {
+          if (pillCandidates[i] !== sourcePillContainer) {
+            targetPillContainer = pillCandidates[i];
+            break;
+          }
         }
       }
 

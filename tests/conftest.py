@@ -1529,7 +1529,7 @@ def optional_list_test_model():
     """Test model for Optional[List[...]] functionality."""
 
     class OptionalListTestModel(BaseModel):
-        name: str  # No default value - this will be required
+        name: str = Field(..., min_length=1)  # Required and must be non-empty
         optional_tags: Optional[List[str]] = None
         required_tags: List[str] = Field(default_factory=list)
 
@@ -1567,13 +1567,26 @@ def optional_list_client(optional_list_test_model):
 
     @rt("/submit", methods=["POST"])
     async def post_submit(req):
+        form_data = await req.form()
+        form_dict = dict(form_data)
+
+        parsed_data = {}
         try:
-            validated = await form_renderer.model_validate_request(req)
+            parsed_data = form_renderer.parse(form_dict)
+        except Exception:
+            parsed_data = form_renderer.values_dict.copy() if form_renderer.values_dict else {}
+
+        try:
+            validated = form_renderer.model_class.model_validate(parsed_data)
             return fh.Pre(
                 f"Validation Successful: {validated.model_dump_json(indent=2)}"
             )
         except ValidationError as e:
-            return fh.Pre(f"Validation Error: {e.json(indent=2)}")
+            temp_renderer = form_renderer.with_initial_values(parsed_data)
+            return fh.Div(
+                fh.Pre(f"Validation Error: {e.json(indent=2)}"),
+                temp_renderer.render_inputs(),
+            )
 
     return TestClient(app)
 

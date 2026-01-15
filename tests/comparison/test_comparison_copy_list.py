@@ -1235,14 +1235,10 @@ class TestJavaScriptPatternBugs:
 
 class TestIsListItemPathBug:
     """
-    FAILING TESTS: Demonstrate bugs in isListItemPath() detection.
+    Regression tests for isListItemPath() detection.
 
-    The JavaScript function `isListItemPath()` uses pattern /[\\d+]/ which
-    ONLY matches numeric indices like [0], [1], NOT placeholder indices
-    like [new_1234567890].
-
-    This causes copy to fail for newly added items that haven't been
-    saved/refreshed yet.
+    These tests ensure we correctly detect full list items (including new_
+    placeholders) and ignore subfields.
     """
 
     def test_isListItemPath_should_match_numeric_index(self):
@@ -1261,31 +1257,21 @@ class TestIsListItemPathBug:
         assert re.search(pattern, "reviews[99]")
         assert re.search(pattern, "addresses[0].street")
 
-    @pytest.mark.xfail(reason="BUG: isListItemPath doesn't match new_ placeholders")
     def test_isListItemPath_should_match_new_placeholder_index(self):
         """
-        FAILING TEST: isListItemPath should match new_ placeholder indices.
-
-        When a user clicks copy on a newly added item (before save/refresh),
-        the path will be like reviews[new_1234567890]. The current implementation
-        does NOT detect this as a list item path.
-
-        This causes the copy to fall through to standard field copy instead
-        of list item copy, which won't work correctly.
+        isListItemPath should match full items with new_ placeholder indices.
         """
         import re
 
-        # The JavaScript pattern: /\[\d+\]/
-        current_pattern = r"\[\d+\]"
+        # The JavaScript pattern: /\[(\d+|new_\d+)\]$/
+        current_pattern = r"\[(\d+|new_\d+)\]$"
 
-        # These should match but DON'T with the current pattern
-        # This is the bug!
-        assert re.search(current_pattern, "reviews[new_1234567890]"), (
-            "BUG: Pattern should match new_ placeholder indices"
-        )
-        assert re.search(current_pattern, "addresses[new_123].street"), (
-            "BUG: Pattern should match new_ placeholder in nested path"
-        )
+        # Full item paths should match
+        assert re.search(current_pattern, "reviews[new_1234567890]")
+        assert re.search(current_pattern, "addresses[new_123]")
+
+        # Subfield paths should not match
+        assert not re.search(current_pattern, "addresses[new_123].street")
 
     def test_correct_pattern_would_match_both_numeric_and_placeholder(self):
         """
@@ -1311,10 +1297,7 @@ class TestIsListItemPathBug:
 
 class TestExtractListFieldPathBug:
     """
-    FAILING TESTS: Demonstrate bugs in extractListFieldPath() function.
-
-    The JavaScript function uses pattern /[\\d+].*$/ which only removes
-    numeric indices, not placeholder indices.
+    Regression tests for extractListFieldPath() behavior.
     """
 
     def test_extractListFieldPath_works_for_numeric_indices(self):
@@ -1331,26 +1314,18 @@ class TestExtractListFieldPathBug:
         assert re.sub(pattern, "", "reviews[0]") == "reviews"
         assert re.sub(pattern, "", "addresses[0].street") == "addresses"
 
-    @pytest.mark.xfail(
-        reason="BUG: extractListFieldPath doesn't handle new_ placeholders"
-    )
     def test_extractListFieldPath_should_work_for_new_placeholders(self):
         """
-        FAILING TEST: extractListFieldPath should work for new_ placeholders.
-
-        When copying a newly added item, the path is like reviews[new_123].
-        The current implementation doesn't extract the list field name correctly.
+        extractListFieldPath should work for new_ placeholders.
         """
         import re
 
-        # The JavaScript pattern: /\[\d+\].*$/
-        current_pattern = r"\[\d+\].*$"
+        # The JavaScript pattern: /\[(\d+|new_\d+)\].*$/
+        current_pattern = r"\[(\d+|new_\d+)\].*$"
 
-        # These should extract "reviews" but DON'T
+        # These should extract "reviews"
         result = re.sub(current_pattern, "", "reviews[new_1234567890]")
-        assert result == "reviews", (
-            f"BUG: Expected 'reviews', got '{result}' - pattern doesn't handle new_ placeholders"
-        )
+        assert result == "reviews"
 
     def test_correct_pattern_handles_both(self):
         """
@@ -1372,10 +1347,7 @@ class TestExtractListFieldPathBug:
 
 class TestExtractListIndexBug:
     """
-    FAILING TESTS: Demonstrate bugs in extractListIndex() function.
-
-    The JavaScript function uses pattern /[(\\d+)]/ which only extracts
-    numeric indices.
+    Regression tests for extractListIndex() behavior.
     """
 
     def test_extractListIndex_works_for_numeric(self):
@@ -1395,36 +1367,23 @@ class TestExtractListIndexBug:
         match = re.search(pattern, "addresses[0].street")
         assert match and match.group(1) == "0"
 
-    @pytest.mark.xfail(
-        reason="BUG: extractListIndex returns None for new_ placeholders"
-    )
     def test_extractListIndex_should_work_for_new_placeholders(self):
         """
-        FAILING TEST: extractListIndex should return something useful for placeholders.
-
-        Currently it returns None for new_ placeholders, which may cause
-        issues with positioning logic.
+        extractListIndex should return something useful for placeholders.
         """
         import re
 
-        # The JavaScript pattern: /\[(\d+)\]/
-        current_pattern = r"\[(\d+)\]"
+        # The JavaScript pattern: /\[(\d+|new_\d+)\]/
+        current_pattern = r"\[(\d+|new_\d+)\]"
 
-        # For placeholders, this returns None
         match = re.search(current_pattern, "reviews[new_1234567890]")
-        assert match is not None, (
-            "BUG: Pattern should match new_ placeholders to extract index info"
-        )
+        assert match is not None
+        assert match.group(1) == "new_1234567890"
 
 
 class TestCopyNewlyAddedItemBug:
     """
-    FAILING TESTS: Demonstrate bugs when copying newly added items.
-
-    Scenario: User adds a new item to right form (not saved yet), then tries
-    to copy it to left form. The copy fails because:
-    1. isListItemPath() doesn't detect it as a list item
-    2. Falls through to standard copy which doesn't handle list semantics
+    Regression tests for copying newly added items.
     """
 
     def test_copy_button_path_for_newly_added_item(
@@ -1459,43 +1418,29 @@ class TestCopyNewlyAddedItemBug:
                     f"Copy button path should contain 'new_' placeholder, got: {path}"
                 )
 
-    @pytest.mark.xfail(reason="BUG: isListItemPath doesn't detect new_ as list item")
     def test_newly_added_item_detected_as_list_item(self):
         """
-        FAILING TEST: Paths with new_ placeholder should be detected as list items.
-
-        The JavaScript isListItemPath() function should return true for both:
-        - reviews[0] (numeric index)
-        - reviews[new_1234567890] (placeholder index)
-
-        Currently it only returns true for numeric indices.
+        Paths with new_ placeholder should be detected as list items.
         """
         import re
 
         # The current JavaScript pattern
-        current_pattern = r"\[\d+\]"
+        current_pattern = r"\[(\d+|new_\d+)\]$"
 
         # This path would be passed to isListItemPath after adding an item
         new_item_path = "reviews[new_1234567890]"
 
-        # This FAILS - the pattern doesn't match new_ placeholders
-        assert re.search(current_pattern, new_item_path), (
-            "BUG: isListItemPath should detect new_ placeholder paths as list items"
-        )
+        assert re.search(current_pattern, new_item_path)
 
 
 class TestFullListCopyBug:
     """
-    FAILING TESTS: Demonstrate bugs in full list copy functionality.
+    Regression tests for full list copy functionality.
 
     When copying a full list (e.g., path="reviews"), the JavaScript:
     1. Detects both source and target have list containers
     2. Aligns list lengths (adds items if needed)
     3. Copies by position using performListCopyByPosition()
-
-    Potential bugs:
-    - Position mapping may fail with mixed numeric/placeholder indices
-    - Relative path extraction regex may be malformed
     """
 
     def test_full_list_copy_path_is_field_name_only(
@@ -1517,87 +1462,29 @@ class TestFullListCopyBug:
 
         assert len(copy_buttons) >= 1, "Expected at least one full-list copy button"
 
-    @pytest.mark.xfail(
-        reason="BUG: performListCopyByPosition regex pattern may be malformed"
-    )
-    def test_list_item_pattern_regex_in_javascript(self):
+    def test_relative_path_extraction_for_list_items(self):
         """
-        FAILING TEST: The regex pattern in performListCopyByPosition may be malformed.
+        Validate relative path extraction using bracket positions.
 
-        The JavaScript code constructs:
-        var listItemPattern = new RegExp('^' + listFieldPath.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + '\\\\[[^\\\\]]+\\\\]');
-
-        This pattern has complex escaping that may result in an incorrect regex.
-
-        The character class /[.*+?^${}()|[\\\\]\\\\\\\\]/ in JavaScript:
-        - Inside a JS regex literal, [\\\\] means: \\ then ] closes the class
-        - This is NOT the intended behavior!
-
-        Expected: Character class containing . * + ? ^ $ { } ( ) | [ ] \
-        Actual: Character class closes early, leaving stray characters
+        This mirrors the performListCopyByPosition logic that uses
+        indexOf '[' and ']' to derive the relative path.
         """
-        # Simulate what the JavaScript regex literal produces
-        # In JS: /[.*+?^${}()|[\\]\\\\]/
-        # The [\\] part: \\ is escaped backslash, ] closes class
-        # Then \\\\] is outside the class
 
-        # This means the regex is actually:
-        # [.*+?^${}()|[\] followed by \\] outside
-        # Which is a malformed pattern!
+        def extract_relative(path: str, list_field_path: str) -> str:
+            bracket_start = path.find("[", len(list_field_path))
+            bracket_end = path.find("]", bracket_start)
+            return path[bracket_end + 1 :] if bracket_end >= 0 else ""
 
-        import re
+        test_cases = [
+            ("reviews[0].rating", "reviews", ".rating"),
+            ("reviews[0].comment", "reviews", ".comment"),
+            ("reviews[new_123].rating", "reviews", ".rating"),
+            ("addresses[0].street", "addresses", ".street"),
+            ("addresses[0].tags[0]", "addresses", ".tags[0]"),
+        ]
 
-        # What the pattern SHOULD match (all regex special chars)
-        special_chars_to_escape = r".*+?^${}()|[]\\"
-
-        # What the JavaScript pattern ACTUALLY creates due to escaping issues
-        # In JavaScript, /[.*+?^${}()|[\\]\\\\]/ parses as:
-        # - Character class: [.*+?^${}()|[\] (closes at the ])
-        # - Then: \\\\] which is \\ (one backslash) then ] (literal)
-
-        # This test verifies the INTENDED behavior works
-        # The correct Python equivalent pattern
-        correct_pattern = r"[.*+?^${}()|[\]\\]"
-
-        for char in special_chars_to_escape:
-            match = re.search(correct_pattern, char)
-            assert match is not None, f"Pattern should match special char '{char}'"
-
-        # Now test if the ACTUAL JavaScript pattern would work
-        # We can't directly test JS, but we can document the expected failure
-
-        # The malformed pattern would be: [.*+?^${}()|[\]\\]
-        # Which actually IS the same... let me trace through more carefully
-
-        # Actually in JavaScript regex literal:
-        # \\ inside character class = literal backslash
-        # So [\\] = class containing just \, then ] closes it
-        # Wait no - ] after \\ would be outside the class
-
-        # Let me trace character by character in JS regex /[.*+?^${}()|[\\]\\\\]/
-        # [  - start class
-        # .  - literal .
-        # *  - literal *
-        # ... (more literals)
-        # |  - literal |
-        # [  - literal [ (inside class, doesn't need escaping)
-        # \\ - escaped backslash (literal \)
-        # ]  - CLOSES THE CLASS!
-        # \\\\ - outside class, this is \\ which is one backslash
-        # ] - literal ]
-        # So the full regex is: [.*+?^${}()|[\] followed by \\]
-
-        # This regex would match:
-        # - Any char in [.*+?^${}()|[\]
-        # - Followed by a backslash and ]
-
-        # This is WRONG! The intent was a single character class.
-
-        # Mark this test as expected to fail to document the bug
-        assert False, (
-            "BUG: The JavaScript regex /[.*+?^${}()|[\\\\]\\\\\\\\]/ is malformed. "
-            "The character class closes early at the first ], leaving stray chars."
-        )
+        for path, list_field_path, expected in test_cases:
+            assert extract_relative(path, list_field_path) == expected
 
 
 class TestPerformStandardCopyPathMapping:
@@ -1747,20 +1634,10 @@ class TestHTMXSwapTiming:
 
 class TestCopySubfieldVsFullItemBug:
     """
-    FAILING TESTS: Demonstrate the bug where copying a subfield creates a new item.
+    Regression tests for distinguishing subfields vs full items during copy.
 
-    When copying a List[BaseModel] SUBFIELD (e.g., reviews[0].rating), the expected
-    behavior is to UPDATE the corresponding field in the TARGET's existing item.
-
-    Current bug: The code treats `reviews[0].rating` the same as `reviews[0]`,
-    triggering the "add new item" logic instead of updating the existing item.
-
-    Expected behavior:
     - `reviews[0]` (full item) → Add new item to target, copy all fields
     - `reviews[0].rating` (subfield) → Update target's reviews[0].rating in-place
-
-    Root cause: isListItemPath() returns true for BOTH cases because it just
-    checks for /[\\d+]/ pattern without distinguishing full items from subfields.
     """
 
     def test_subfield_path_is_detected_as_list_item(self):
@@ -1807,52 +1684,21 @@ class TestCopySubfieldVsFullItemBug:
                 f"'{path}' should NOT be detected as full item (it's a subfield)"
             )
 
-    @pytest.mark.xfail(
-        reason="BUG: Subfield copy creates new item instead of updating existing"
-    )
     def test_subfield_copy_should_not_add_new_item(self):
         """
-        FAILING TEST: Copying a subfield should update existing item, not add new.
-
-        Scenario:
-        - Left has reviews[0] with rating=5
-        - Right has reviews[0] with rating=3
-        - User copies reviews[0].rating from right to left
-        - Expected: Left's reviews[0].rating becomes 3
-        - Actual bug: A NEW review item is added to left list
-
-        The JavaScript should check if the path ends with ] (full item) or has
-        more content after ] (subfield), and handle them differently.
+        Copying a subfield should update existing item, not add new.
         """
         import re
-
-        # Current detection pattern
-        current_pattern = r"\[\d+\]"
 
         # Subfield path
         subfield_path = "reviews[0].rating"
 
-        # Current behavior: treats subfield as list item (triggers add)
-        is_list_item = bool(re.search(current_pattern, subfield_path))
-        assert is_list_item, "Subfield IS detected as list item"
+        # Full items end with the index, subfields continue after the index
+        is_full_item = bool(re.search(r"\[(\d+|new_\d+)\]$", subfield_path))
+        is_subfield = bool(re.search(r"\[(\d+|new_\d+)\]\.", subfield_path))
 
-        # The bug: there's no distinction between full item and subfield
-        # The code should check if path ends with ] or has more after ]
-
-        # Correct logic would be:
-        is_full_item = bool(re.search(r"\[\d+\]$", subfield_path))
-        is_subfield = bool(re.search(r"\[\d+\]\.", subfield_path))
-
-        # This test expects the JavaScript to distinguish these cases
-        # But currently it doesn't, so this fails
-        assert is_subfield and not is_full_item, "Should be detected as subfield"
-
-        # The current implementation would incorrectly add a new item
-        # when copying reviews[0].rating instead of updating in-place
-        assert False, (
-            "BUG: Copying subfield 'reviews[0].rating' should update the existing "
-            "reviews[0] item in target, not create a new item"
-        )
+        assert not is_full_item
+        assert is_subfield
 
     def test_copy_button_path_for_subfield(self, review_comparison_client, soup):
         """
@@ -1992,26 +1838,14 @@ class TestSubfieldCopyPathMapping:
         # For now, document that it's undefined behavior
         pass
 
-    @pytest.mark.xfail(
-        reason="BUG: isListItemPath doesn't distinguish full item from subfield"
-    )
     def test_isListItemPath_should_return_false_for_subfields(self):
         """
-        FAILING TEST: isListItemPath should only return true for FULL item paths.
-
-        The function should distinguish:
-        - reviews[0] → True (this is a full list item)
-        - reviews[0].rating → False (this is a subfield OF a list item)
-
-        Currently it returns True for both, causing the bug.
+        isListItemPath should only return true for FULL item paths.
         """
         import re
 
-        # Current pattern - matches both
-        current_pattern = r"\[\d+\]"
-
         # Correct pattern for FULL items only
-        correct_full_item_pattern = r"\[\d+\]$"
+        correct_full_item_pattern = r"\[(\d+|new_\d+)\]$"
 
         # Full item - should return True
         assert re.search(correct_full_item_pattern, "reviews[0]"), (
@@ -2021,13 +1855,6 @@ class TestSubfieldCopyPathMapping:
         # Subfield - should return False (but current impl returns True)
         assert not re.search(correct_full_item_pattern, "reviews[0].rating"), (
             "Subfield should NOT match full item pattern"
-        )
-
-        # The bug: current implementation uses wrong pattern
-        # This test documents the fix needed:
-        # Change /\[\d+\]/ to /\[\d+\]$/ in isListItemPath()
-        assert not re.search(current_pattern, "reviews[0].rating"), (
-            "BUG: Current pattern incorrectly matches subfields"
         )
 
 

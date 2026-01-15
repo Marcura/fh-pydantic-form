@@ -3,17 +3,15 @@
  *
  * These tests validate the JavaScript helper functions used in ComparisonForm
  * for list item path detection and manipulation.
- *
- * Several tests are marked with .failing() to document known bugs that need fixing.
  */
 
 const {
-  // Current (buggy) implementations
+  // Core implementations
   isListItemPath,
   extractListFieldPath,
   extractListIndex,
 
-  // Fixed implementations
+  // Aliases for backward compatibility
   isListItemPathFixed,
   isListSubfieldPath,
   extractListFieldPathFixed,
@@ -25,53 +23,16 @@ const {
   remapPathIndex,
 } = require('../src/comparison-helpers');
 
-describe('isListItemPath (current buggy implementation)', () => {
-  describe('should match numeric indices', () => {
-    test.each([
-      ['reviews[0]', true],
-      ['reviews[1]', true],
-      ['reviews[99]', true],
-      ['addresses[0].street', true],
-      ['items[5].nested.deep', true],
-    ])('isListItemPath("%s") should be %s', (path, expected) => {
-      expect(isListItemPath(path)).toBe(expected);
-    });
-  });
-
-  describe('should NOT match non-list paths', () => {
-    test.each([
-      ['reviews', false],
-      ['name', false],
-      ['address.street', false],
-    ])('isListItemPath("%s") should be %s', (path, expected) => {
-      expect(isListItemPath(path)).toBe(expected);
-    });
-  });
-
-  describe('BUG: fails to match placeholder indices', () => {
-    // These tests document the bug - they FAIL with current implementation
-    test.failing('should match new_ placeholder index', () => {
-      expect(isListItemPath('reviews[new_1234567890]')).toBe(true);
-    });
-
-    test.failing('should match placeholder in nested path', () => {
-      expect(isListItemPath('addresses[new_123].street')).toBe(true);
-    });
-
-    test.failing('should match placeholder with underscore', () => {
-      expect(isListItemPath('items[new_999999]')).toBe(true);
-    });
-  });
-});
-
-describe('isListItemPathFixed', () => {
+describe('isListItemPath', () => {
   describe('matches numeric indices (full items only)', () => {
     test.each([
       ['reviews[0]', true],
       ['reviews[1]', true],
-      ['items[99]', true],
-    ])('isListItemPathFixed("%s") should be %s', (path, expected) => {
-      expect(isListItemPathFixed(path)).toBe(expected);
+      ['reviews[99]', true],
+      ['addresses[0]', true],
+      ['items[5]', true],
+    ])('isListItemPath("%s") should be %s', (path, expected) => {
+      expect(isListItemPath(path)).toBe(expected);
     });
   });
 
@@ -80,8 +41,8 @@ describe('isListItemPathFixed', () => {
       ['reviews[new_1234567890]', true],
       ['addresses[new_123]', true],
       ['items[new_0]', true],
-    ])('isListItemPathFixed("%s") should be %s', (path, expected) => {
-      expect(isListItemPathFixed(path)).toBe(expected);
+    ])('isListItemPath("%s") should be %s', (path, expected) => {
+      expect(isListItemPath(path)).toBe(expected);
     });
   });
 
@@ -91,8 +52,8 @@ describe('isListItemPathFixed', () => {
       ['reviews[new_123].comment', false],
       ['addresses[0].street', false],
       ['items[5].nested.deep', false],
-    ])('isListItemPathFixed("%s") should be %s', (path, expected) => {
-      expect(isListItemPathFixed(path)).toBe(expected);
+    ])('isListItemPath("%s") should be %s', (path, expected) => {
+      expect(isListItemPath(path)).toBe(expected);
     });
   });
 
@@ -101,9 +62,21 @@ describe('isListItemPathFixed', () => {
       ['reviews', false],
       ['name', false],
       ['address.street', false],
-    ])('isListItemPathFixed("%s") should be %s', (path, expected) => {
-      expect(isListItemPathFixed(path)).toBe(expected);
+    ])('isListItemPath("%s") should be %s', (path, expected) => {
+      expect(isListItemPath(path)).toBe(expected);
     });
+  });
+
+});
+
+describe('isListItemPathFixed', () => {
+  test.each([
+    ['reviews[0]', true],
+    ['reviews[new_123]', true],
+    ['reviews[0].rating', false],
+    ['reviews', false],
+  ])('isListItemPathFixed("%s") should be %s', (path, expected) => {
+    expect(isListItemPathFixed(path)).toBe(expected);
   });
 });
 
@@ -150,7 +123,7 @@ describe('isListSubfieldPath', () => {
   });
 });
 
-describe('extractListFieldPath (current buggy implementation)', () => {
+describe('extractListFieldPath', () => {
   describe('works for numeric indices', () => {
     test.each([
       ['reviews[0]', 'reviews'],
@@ -162,13 +135,12 @@ describe('extractListFieldPath (current buggy implementation)', () => {
     });
   });
 
-  describe('BUG: fails for placeholder indices', () => {
-    test.failing('should extract field path from placeholder index', () => {
-      expect(extractListFieldPath('reviews[new_1234567890]')).toBe('reviews');
-    });
-
-    test.failing('should extract from nested placeholder path', () => {
-      expect(extractListFieldPath('addresses[new_123].street')).toBe('addresses');
+  describe('works for placeholder indices', () => {
+    test.each([
+      ['reviews[new_1234567890]', 'reviews'],
+      ['addresses[new_123].street', 'addresses'],
+    ])('extractListFieldPath("%s") should be "%s"', (path, expected) => {
+      expect(extractListFieldPath(path)).toBe(expected);
     });
   });
 });
@@ -196,7 +168,7 @@ describe('extractListFieldPathFixed', () => {
   });
 });
 
-describe('extractListIndex (current buggy implementation)', () => {
+describe('extractListIndex', () => {
   describe('works for numeric indices', () => {
     test.each([
       ['reviews[0]', 0],
@@ -209,12 +181,12 @@ describe('extractListIndex (current buggy implementation)', () => {
     });
   });
 
-  describe('BUG: returns null for placeholder indices', () => {
-    test.failing('should extract index from placeholder', () => {
-      // The current implementation returns null for placeholders
-      // This test documents that it SHOULD return something useful
-      const result = extractListIndex('reviews[new_1234567890]');
-      expect(result).not.toBeNull();
+  describe('works for placeholder indices', () => {
+    test.each([
+      ['reviews[new_1234567890]', 'new_1234567890'],
+      ['addresses[new_123].street', 'new_123'],
+    ])('extractListIndex("%s") should be %s', (path, expected) => {
+      expect(extractListIndex(path)).toBe(expected);
     });
   });
 });
@@ -357,56 +329,5 @@ describe('Integration: Copy behavior decision flow', () => {
     expect(isListItemPathFixed(path)).toBe(false);
     expect(isListSubfieldPath(path)).toBe(true);
     expect(getCopyBehavior(path)).toBe('update_existing_subfield');
-  });
-});
-
-describe('Bug reproduction: Current implementation failures', () => {
-  /**
-   * These tests demonstrate the exact bugs reported by users.
-   */
-
-  describe('Bug 1: Copying newly added items fails', () => {
-    test('current isListItemPath fails for new_ placeholders', () => {
-      // User adds a new item (not saved yet) with path reviews[new_123]
-      // Then tries to copy it to the other side
-      // Current implementation doesn't detect it as a list item
-      const newItemPath = 'reviews[new_1234567890]';
-
-      // Current buggy behavior
-      expect(isListItemPath(newItemPath)).toBe(false); // BUG: should be true
-
-      // Fixed behavior
-      expect(isListItemPathFixed(newItemPath)).toBe(true);
-    });
-  });
-
-  describe('Bug 2: Copying subfield creates new item instead of updating', () => {
-    test('current implementation treats subfield same as full item', () => {
-      const subfieldPath = 'reviews[0].rating';
-
-      // Current buggy behavior: both full item and subfield match the pattern
-      expect(isListItemPath('reviews[0]')).toBe(true);
-      expect(isListItemPath(subfieldPath)).toBe(true); // BUG: same result!
-
-      // The code can't distinguish between copying a full item (should add new)
-      // and copying a subfield (should update existing)
-
-      // Fixed behavior: clear distinction
-      expect(isListItemPathFixed('reviews[0]')).toBe(true);  // Full item
-      expect(isListItemPathFixed(subfieldPath)).toBe(false); // Subfield
-      expect(isListSubfieldPath(subfieldPath)).toBe(true);   // Detected as subfield
-    });
-  });
-
-  describe('Bug 3: extractListFieldPath fails for placeholders', () => {
-    test('cannot extract field path from newly added items', () => {
-      const path = 'reviews[new_1234567890]';
-
-      // Current buggy behavior: returns the full path unchanged
-      expect(extractListFieldPath(path)).toBe(path); // BUG: should be "reviews"
-
-      // Fixed behavior
-      expect(extractListFieldPathFixed(path)).toBe('reviews');
-    });
   });
 });

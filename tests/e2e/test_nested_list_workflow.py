@@ -652,9 +652,22 @@ class TestOptionalListWorkflow:
         """
         E2E test to ensure validation errors preserve the state of optional lists.
         """
-        # This test is complex and depends on the form's validation error handling
-        # For now, we'll focus on the main functionality that optional lists work correctly
-        # and skip the validation error preservation test
-        pytest.skip(
-            "Validation error preservation test is complex and depends on form error handling"
+        # Trigger a validation error by submitting an empty name (min_length=1)
+        form_data = {
+            "optional_list_form_name": "",
+            "optional_list_form_optional_tags_0": "opt_error_1",
+            "optional_list_form_optional_tags_1": "opt_error_2",
+            "optional_list_form_required_tags_0": "req_error_1",
+        }
+
+        response = optional_list_client.post(
+            "/submit", data=form_data, headers=htmx_headers
         )
+
+        assert response.status_code == 200
+        assert "Validation Error" in response.text
+
+        # The optional/required list values should still be present in the rendered form
+        assert "opt_error_1" in response.text
+        assert "opt_error_2" in response.text
+        assert "req_error_1" in response.text
