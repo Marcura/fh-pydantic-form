@@ -825,9 +825,19 @@ function performListCopyByPosition(sourceListContainer, targetListContainer, sou
 function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, copyTarget, accordionStates) {
   try {
     // Check if this is a pill field (List[Literal] or List[Enum])
-    var sourcePillContainer = document.querySelector(
+    // Must find the container that belongs to the SOURCE form (by prefix)
+    var sourcePillCandidates = document.querySelectorAll(
       '[data-field-path="' + sourcePathPrefix + '"][data-pill-field="true"]'
     );
+    var sourcePillContainer = null;
+    for (var i = 0; i < sourcePillCandidates.length; i++) {
+      var candidateId = sourcePillCandidates[i].id;
+      // Check if this container belongs to source form by checking ID starts with source prefix
+      if (candidateId && candidateId.startsWith(sourcePrefix.replace(/_$/, ''))) {
+        sourcePillContainer = sourcePillCandidates[i];
+        break;
+      }
+    }
 
     if (sourcePillContainer) {
       // Find corresponding target pill container
