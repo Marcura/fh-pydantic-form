@@ -8,14 +8,16 @@ ComparisonForm, including:
 2. Copying subfields of list items (e.g., reviews[0].rating) - updates existing item
 3. Copying entire lists (e.g., reviews)
 4. Copying simple scalar fields (e.g., name)
+5. Copying List[Literal] pill fields (e.g., categories)
 
 Use this to test that:
 - Copying a full list item creates a NEW item in the target list
 - Copying a subfield UPDATES the existing item (doesn't create new)
 - Copying works for both numeric indices (reviews[0]) and placeholder indices (reviews[new_123])
+- Copying pill fields transfers all selected pills to target
 """
 
-from typing import List
+from typing import List, Literal
 
 import fasthtml.common as fh
 import monsterui.all as mui
@@ -40,6 +42,9 @@ class Product(BaseModel):
 
     name: str = Field(default="", description="Product name")
     description: str = Field(default="", description="Product description")
+    categories: List[Literal["Electronics", "Clothing", "Home", "Sports", "Books"]] = Field(
+        default_factory=list, description="Product categories (pill selector)"
+    )
     reviews: List[Review] = Field(default_factory=list, description="Customer reviews")
     tags: List[str] = Field(default_factory=list, description="Product tags")
 
@@ -50,6 +55,7 @@ class Product(BaseModel):
 LEFT_DATA = Product(
     name="Left Product",
     description="This is the reference product on the left side.",
+    categories=["Electronics", "Home"],
     reviews=[
         Review(rating=5, comment="Excellent quality!"),
         Review(rating=4, comment="Good value for money."),
@@ -61,6 +67,7 @@ LEFT_DATA = Product(
 RIGHT_DATA = Product(
     name="Right Product",
     description="This is the generated product on the right side.",
+    categories=["Clothing", "Sports", "Books"],
     reviews=[
         Review(rating=3, comment="Average product."),
     ],
@@ -146,6 +153,11 @@ def home():
                             "Add a new item (creates new_TIMESTAMP placeholder), then copy it",
                             cls="mb-2",
                         ),
+                        fh.Li(
+                            fh.Strong("Copy Pill Field: "),
+                            "Click copy on 'categories' - should copy all selected pills to target",
+                            cls="mb-2",
+                        ),
                         cls="list-disc ml-6",
                     ),
                 ),
@@ -224,6 +236,7 @@ if __name__ == "__main__":
     print("  - Copying full list items (adds new item)")
     print("  - Copying subfields (updates existing item)")
     print("  - Copying newly added items (new_TIMESTAMP placeholders)")
+    print("  - Copying List[Literal] pill fields (categories)")
     print("\nOpen http://localhost:5001 in your browser")
     print("=" * 60 + "\n")
 
