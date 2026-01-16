@@ -27,8 +27,8 @@ from fh_pydantic_form.field_renderers import (
     NumberFieldRenderer,
     StringFieldRenderer,
     TimeFieldRenderer,
-    list_choice_js,
-    list_literal_js,
+    list_choice_js as list_choice_js,  # Deprecated, kept for backward compatibility
+    list_literal_js as list_literal_js,  # Deprecated, kept for backward compatibility
 )
 from fh_pydantic_form.form_renderer import PydanticForm, list_manipulation_js
 from fh_pydantic_form.registry import FieldRendererRegistry
@@ -169,8 +169,6 @@ __all__ = [
     "PydanticForm",
     "FieldRendererRegistry",
     "list_manipulation_js",
-    "list_choice_js",
-    "list_literal_js",
     "SpacingTheme",
     "SpacingValue",
     "spacing",
@@ -184,4 +182,6 @@ __all__ = [
     "simple_diff_metrics",
     "ListChoiceFieldRenderer",
     "ListLiteralFieldRenderer",
+    # Note: list_choice_js and list_literal_js are deprecated (return empty script)
+    # and are not exported but remain importable for backward compatibility
 ]

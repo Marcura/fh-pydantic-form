@@ -42,46 +42,57 @@ ModelType = TypeVar("ModelType", bound=BaseModel)
 def comparison_form_js():
     """JavaScript for comparison: sync accordions and handle JS-only copy operations."""
     return fh.Script(r"""
+// ==== Regex patterns for list path detection ====
+// These patterns match both numeric indices [0] and placeholder indices [new_123]
+var FHPF_RE = {
+  // Full list item: ends with [index] (no trailing content)
+  FULL_ITEM: /\[(\d+|new_\d+)\]$/,
+  // Subfield: has content after [index] (e.g., [0].field)
+  SUBFIELD: /\[(\d+|new_\d+)\]\./,
+  // Any index: matches [index] anywhere in path
+  ANY_INDEX: /\[(\d+|new_\d+)\]/,
+  // Strip index and everything after
+  STRIP_INDEX_SUFFIX: /\[(\d+|new_\d+)\].*$/,
+  // Pure numeric string
+  NUMERIC: /^\d+$/
+};
+
 // Helper functions for list item path detection
-// FIXED: Now matches both numeric indices AND new_ placeholder indices
-// FIXED: Only matches FULL list items (path ends with ]), not subfields
 function isListItemPath(pathPrefix) {
   // Check if path is a full list item: ends with [index] where index is numeric or new_*
   // e.g., "reviews[0]" or "reviews[new_123]" -> true
   // e.g., "reviews[0].rating" or "reviews" -> false
-  return /\[(\d+|new_\d+)\]$/.test(pathPrefix);
+  return FHPF_RE.FULL_ITEM.test(pathPrefix);
 }
 
-// NEW: Check if path is a subfield of a list item (has content after [index])
 function isListSubfieldPath(pathPrefix) {
+  // Check if path is a subfield of a list item (has content after [index])
   // e.g., "reviews[0].rating" or "reviews[new_123].comment" -> true
   // e.g., "reviews[0]" or "reviews" -> false
-  return /\[(\d+|new_\d+)\]\./.test(pathPrefix);
+  return FHPF_RE.SUBFIELD.test(pathPrefix);
 }
 
-// FIXED: Check if path contains ANY list index (for general list detection)
 function hasListIndex(pathPrefix) {
-  return /\[(\d+|new_\d+)\]/.test(pathPrefix);
+  // Check if path contains ANY list index (for general list detection)
+  return FHPF_RE.ANY_INDEX.test(pathPrefix);
 }
 
 function extractListFieldPath(pathPrefix) {
   // Extract the list field path without the index
   // e.g., "addresses[0]" -> "addresses"
   // e.g., "addresses[new_123].street" -> "addresses"
-  // FIXED: Now handles new_ placeholder indices
-  return pathPrefix.replace(/\[(\d+|new_\d+)\].*$/, '');
+  return pathPrefix.replace(FHPF_RE.STRIP_INDEX_SUFFIX, '');
 }
 
 function extractListIndex(pathPrefix) {
   // Extract the index from path
   // e.g., "addresses[0].street" -> 0
   // e.g., "addresses[new_123]" -> "new_123"
-  // FIXED: Now handles new_ placeholder indices
-  var match = pathPrefix.match(/\[(\d+|new_\d+)\]/);
+  var match = pathPrefix.match(FHPF_RE.ANY_INDEX);
   if (!match) return null;
   var indexStr = match[1];
   // Return numeric index as number, placeholder as string
-  return /^\d+$/.test(indexStr) ? parseInt(indexStr) : indexStr;
+  return FHPF_RE.NUMERIC.test(indexStr) ? parseInt(indexStr) : indexStr;
 }
 
 function fhpfFormNameFromPrefix(prefix) {
@@ -428,11 +439,11 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget, trigger
               var tgtSelect = targetInput.querySelector('select');
               if (srcSelect && tgtSelect) {
                 var srcVal = srcSelect.value;
-                for (var k = 0; k < tgtSelect.options.length; k++) {
+                for (let k = 0; k < tgtSelect.options.length; k++) {
                   tgtSelect.options[k].removeAttribute('selected');
                   tgtSelect.options[k].selected = false;
                 }
-                for (var k = 0; k < tgtSelect.options.length; k++) {
+                for (let k = 0; k < tgtSelect.options.length; k++) {
                   if (tgtSelect.options[k].value === srcVal) {
                     tgtSelect.options[k].setAttribute('selected', 'selected');
                     tgtSelect.options[k].selected = true;
@@ -954,13 +965,13 @@ function performListCopyByPosition(sourceListContainer, targetListContainer, sou
             var sourceValue = sourceNativeSelect.value;
 
             // Clear all selected attributes
-            for (var k = 0; k < targetNativeSelect.options.length; k++) {
+            for (let k = 0; k < targetNativeSelect.options.length; k++) {
               targetNativeSelect.options[k].removeAttribute('selected');
               targetNativeSelect.options[k].selected = false;
             }
 
             // Find and set the matching option
-            for (var k = 0; k < targetNativeSelect.options.length; k++) {
+            for (let k = 0; k < targetNativeSelect.options.length; k++) {
               if (targetNativeSelect.options[k].value === sourceValue) {
                 targetNativeSelect.options[k].setAttribute('selected', 'selected');
                 targetNativeSelect.options[k].selected = true;
@@ -1109,117 +1120,8 @@ function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, c
       }
 
       if (targetPillContainer) {
-        // Get source selected values from pills
-        var sourcePillsContainer = sourcePillContainer.querySelector('[id$="_pills"]');
-        var sourceValues = [];
-        if (sourcePillsContainer) {
-          var sourcePills = sourcePillsContainer.querySelectorAll('[data-value]');
-          sourcePills.forEach(function(pill) {
-            var hiddenInput = pill.querySelector('input[type="hidden"]');
-            if (hiddenInput) {
-              sourceValues.push({
-                value: pill.dataset.value,
-                display: pill.querySelector('span.mr-1') ? pill.querySelector('span.mr-1').textContent : pill.dataset.value
-              });
-            }
-          });
-        }
-
-        // Clear target pills
-        var targetPillsContainer = targetPillContainer.querySelector('[id$="_pills"]');
-        var targetDropdown = targetPillContainer.querySelector('select');
-        var targetFieldName = targetPillContainer.dataset.fieldName;
-        var targetContainerId = targetPillContainer.id;
-
-        if (targetPillsContainer) {
-          targetPillsContainer.innerHTML = '';
-        }
-
-        // Recreate pills in target with source values
-        sourceValues.forEach(function(item, idx) {
-          var pillId = targetFieldName + '_' + idx + '_pill';
-          var inputName = targetFieldName + '_' + idx;
-
-          // Create hidden input
-          var input = document.createElement('input');
-          input.type = 'hidden';
-          input.name = inputName;
-          input.value = item.value;
-
-          // Create label span
-          var label = document.createElement('span');
-          label.className = 'mr-1';
-          label.textContent = item.display;
-
-          // Create remove button
-          var removeBtn = document.createElement('button');
-          removeBtn.type = 'button';
-          removeBtn.className = 'ml-1 text-xs hover:text-red-600 font-bold cursor-pointer';
-          removeBtn.textContent = '×';
-          removeBtn.onclick = function() {
-            window.fhpfRemoveChoicePill(pillId, item.value, targetContainerId);
-          };
-
-          // Create pill span
-          var pill = document.createElement('span');
-          pill.id = pillId;
-          pill.dataset.value = item.value;
-          pill.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800';
-          pill.appendChild(input);
-          pill.appendChild(label);
-          pill.appendChild(removeBtn);
-
-          targetPillsContainer.appendChild(pill);
-        });
-
-        // Rebuild the target dropdown to show remaining options
-        if (targetDropdown && typeof fhpfRebuildChoiceDropdown === 'function') {
-          // Use internal rebuild function if available
-          fhpfRebuildChoiceDropdown(targetContainerId);
-        } else if (targetDropdown) {
-          // Manual dropdown rebuild
-          var allChoicesJson = targetPillContainer.dataset.allChoices || '[]';
-          var allChoices = [];
-          try {
-            allChoices = JSON.parse(allChoicesJson);
-          } catch (e) {
-            console.error('Failed to parse pill choices:', e);
-          }
-
-          var selectedValues = new Set(sourceValues.map(function(v) { return v.value; }));
-          var remaining = allChoices.filter(function(choice) {
-            return !selectedValues.has(choice.value);
-          });
-
-          // Rebuild dropdown options
-          targetDropdown.innerHTML = '';
-          var placeholder = document.createElement('option');
-          placeholder.value = '';
-          placeholder.textContent = 'Add...';
-          placeholder.selected = true;
-          placeholder.disabled = true;
-          targetDropdown.appendChild(placeholder);
-
-          remaining.forEach(function(choice) {
-            var opt = document.createElement('option');
-            opt.value = choice.value;
-            opt.textContent = choice.display;
-            opt.dataset.display = choice.display;
-            targetDropdown.appendChild(opt);
-          });
-
-          targetDropdown.style.display = remaining.length > 0 ? 'inline-block' : 'none';
-        }
-
-        // Highlight the target container briefly
-        targetPillContainer.style.transition = 'background-color 0.3s';
-        targetPillContainer.style.backgroundColor = '#dbeafe';
-        setTimeout(function() {
-          targetPillContainer.style.backgroundColor = '';
-          setTimeout(function() {
-            targetPillContainer.style.transition = '';
-          }, 300);
-        }, 1500);
+        // Use the shared copyPillContainer helper
+        copyPillContainer(sourcePillContainer, targetPillContainer, true);
 
         // Restore accordion states
         setTimeout(function() {
@@ -1330,17 +1232,17 @@ function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, c
           var sourceValue = sourceNativeSelect.value;
 
           // First, clear all selected attributes
-          for (var i = 0; i < targetNativeSelect.options.length; i++) {
-            targetNativeSelect.options[i].removeAttribute('selected');
-            targetNativeSelect.options[i].selected = false;
+          for (let optIdx = 0; optIdx < targetNativeSelect.options.length; optIdx++) {
+            targetNativeSelect.options[optIdx].removeAttribute('selected');
+            targetNativeSelect.options[optIdx].selected = false;
           }
 
           // Find and set the matching option
-          for (var i = 0; i < targetNativeSelect.options.length; i++) {
-            if (targetNativeSelect.options[i].value === sourceValue) {
-              targetNativeSelect.options[i].setAttribute('selected', 'selected');
-              targetNativeSelect.options[i].selected = true;
-              targetNativeSelect.selectedIndex = i;
+          for (let optIdx = 0; optIdx < targetNativeSelect.options.length; optIdx++) {
+            if (targetNativeSelect.options[optIdx].value === sourceValue) {
+              targetNativeSelect.options[optIdx].setAttribute('selected', 'selected');
+              targetNativeSelect.options[optIdx].selected = true;
+              targetNativeSelect.selectedIndex = optIdx;
               targetNativeSelect.value = sourceValue;
               break;
             }

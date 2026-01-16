@@ -9,6 +9,7 @@ from typing import (
     List,
     Literal,
     Optional,
+    Type,
     get_args,
     get_origin,
 )
@@ -1143,7 +1144,7 @@ class ListChoiceFieldRenderer(BaseFieldRenderer):
         - A dropdown with only "green" available to add
     """
 
-    def _extract_choices(self) -> tuple[List[tuple[str, str]], type | None]:
+    def _extract_choices(self) -> tuple[List[tuple[str, str]], Type[Enum] | None]:
         """Extract (display_text, form_value) pairs from the item type.
 
         Returns:
@@ -1181,7 +1182,7 @@ class ListChoiceFieldRenderer(BaseFieldRenderer):
         return [], None
 
     def _normalize_selected_values(
-        self, enum_class: type | None
+        self, enum_class: Type[Enum] | None
     ) -> List[tuple[str, str]]:
         """Normalize selected values to (display_text, form_value) pairs.
 

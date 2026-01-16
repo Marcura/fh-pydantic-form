@@ -1078,7 +1078,8 @@ class PydanticForm(Generic[ModelType]):
             try:
                 form_data = await req.form()
                 form_name_override = form_data.get("fhpf_form_name")
-            except Exception:
+            except Exception as e:
+                logger.debug("Could not parse form data for form_name_override: %s", e)
                 form_name_override = None
 
             if not form_name_override:
