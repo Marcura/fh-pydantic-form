@@ -31,4 +31,8 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
-
+      - id: js-syntax
+        name: js syntax check
+        entry: uv run python scripts/check_js_syntax.py
+        language: system
+        files: \.(js|mjs|cjs)$
