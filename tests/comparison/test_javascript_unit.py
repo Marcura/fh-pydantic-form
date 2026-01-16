@@ -168,9 +168,7 @@ class TestJavaScriptBugDocumentation:
 
         xfailed = test_results.get("xfailed", 0)
 
-        assert xfailed == 0, (
-            f"Expected no xfailed JavaScript tests, got {xfailed}"
-        )
+        assert xfailed == 0, f"Expected no xfailed JavaScript tests, got {xfailed}"
 
     def test_fixed_functions_exist(self, node_available):
         """

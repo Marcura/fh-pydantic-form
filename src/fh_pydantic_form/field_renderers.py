@@ -1305,7 +1305,7 @@ class ListChoiceFieldRenderer(BaseFieldRenderer):
         )
 
         # Build remove button attrs
-        remove_btn_attrs = {
+        remove_btn_attrs: dict[str, str | bool] = {
             "type": "button",
             "cls": "ml-1 text-xs hover:text-red-600 font-bold cursor-pointer",
             "uk-tooltip": f"Remove '{display_text}'",
@@ -1315,9 +1315,9 @@ class ListChoiceFieldRenderer(BaseFieldRenderer):
         if not self.disabled:
             # Escape single quotes in values for JS
             escaped_form_value = form_value.replace("'", "\\'")
-            remove_btn_attrs[
-                "onclick"
-            ] = f"window.fhpfRemoveChoicePill('{pill_id}', '{escaped_form_value}', '{container_id}')"
+            remove_btn_attrs["onclick"] = (
+                f"window.fhpfRemoveChoicePill('{pill_id}', '{escaped_form_value}', '{container_id}')"
+            )
         else:
             remove_btn_attrs["disabled"] = True
             remove_btn_attrs["cls"] = "ml-1 text-xs text-gray-400 cursor-not-allowed"
@@ -1357,23 +1357,27 @@ class ListChoiceFieldRenderer(BaseFieldRenderer):
             )
 
         # Build select attrs
-        select_attrs = {
+        base_style = (
+            "display: inline-block; height: 24px; padding: 0 6px; width: auto; "
+            "min-width: 80px;"
+        )
+        select_attrs: dict[str, str | bool] = {
             "id": dropdown_id,
             "cls": "uk-select uk-form-small text-xs",
-            "style": "display: inline-block; height: 24px; padding: 0 6px; width: auto; min-width: 80px;",
+            "style": base_style,
         }
 
         # Only add onchange handler if not disabled
         if not self.disabled:
-            select_attrs[
-                "onchange"
-            ] = f"window.fhpfAddChoicePill('{self.field_name}', this, '{container_id}')"
+            select_attrs["onchange"] = (
+                f"window.fhpfAddChoicePill('{self.field_name}', this, '{container_id}')"
+            )
         else:
             select_attrs["disabled"] = True
 
         # Hide dropdown if no remaining values
         if not remaining_choices:
-            select_attrs["style"] += " display: none;"
+            select_attrs["style"] = f"{base_style} display: none;"
 
         return fh.Select(*options, **select_attrs)
 

@@ -42,8 +42,8 @@ class Product(BaseModel):
 
     name: str = Field(default="", description="Product name")
     description: str = Field(default="", description="Product description")
-    categories: List[Literal["Electronics", "Clothing", "Home", "Sports", "Books"]] = Field(
-        default_factory=list, description="Product categories (pill selector)"
+    categories: List[Literal["Electronics", "Clothing", "Home", "Sports", "Books"]] = (
+        Field(default_factory=list, description="Product categories (pill selector)")
     )
     reviews: List[Review] = Field(default_factory=list, description="Customer reviews")
     tags: List[str] = Field(default_factory=list, description="Product tags")

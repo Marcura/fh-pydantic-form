@@ -1574,7 +1574,9 @@ def optional_list_client(optional_list_test_model):
         try:
             parsed_data = form_renderer.parse(form_dict)
         except Exception:
-            parsed_data = form_renderer.values_dict.copy() if form_renderer.values_dict else {}
+            parsed_data = (
+                form_renderer.values_dict.copy() if form_renderer.values_dict else {}
+            )
 
         try:
             validated = form_renderer.model_class.model_validate(parsed_data)

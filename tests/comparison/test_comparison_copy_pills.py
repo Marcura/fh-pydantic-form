@@ -93,9 +93,7 @@ def nested_pill_comparison_dom(soup):
         groups=[CategoryGroup(categories=["B", "C"])],
     )
 
-    left_form = PydanticForm(
-        "left_form", NestedPillProduct, initial_values=left_values
-    )
+    left_form = PydanticForm("left_form", NestedPillProduct, initial_values=left_values)
     right_form = PydanticForm(
         "right_form", NestedPillProduct, initial_values=right_values
     )
@@ -144,7 +142,9 @@ class TestPillFieldCopyMarkup:
             values = {item["value"] for item in parsed}
             assert values == {"Electronics", "Clothing", "Home"}
 
-    def test_nested_pill_containers_include_item_prefix(self, nested_pill_comparison_dom):
+    def test_nested_pill_containers_include_item_prefix(
+        self, nested_pill_comparison_dom
+    ):
         containers = nested_pill_comparison_dom.find_all(
             attrs={"data-pill-field": "true", "data-field-path": "groups[0].categories"}
         )

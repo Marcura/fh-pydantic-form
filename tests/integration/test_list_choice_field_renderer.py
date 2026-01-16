@@ -10,7 +10,10 @@ from typing import List, Literal, Optional
 import pytest
 from pydantic.fields import FieldInfo
 
-from fh_pydantic_form.field_renderers import ListChoiceFieldRenderer, ListLiteralFieldRenderer
+from fh_pydantic_form.field_renderers import (
+    ListChoiceFieldRenderer,
+    ListLiteralFieldRenderer,
+)
 from tests import to_html
 
 
@@ -363,7 +366,11 @@ class TestListChoiceFieldRendererCommon:
         html = to_html(renderer.render_input())
 
         # Count hidden inputs (one per selected pill)
-        hidden_input_count = html.count('type="hidden"') if 'type="hidden"' in html else html.count("'type': 'hidden'")
+        hidden_input_count = (
+            html.count('type="hidden"')
+            if 'type="hidden"' in html
+            else html.count("'type': 'hidden'")
+        )
         assert hidden_input_count == expected_pills
 
     @pytest.mark.parametrize(
