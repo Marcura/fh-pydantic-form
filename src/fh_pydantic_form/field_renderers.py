@@ -8,6 +8,7 @@ from typing import (
     Any,
     List,
     Literal,
+    NamedTuple,
     Optional,
     Type,
     get_args,
@@ -25,7 +26,14 @@ from fh_pydantic_form.color_utils import (
     get_metric_colors,
     robust_color_to_rgba,
 )
-from fh_pydantic_form.constants import _UNSET
+from fh_pydantic_form.constants import (
+    ATTR_ALL_CHOICES,
+    ATTR_FIELD_NAME,
+    ATTR_FIELD_PATH,
+    ATTR_INPUT_PREFIX,
+    ATTR_PILL_FIELD,
+    _UNSET,
+)
 from fh_pydantic_form.defaults import default_dict_for_model, default_for_annotation
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import (
@@ -726,7 +734,7 @@ class StringFieldRenderer(BaseFieldRenderer):
             "cls": " ".join(input_cls_parts),
             "rows": rows,
             "style": "resize: vertical; min-height: 2.5rem; padding: 0.5rem; line-height: 1.25;",
-            "data-field-path": self._build_path_string(),
+            ATTR_FIELD_PATH: self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -784,7 +792,7 @@ class NumberFieldRenderer(BaseFieldRenderer):
             if self.field_info.annotation is float
             or get_origin(self.field_info.annotation) is float
             else "1",
-            "data-field-path": self._build_path_string(),
+            ATTR_FIELD_PATH: self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -845,7 +853,7 @@ class DecimalFieldRenderer(BaseFieldRenderer):
             "required": is_field_required,
             "cls": " ".join(input_cls_parts),
             "step": "any",  # Allow arbitrary decimal precision
-            "data-field-path": self._build_path_string(),
+            ATTR_FIELD_PATH: self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -873,7 +881,7 @@ class BooleanFieldRenderer(BaseFieldRenderer):
             "id": self.field_name,
             "name": self.field_name,
             "checked": bool(self.value),
-            "data-field-path": self._build_path_string(),
+            ATTR_FIELD_PATH: self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -972,7 +980,7 @@ class DateFieldRenderer(BaseFieldRenderer):
             "placeholder": placeholder_text,
             "required": is_field_required,
             "cls": " ".join(input_cls_parts),
-            "data-field-path": self._build_path_string(),
+            ATTR_FIELD_PATH: self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -1037,7 +1045,7 @@ class TimeFieldRenderer(BaseFieldRenderer):
             "placeholder": placeholder_text,
             "required": is_field_required,
             "cls": " ".join(input_cls_parts),
-            "data-field-path": self._build_path_string(),
+            ATTR_FIELD_PATH: self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -1115,7 +1123,7 @@ class LiteralFieldRenderer(BaseFieldRenderer):
             "required": is_field_required,
             "placeholder": placeholder_text,
             "cls": " ".join(select_cls_parts),
-            "data-field-path": self._build_path_string(),
+            ATTR_FIELD_PATH: self._build_path_string(),
         }
 
         if self.disabled:
@@ -1123,6 +1131,13 @@ class LiteralFieldRenderer(BaseFieldRenderer):
 
         # Render the select element with options and attributes
         return mui.Select(*options, **select_attrs)
+
+
+class ChoiceItem(NamedTuple):
+    """A choice item with display text and form submission value."""
+
+    display_text: str
+    form_value: str
 
 
 class ListChoiceFieldRenderer(BaseFieldRenderer):
@@ -1144,12 +1159,11 @@ class ListChoiceFieldRenderer(BaseFieldRenderer):
         - A dropdown with only "green" available to add
     """
 
-    def _extract_choices(self) -> tuple[List[tuple[str, str]], Type[Enum] | None]:
-        """Extract (display_text, form_value) pairs from the item type.
+    def _extract_choices(self) -> tuple[List[ChoiceItem], Type[Enum] | None]:
+        """Extract ChoiceItem instances from the item type.
 
         Returns:
             Tuple of (choices list, enum_class or None)
-            Each choice is (display_text, form_value)
         """
         annotation = getattr(self.field_info, "annotation", None)
         base_annotation = _get_underlying_type_if_optional(annotation)
@@ -1168,7 +1182,7 @@ class ListChoiceFieldRenderer(BaseFieldRenderer):
         if get_origin(item_type_base) is Literal:
             literal_values = get_args(item_type_base)
             # For Literal, display and form value are the same
-            return [(str(v), str(v)) for v in literal_values], None
+            return [ChoiceItem(str(v), str(v)) for v in literal_values], None
 
         # Check for Enum type
         if isinstance(item_type_base, type) and issubclass(item_type_base, Enum):
@@ -1176,24 +1190,24 @@ class ListChoiceFieldRenderer(BaseFieldRenderer):
             for member in item_type_base:
                 display_text = member.name.replace("_", " ").title()
                 form_value = str(member.value)
-                choices.append((display_text, form_value))
+                choices.append(ChoiceItem(display_text, form_value))
             return choices, item_type_base
 
         return [], None
 
     def _normalize_selected_values(
         self, enum_class: Type[Enum] | None
-    ) -> List[tuple[str, str]]:
-        """Normalize selected values to (display_text, form_value) pairs.
+    ) -> List[ChoiceItem]:
+        """Normalize selected values to ChoiceItem instances.
 
         Args:
             enum_class: The Enum class if item type is Enum, else None
 
         Returns:
-            List of (display_text, form_value) tuples for selected items
+            List of ChoiceItem instances for selected items
         """
         selected = self.value if isinstance(self.value, list) else []
-        result = []
+        result: List[ChoiceItem] = []
 
         for val in selected:
             if enum_class is not None:
@@ -1216,7 +1230,7 @@ class ListChoiceFieldRenderer(BaseFieldRenderer):
                 display_text = str(val)
                 form_value = str(val)
 
-            result.append((display_text, form_value))
+            result.append(ChoiceItem(display_text, form_value))
 
         return result
 
@@ -1232,21 +1246,25 @@ class ListChoiceFieldRenderer(BaseFieldRenderer):
             )
 
         # Normalize selected values
-        selected_pairs = self._normalize_selected_values(enum_class)
-        selected_form_values = {fv for _, fv in selected_pairs}
+        selected_items = self._normalize_selected_values(enum_class)
+        selected_form_values = {item.form_value for item in selected_items}
 
         # Build unique container ID
         container_id = f"{self.field_name}_pills_container"
 
         # Build pills for selected values
         pill_elements = []
-        for idx, (display_text, form_value) in enumerate(selected_pairs):
-            pill = self._render_pill(display_text, form_value, idx, container_id)
+        for idx, item in enumerate(selected_items):
+            pill = self._render_pill(
+                item.display_text, item.form_value, idx, container_id
+            )
             pill_elements.append(pill)
 
         # Build dropdown for remaining (unselected) values
         remaining = [
-            (dt, fv) for dt, fv in all_choices if fv not in selected_form_values
+            choice
+            for choice in all_choices
+            if choice.form_value not in selected_form_values
         ]
         dropdown = self._render_dropdown(remaining, container_id)
 
@@ -1263,17 +1281,20 @@ class ListChoiceFieldRenderer(BaseFieldRenderer):
 
         # Store all choices as JSON for JS rebuild (handles special chars safely)
         all_choices_json = json.dumps(
-            [{"display": dt, "value": fv} for dt, fv in all_choices]
+            [
+                {"display": choice.display_text, "value": choice.form_value}
+                for choice in all_choices
+            ]
         )
 
         wrapper_attrs = {
             "id": container_id,
             "cls": "flex flex-wrap gap-2 items-center",
-            "data-field-name": self.field_name,
-            "data-input-prefix": self.prefix,
-            "data-field-path": self._build_path_string(),
-            "data-all-choices": all_choices_json,
-            "data-pill-field": "true",  # Marker for copy JS to identify pill fields
+            ATTR_FIELD_NAME: self.field_name,
+            ATTR_INPUT_PREFIX: self.prefix,
+            ATTR_FIELD_PATH: self._build_path_string(),
+            ATTR_ALL_CHOICES: all_choices_json,
+            ATTR_PILL_FIELD: "true",  # Marker for copy JS to identify pill fields
         }
         if is_field_required:
             wrapper_attrs["data-required"] = "true"
@@ -1339,13 +1360,13 @@ class ListChoiceFieldRenderer(BaseFieldRenderer):
 
     def _render_dropdown(
         self,
-        remaining_choices: List[tuple[str, str]],
+        remaining_choices: List[ChoiceItem],
         container_id: str,
     ) -> FT:
         """Render dropdown for adding new values.
 
         Args:
-            remaining_choices: (display_text, form_value) pairs not yet selected
+            remaining_choices: ChoiceItem instances not yet selected
             container_id: Parent container ID for JS callbacks
 
         Returns:
@@ -1355,9 +1376,13 @@ class ListChoiceFieldRenderer(BaseFieldRenderer):
 
         # Build options - placeholder plus remaining values
         options = [fh.Option("Add...", value="", selected=True, disabled=True)]
-        for display_text, form_value in remaining_choices:
+        for choice in remaining_choices:
             options.append(
-                fh.Option(display_text, value=form_value, data_display=display_text)
+                fh.Option(
+                    choice.display_text,
+                    value=choice.form_value,
+                    data_display=choice.display_text,
+                )
             )
 
         # Build select attrs
@@ -1511,7 +1536,7 @@ class EnumFieldRenderer(BaseFieldRenderer):
                 "w-full",
                 f"{spacing('input_size', self.spacing)} {spacing('input_padding', self.spacing)}".strip(),
             ),
-            "data-field-path": self._build_path_string(),
+            ATTR_FIELD_PATH: self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled

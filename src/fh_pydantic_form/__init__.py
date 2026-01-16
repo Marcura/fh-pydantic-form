@@ -17,6 +17,7 @@ from fh_pydantic_form.defaults import (
 from fh_pydantic_form.field_renderers import (
     BaseModelFieldRenderer,
     BooleanFieldRenderer,
+    ChoiceItem,
     DateFieldRenderer,
     DecimalFieldRenderer,
     EnumFieldRenderer,
@@ -182,6 +183,7 @@ __all__ = [
     "simple_diff_metrics",
     "ListChoiceFieldRenderer",
     "ListLiteralFieldRenderer",
+    "ChoiceItem",
     # Note: list_choice_js and list_literal_js are deprecated (return empty script)
     # and are not exported but remain importable for backward compatibility
 ]

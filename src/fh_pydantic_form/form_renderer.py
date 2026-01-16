@@ -138,6 +138,12 @@ window.fhpfResetForm = function(wrapperId, basePrefix, confirmMessage) {
 
     if (!wrapper) {
         console.warn('Reset target not found:', wrapperId);
+        // Show user-facing notification using UIkit if available, otherwise alert
+        if (window.UIkit && UIkit.notification) {
+            UIkit.notification({message: 'Reset failed: form not found', status: 'warning', pos: 'top-center'});
+        } else {
+            alert('Reset failed: unable to find the form to reset.');
+        }
         return false;
     }
 
@@ -146,6 +152,12 @@ window.fhpfResetForm = function(wrapperId, basePrefix, confirmMessage) {
         : null;
     if (!initialHtml) {
         console.warn('No initial snapshot for form:', wrapper.id);
+        // Show user-facing notification - initial state was not captured
+        if (window.UIkit && UIkit.notification) {
+            UIkit.notification({message: 'Reset failed: initial form state not available', status: 'warning', pos: 'top-center'});
+        } else {
+            alert('Reset failed: the initial form state was not captured. Please refresh the page to reset.');
+        }
         return false;
     }
 

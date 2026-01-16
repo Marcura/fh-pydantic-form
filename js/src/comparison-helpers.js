@@ -67,10 +67,10 @@ function extractListFieldPathFixed(pathPrefix) {
  * @returns {string|number|null} The index value, or null if not found
  */
 function extractListIndex(pathPrefix) {
-  var match = pathPrefix.match(/\[(\d+|new_\d+)\]/);
+  const match = pathPrefix.match(/\[(\d+|new_\d+)\]/);
   if (!match) return null;
 
-  var indexStr = match[1];
+  const indexStr = match[1];
   // Return numeric for numbers, string for placeholders
   return /^\d+$/.test(indexStr) ? parseInt(indexStr) : indexStr;
 }
@@ -92,10 +92,11 @@ function extractListIndexFixed(pathPrefix) {
  * @returns {string} The relative path after the index
  */
 function extractRelativePath(fullPath, listFieldPath) {
-  // Build pattern to match listFieldPath[anything]
-  var escapedPath = listFieldPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  var pattern = new RegExp('^' + escapedPath + '\\[[^\\]]+\\]');
-  var match = fullPath.match(pattern);
+  // Escape special regex chars in listFieldPath to match it literally
+  const listFieldPathEscaped = listFieldPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Build pattern to match listFieldPath[anything] (e.g., "reviews[0]" or "reviews[new_123]")
+  const listItemPattern = new RegExp('^' + listFieldPathEscaped + '\\[[^\\]]+\\]');
+  const match = fullPath.match(listItemPattern);
 
   if (!match) return fullPath;
   return fullPath.slice(match[0].length);
