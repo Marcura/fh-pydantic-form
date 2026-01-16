@@ -71,29 +71,30 @@ console.log('Running JavaScript unit tests for comparison-helpers.js\n');
 console.log('=' .repeat(70));
 
 // ============================================================================
-// Tests for isListItemPath (current buggy implementation)
+// Tests for isListItemPath
 // ============================================================================
-console.log('\n--- isListItemPath (current buggy implementation) ---');
+console.log('\n--- isListItemPath ---');
 
-test('isListItemPath matches numeric indices', () => {
+test('isListItemPath matches numeric full items', () => {
   expect(helpers.isListItemPath('reviews[0]')).toBe(true);
   expect(helpers.isListItemPath('reviews[1]')).toBe(true);
   expect(helpers.isListItemPath('reviews[99]')).toBe(true);
-  expect(helpers.isListItemPath('addresses[0].street')).toBe(true);
+  expect(helpers.isListItemPath('addresses[0]')).toBe(true);
+});
+
+test('isListItemPath matches placeholder full items', () => {
+  expect(helpers.isListItemPath('reviews[new_1234567890]')).toBe(true);
+  expect(helpers.isListItemPath('addresses[new_123]')).toBe(true);
+});
+
+test('isListItemPath does NOT match subfields', () => {
+  expect(helpers.isListItemPath('reviews[0].rating')).toBe(false);
+  expect(helpers.isListItemPath('addresses[new_123].street')).toBe(false);
 });
 
 test('isListItemPath does NOT match non-list paths', () => {
   expect(helpers.isListItemPath('reviews')).toBe(false);
   expect(helpers.isListItemPath('name')).toBe(false);
-});
-
-// Document bugs with expected failures
-xfail('BUG: isListItemPath should match new_ placeholder', () => {
-  expect(helpers.isListItemPath('reviews[new_1234567890]')).toBe(true);
-});
-
-xfail('BUG: isListItemPath should match nested placeholder path', () => {
-  expect(helpers.isListItemPath('addresses[new_123].street')).toBe(true);
 });
 
 // ============================================================================
@@ -141,17 +142,18 @@ test('isListSubfieldPath does NOT match full items', () => {
 });
 
 // ============================================================================
-// Tests for extractListFieldPath (current buggy implementation)
+// Tests for extractListFieldPath
 // ============================================================================
-console.log('\n--- extractListFieldPath (current buggy implementation) ---');
+console.log('\n--- extractListFieldPath ---');
 
 test('extractListFieldPath works for numeric indices', () => {
   expect(helpers.extractListFieldPath('reviews[0]')).toBe('reviews');
   expect(helpers.extractListFieldPath('addresses[0].street')).toBe('addresses');
 });
 
-xfail('BUG: extractListFieldPath should work for placeholders', () => {
+test('extractListFieldPath works for placeholders', () => {
   expect(helpers.extractListFieldPath('reviews[new_1234567890]')).toBe('reviews');
+  expect(helpers.extractListFieldPath('addresses[new_123].street')).toBe('addresses');
 });
 
 // ============================================================================
@@ -170,9 +172,9 @@ test('extractListFieldPathFixed works for placeholder indices', () => {
 });
 
 // ============================================================================
-// Tests for extractListIndex (current buggy implementation)
+// Tests for extractListIndex
 // ============================================================================
-console.log('\n--- extractListIndex (current buggy implementation) ---');
+console.log('\n--- extractListIndex ---');
 
 test('extractListIndex works for numeric indices', () => {
   expect(helpers.extractListIndex('reviews[0]')).toBe(0);
@@ -180,8 +182,9 @@ test('extractListIndex works for numeric indices', () => {
   expect(helpers.extractListIndex('addresses[0].street')).toBe(0);
 });
 
-xfail('BUG: extractListIndex should work for placeholders', () => {
-  expect(helpers.extractListIndex('reviews[new_1234567890]')).not.toBeNull();
+test('extractListIndex works for placeholders', () => {
+  expect(helpers.extractListIndex('reviews[new_1234567890]')).toBe('new_1234567890');
+  expect(helpers.extractListIndex('reviews[new_0]')).toBe('new_0');
 });
 
 // ============================================================================
@@ -243,26 +246,6 @@ test('remapPathIndex changes index correctly', () => {
   expect(helpers.remapPathIndex('reviews[0]', '0', 'new_123')).toBe('reviews[new_123]');
   expect(helpers.remapPathIndex('reviews[0].rating', '0', 'new_123')).toBe('reviews[new_123].rating');
   expect(helpers.remapPathIndex('reviews[new_123]', 'new_123', '5')).toBe('reviews[5]');
-});
-
-// ============================================================================
-// Bug reproduction tests
-// ============================================================================
-console.log('\n--- Bug Reproduction Tests ---');
-
-test('BUG DEMO: current impl treats subfield same as full item', () => {
-  // This is the core bug - both match the same pattern
-  const fullItem = 'reviews[0]';
-  const subfield = 'reviews[0].rating';
-
-  // Current behavior: both return true
-  expect(helpers.isListItemPath(fullItem)).toBe(true);
-  expect(helpers.isListItemPath(subfield)).toBe(true);
-
-  // Fixed behavior: clear distinction
-  expect(helpers.isListItemPathFixed(fullItem)).toBe(true);   // Full item
-  expect(helpers.isListItemPathFixed(subfield)).toBe(false);  // NOT full item
-  expect(helpers.isListSubfieldPath(subfield)).toBe(true);    // IS subfield
 });
 
 // ============================================================================

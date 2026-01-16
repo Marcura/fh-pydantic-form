@@ -147,20 +147,12 @@ class TestJavaScriptUnit:
 
 class TestJavaScriptBugDocumentation:
     """
-    Tests that document specific JavaScript bugs.
-
-    These tests verify that the xfail tests in JavaScript are correctly
-    documenting the bugs we've identified.
+    Tests that ensure JavaScript helper tests run cleanly.
     """
 
-    def test_xfailed_tests_document_placeholder_bug(self, node_available):
+    def test_no_xfailed_javascript_tests(self, node_available):
         """
-        Verify that xfail tests document the new_ placeholder bug.
-
-        The JavaScript tests should have xfail tests for:
-        - isListItemPath not matching new_ placeholders
-        - extractListFieldPath not working for placeholders
-        - extractListIndex returning null for placeholders
+        Verify JavaScript tests complete without xfailed cases.
         """
         result = subprocess.run(
             [node_available, str(JS_TEST_SCRIPT)],
@@ -176,10 +168,7 @@ class TestJavaScriptBugDocumentation:
 
         xfailed = test_results.get("xfailed", 0)
 
-        # We should have at least 4 xfail tests documenting bugs
-        assert xfailed >= 4, (
-            f"Expected at least 4 xfail tests documenting bugs, got {xfailed}"
-        )
+        assert xfailed == 0, f"Expected no xfailed JavaScript tests, got {xfailed}"
 
     def test_fixed_functions_exist(self, node_available):
         """

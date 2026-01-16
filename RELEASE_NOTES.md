@@ -1,5 +1,30 @@
 # Release Notes
 
+## Version 0.3.12 (2026-01-15)
+
+### 🎉 New Features
+
+#### List[Literal] / List[Enum] Pill Fields
+- **NEW**: `ListChoiceFieldRenderer` renders `List[Literal]` and `List[Enum]` as pill/tag selectors with add/remove UI
+- **ENHANCED**: Pill fields now support reliable copy between ComparisonForm sides (including nested list items)
+
+### 🔧 Bug Fixes & Improvements
+
+#### ComparisonForm Copy Reliability
+- **FIXED**: Subfield copy (e.g., `reviews[0].rating`) updates existing target items instead of creating new ones
+- **FIXED**: Copy logic handles `new_` placeholder indices for newly added list items
+- **IMPROVED**: Full list copy aligns list lengths before copying and preserves accordion state
+
+#### Pill Copy Behavior
+- **FIXED**: Copying pill fields now clears extra target pills when the source has fewer selections
+- **IMPROVED**: Source/target pill containers are resolved deterministically via form prefix metadata
+
+### 🧪 Testing
+- **NEW**: ComparisonForm pill copy tests (top-level and nested list contexts)
+- **IMPROVED**: JavaScript helper tests updated to reflect current copy behavior (no expected failures)
+
+---
+
 ## Version 0.3.11 (2026-01-08)
 
 ### 🔧 Bug Fixes

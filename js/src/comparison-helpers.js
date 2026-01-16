@@ -10,30 +10,22 @@
  */
 
 /**
- * Check if path contains array index pattern like [0], [1], etc.
- *
- * KNOWN BUG: This pattern only matches numeric indices, not placeholder
- * indices like [new_1234567890] used for newly added items.
- *
- * @param {string} pathPrefix - The field path to check
- * @returns {boolean} True if path contains an array index
- */
-function isListItemPath(pathPrefix) {
-  // Current (buggy) implementation - only matches numeric indices
-  return /\[\d+\]/.test(pathPrefix);
-}
-
-/**
- * Fixed version of isListItemPath that handles both numeric and placeholder indices.
- * Also distinguishes between full items and subfields.
+ * Check if path is a FULL list item.
  *
  * @param {string} pathPrefix - The field path to check
  * @returns {boolean} True if path is a full list item (ends with [index])
  */
-function isListItemPathFixed(pathPrefix) {
+function isListItemPath(pathPrefix) {
   // Match both numeric [0] and placeholder [new_123] indices
   // Only match if the path ENDS with the index (full item, not subfield)
   return /\[(\d+|new_\d+)\]$/.test(pathPrefix);
+}
+
+/**
+ * Backward-compatible alias.
+ */
+function isListItemPathFixed(pathPrefix) {
+  return isListItemPath(pathPrefix);
 }
 
 /**
@@ -52,56 +44,42 @@ function isListSubfieldPath(pathPrefix) {
  * e.g., "addresses[0]" -> "addresses"
  * e.g., "addresses[0].street" -> "addresses"
  *
- * KNOWN BUG: Only removes numeric indices, not placeholder indices.
- *
  * @param {string} pathPrefix - The field path
  * @returns {string} The base list field name
  */
 function extractListFieldPath(pathPrefix) {
-  // Current (buggy) implementation
-  return pathPrefix.replace(/\[\d+\].*$/, '');
+  return pathPrefix.replace(/\[(\d+|new_\d+)\].*$/, '');
 }
 
 /**
- * Fixed version that handles both numeric and placeholder indices.
- *
- * @param {string} pathPrefix - The field path
- * @returns {string} The base list field name
+ * Backward-compatible alias.
  */
 function extractListFieldPathFixed(pathPrefix) {
-  return pathPrefix.replace(/\[(\d+|new_\d+)\].*$/, '');
+  return extractListFieldPath(pathPrefix);
 }
 
 /**
  * Extract the index from path.
  * e.g., "addresses[0].street" -> 0
- * e.g., "addresses[5]" -> 5
- *
- * KNOWN BUG: Only extracts numeric indices, returns null for placeholder indices.
- *
- * @param {string} pathPrefix - The field path
- * @returns {number|null} The numeric index, or null if not found
- */
-function extractListIndex(pathPrefix) {
-  // Current (buggy) implementation
-  var match = pathPrefix.match(/\[(\d+)\]/);
-  return match ? parseInt(match[1]) : null;
-}
-
-/**
- * Fixed version that handles placeholder indices.
- * Returns the index value (numeric or placeholder string).
+ * e.g., "addresses[new_123]" -> "new_123"
  *
  * @param {string} pathPrefix - The field path
  * @returns {string|number|null} The index value, or null if not found
  */
-function extractListIndexFixed(pathPrefix) {
+function extractListIndex(pathPrefix) {
   var match = pathPrefix.match(/\[(\d+|new_\d+)\]/);
   if (!match) return null;
 
   var indexStr = match[1];
   // Return numeric for numbers, string for placeholders
   return /^\d+$/.test(indexStr) ? parseInt(indexStr) : indexStr;
+}
+
+/**
+ * Backward-compatible alias.
+ */
+function extractListIndexFixed(pathPrefix) {
+  return extractListIndex(pathPrefix);
 }
 
 /**
@@ -157,18 +135,13 @@ function remapPathIndex(sourcePath, sourceIndex, targetIndex) {
 // Export for Node.js/Jest testing
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    // Current (buggy) implementations
     isListItemPath,
     extractListFieldPath,
     extractListIndex,
-
-    // Fixed implementations
     isListItemPathFixed,
     isListSubfieldPath,
     extractListFieldPathFixed,
     extractListIndexFixed,
-
-    // Additional helpers
     extractRelativePath,
     getCopyBehavior,
     remapPathIndex,

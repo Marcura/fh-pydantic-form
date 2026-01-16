@@ -1,21 +1,23 @@
 import sys
+from pathlib import Path
 
-sys.path.insert(0, "/Users/oege/projects/fh-pydantic-form/src")
+# Insert the src directory from the current project
+_project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(_project_root / "src"))
 
+import datetime  # noqa: E402
+from enum import Enum, IntEnum  # noqa: E402
+from typing import List, Literal, Optional  # noqa: E402
 
-import datetime
-from enum import Enum, IntEnum
-from typing import List, Literal, Optional
-
-import fasthtml.common as fh  # type: ignore
-import monsterui.all as mui  # type: ignore
-import pytest
-from pydantic import BaseModel, Field, ValidationError
-from pydantic.json_schema import SkipJsonSchema
-from starlette.testclient import TestClient
+import fasthtml.common as fh  # type: ignore  # noqa: E402
+import monsterui.all as mui  # type: ignore  # noqa: E402
+import pytest  # noqa: E402
+from pydantic import BaseModel, Field, ValidationError  # noqa: E402
+from pydantic.json_schema import SkipJsonSchema  # noqa: E402
+from starlette.testclient import TestClient  # noqa: E402
 
 # Remove imports from examples
-from fh_pydantic_form import PydanticForm, list_manipulation_js
+from fh_pydantic_form import PydanticForm, list_manipulation_js  # noqa: E402
 
 
 # --- E2E ComparisonForm fixture ---
@@ -1527,7 +1529,7 @@ def optional_list_test_model():
     """Test model for Optional[List[...]] functionality."""
 
     class OptionalListTestModel(BaseModel):
-        name: str  # No default value - this will be required
+        name: str = Field(..., min_length=1)  # Required and must be non-empty
         optional_tags: Optional[List[str]] = None
         required_tags: List[str] = Field(default_factory=list)
 
@@ -1565,13 +1567,28 @@ def optional_list_client(optional_list_test_model):
 
     @rt("/submit", methods=["POST"])
     async def post_submit(req):
+        form_data = await req.form()
+        form_dict = dict(form_data)
+
+        parsed_data = {}
         try:
-            validated = await form_renderer.model_validate_request(req)
+            parsed_data = form_renderer.parse(form_dict)
+        except Exception:
+            parsed_data = (
+                form_renderer.values_dict.copy() if form_renderer.values_dict else {}
+            )
+
+        try:
+            validated = form_renderer.model_class.model_validate(parsed_data)
             return fh.Pre(
                 f"Validation Successful: {validated.model_dump_json(indent=2)}"
             )
         except ValidationError as e:
-            return fh.Pre(f"Validation Error: {e.json(indent=2)}")
+            temp_renderer = form_renderer.with_initial_values(parsed_data)
+            return fh.Div(
+                fh.Pre(f"Validation Error: {e.json(indent=2)}"),
+                temp_renderer.render_inputs(),
+            )
 
     return TestClient(app)
 

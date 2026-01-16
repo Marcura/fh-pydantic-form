@@ -41,7 +41,7 @@ ModelType = TypeVar("ModelType", bound=BaseModel)
 
 def comparison_form_js():
     """JavaScript for comparison: sync accordions and handle JS-only copy operations."""
-    return fh.Script("""
+    return fh.Script(r"""
 // Helper functions for list item path detection
 // FIXED: Now matches both numeric indices AND new_ placeholder indices
 // FIXED: Only matches FULL list items (path ends with ]), not subfields
@@ -457,7 +457,7 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
                 var newPathPrefix = listFieldPath + '[' + actualPlaceholderIdx + ']';
 
                 // Now perform the standard copy operation with the new path
-                performStandardCopy(pathPrefix, newPathPrefix, sourcePrefix, copyTarget, accordionStates);
+                performStandardCopy(pathPrefix, newPathPrefix, sourcePrefix, copyTarget, accordionStates, currentPrefix);
 
                 // Wait for copy to complete, then open accordion and highlight
                 // Note: We skip automatic refresh because the temporary item ID doesn't persist after refresh
@@ -641,7 +641,7 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
       }
 
       // Default path (non-list fields or already aligned lists)
-      performStandardCopy(pathPrefix, pathPrefix, sourcePrefix, copyTarget, accordionStates);
+      performStandardCopy(pathPrefix, pathPrefix, sourcePrefix, copyTarget, accordionStates, currentPrefix);
     })();
 
   } catch (e) {
@@ -822,8 +822,192 @@ function performListCopyByPosition(sourceListContainer, targetListContainer, sou
 }
 
 // Extracted standard copy logic to allow reuse
-function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, copyTarget, accordionStates) {
+function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, copyTarget, accordionStates, currentPrefix) {
   try {
+    // Check if this is a pill field (List[Literal] or List[Enum])
+    // Must find the container that belongs to the SOURCE form (by prefix)
+    function normalizePrefix(prefix) {
+      if (!prefix) return prefix;
+      return prefix.replace(/\\./g, '_').replace(/_$/, '');
+    }
+
+    function findPillContainer(candidates, matchPrefix) {
+      if (!matchPrefix) return null;
+      var normalizedPrefix = normalizePrefix(matchPrefix);
+      for (var i = 0; i < candidates.length; i++) {
+        var candidate = candidates[i];
+        var dataPrefix = candidate.dataset.inputPrefix;
+        if (dataPrefix && dataPrefix === matchPrefix) {
+          return candidate;
+        }
+        var candidateId = candidate.id;
+        if (candidateId && normalizedPrefix && candidateId.startsWith(normalizedPrefix)) {
+          return candidate;
+        }
+      }
+      return null;
+    }
+
+    var targetBasePrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
+    var sourceMatchPrefix = currentPrefix || sourcePrefix;
+    var targetMatchPrefix = targetBasePrefix;
+    if (currentPrefix && sourcePrefix && currentPrefix.startsWith(sourcePrefix)) {
+      targetMatchPrefix = targetBasePrefix + currentPrefix.substring(sourcePrefix.length);
+    }
+
+    var sourcePillCandidates = document.querySelectorAll(
+      '[data-field-path="' + sourcePathPrefix + '"][data-pill-field="true"]'
+    );
+    var sourcePillContainer = findPillContainer(sourcePillCandidates, sourceMatchPrefix);
+
+    if (sourcePillContainer) {
+      // Find corresponding target pill container
+      var targetPillContainer = null;
+
+      // Find target by data-field-path that belongs to target form (not source)
+      var pillCandidates = document.querySelectorAll('[data-field-path="' + targetPathPrefix + '"][data-pill-field="true"]');
+      targetPillContainer = findPillContainer(pillCandidates, targetMatchPrefix);
+      if (!targetPillContainer && sourcePillContainer && pillCandidates.length > 1) {
+        for (var i = 0; i < pillCandidates.length; i++) {
+          if (pillCandidates[i] !== sourcePillContainer) {
+            targetPillContainer = pillCandidates[i];
+            break;
+          }
+        }
+      }
+
+      if (targetPillContainer) {
+        // Get source selected values from pills
+        var sourcePillsContainer = sourcePillContainer.querySelector('[id$="_pills"]');
+        var sourceValues = [];
+        if (sourcePillsContainer) {
+          var sourcePills = sourcePillsContainer.querySelectorAll('[data-value]');
+          sourcePills.forEach(function(pill) {
+            var hiddenInput = pill.querySelector('input[type="hidden"]');
+            if (hiddenInput) {
+              sourceValues.push({
+                value: pill.dataset.value,
+                display: pill.querySelector('span.mr-1') ? pill.querySelector('span.mr-1').textContent : pill.dataset.value
+              });
+            }
+          });
+        }
+
+        // Clear target pills
+        var targetPillsContainer = targetPillContainer.querySelector('[id$="_pills"]');
+        var targetDropdown = targetPillContainer.querySelector('select');
+        var targetFieldName = targetPillContainer.dataset.fieldName;
+        var targetContainerId = targetPillContainer.id;
+
+        if (targetPillsContainer) {
+          targetPillsContainer.innerHTML = '';
+        }
+
+        // Recreate pills in target with source values
+        sourceValues.forEach(function(item, idx) {
+          var pillId = targetFieldName + '_' + idx + '_pill';
+          var inputName = targetFieldName + '_' + idx;
+
+          // Create hidden input
+          var input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = inputName;
+          input.value = item.value;
+
+          // Create label span
+          var label = document.createElement('span');
+          label.className = 'mr-1';
+          label.textContent = item.display;
+
+          // Create remove button
+          var removeBtn = document.createElement('button');
+          removeBtn.type = 'button';
+          removeBtn.className = 'ml-1 text-xs hover:text-red-600 font-bold cursor-pointer';
+          removeBtn.textContent = '×';
+          removeBtn.onclick = function() {
+            window.fhpfRemoveChoicePill(pillId, item.value, targetContainerId);
+          };
+
+          // Create pill span
+          var pill = document.createElement('span');
+          pill.id = pillId;
+          pill.dataset.value = item.value;
+          pill.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800';
+          pill.appendChild(input);
+          pill.appendChild(label);
+          pill.appendChild(removeBtn);
+
+          targetPillsContainer.appendChild(pill);
+        });
+
+        // Rebuild the target dropdown to show remaining options
+        if (targetDropdown && typeof fhpfRebuildChoiceDropdown === 'function') {
+          // Use internal rebuild function if available
+          fhpfRebuildChoiceDropdown(targetContainerId);
+        } else if (targetDropdown) {
+          // Manual dropdown rebuild
+          var allChoicesJson = targetPillContainer.dataset.allChoices || '[]';
+          var allChoices = [];
+          try {
+            allChoices = JSON.parse(allChoicesJson);
+          } catch (e) {
+            console.error('Failed to parse pill choices:', e);
+          }
+
+          var selectedValues = new Set(sourceValues.map(function(v) { return v.value; }));
+          var remaining = allChoices.filter(function(choice) {
+            return !selectedValues.has(choice.value);
+          });
+
+          // Rebuild dropdown options
+          targetDropdown.innerHTML = '';
+          var placeholder = document.createElement('option');
+          placeholder.value = '';
+          placeholder.textContent = 'Add...';
+          placeholder.selected = true;
+          placeholder.disabled = true;
+          targetDropdown.appendChild(placeholder);
+
+          remaining.forEach(function(choice) {
+            var opt = document.createElement('option');
+            opt.value = choice.value;
+            opt.textContent = choice.display;
+            opt.dataset.display = choice.display;
+            targetDropdown.appendChild(opt);
+          });
+
+          targetDropdown.style.display = remaining.length > 0 ? 'inline-block' : 'none';
+        }
+
+        // Highlight the target container briefly
+        targetPillContainer.style.transition = 'background-color 0.3s';
+        targetPillContainer.style.backgroundColor = '#dbeafe';
+        setTimeout(function() {
+          targetPillContainer.style.backgroundColor = '';
+          setTimeout(function() {
+            targetPillContainer.style.transition = '';
+          }, 300);
+        }, 1500);
+
+        // Restore accordion states
+        setTimeout(function() {
+          accordionStates.forEach(function(state) {
+            if (state.isOpen && !state.element.classList.contains('uk-open')) {
+              state.element.classList.add('uk-open');
+              var content = state.element.querySelector('.uk-accordion-content');
+              if (content) {
+                content.hidden = false;
+                content.style.height = 'auto';
+              }
+            }
+          });
+          window.__fhpfCopyInProgress = false;
+        }, 100);
+
+        return; // Pill copy complete
+      }
+    }
+
     // Find all inputs with matching data-field-path from source
     var allInputs = document.querySelectorAll('[data-field-path]');
     var sourceInputs = Array.from(allInputs).filter(function(el) {

@@ -257,6 +257,134 @@ window.restoreAllAccordionStates = function() {
     });
 };
 
+// ============================================
+// List[Literal] / List[Enum] pill management
+// ============================================
+
+// Add a new pill when dropdown selection changes
+window.fhpfAddChoicePill = function(fieldName, selectEl, containerId) {
+    const formValue = selectEl.value;
+    if (!formValue) return;
+
+    // Get display text from selected option's data attribute or text content
+    const selectedOption = selectEl.options[selectEl.selectedIndex];
+    const displayText = selectedOption.dataset.display || selectedOption.textContent;
+
+    const container = document.getElementById(containerId);
+    const pillsContainer = document.getElementById(containerId + '_pills');
+    if (!container || !pillsContainer) return;
+
+    // Generate unique index using timestamp
+    const idx = 'new_' + Date.now();
+    const pillId = fieldName + '_' + idx + '_pill';
+    const inputName = fieldName + '_' + idx;
+
+    // Create the pill element
+    const pill = document.createElement('span');
+    pill.id = pillId;
+    pill.dataset.value = formValue;
+    pill.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800';
+
+    // Create hidden input (stores form value)
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = inputName;
+    input.value = formValue;
+
+    // Create label span (shows display text)
+    const label = document.createElement('span');
+    label.className = 'mr-1';
+    label.textContent = displayText;
+
+    // Create remove button
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'ml-1 text-xs hover:text-red-600 font-bold cursor-pointer';
+    removeBtn.textContent = '×';
+    removeBtn.onclick = function() {
+        window.fhpfRemoveChoicePill(pillId, formValue, containerId);
+    };
+
+    // Assemble pill
+    pill.appendChild(input);
+    pill.appendChild(label);
+    pill.appendChild(removeBtn);
+
+    // Add to pills container
+    pillsContainer.appendChild(pill);
+
+    // Reset and rebuild dropdown
+    selectEl.value = '';
+    fhpfRebuildChoiceDropdown(containerId);
+};
+
+// Remove a pill
+window.fhpfRemoveChoicePill = function(pillId, formValue, containerId) {
+    const pill = document.getElementById(pillId);
+    if (pill) {
+        pill.remove();
+    }
+    // Rebuild dropdown to include the removed value
+    fhpfRebuildChoiceDropdown(containerId);
+};
+
+// Rebuild dropdown based on current pills
+function fhpfRebuildChoiceDropdown(containerId) {
+    const container = document.getElementById(containerId);
+    const dropdown = document.getElementById(containerId + '_dropdown');
+    const pillsContainer = document.getElementById(containerId + '_pills');
+    if (!container || !dropdown || !pillsContainer) return;
+
+    // Get all possible choices from JSON data attribute
+    const allChoicesJson = container.dataset.allChoices || '[]';
+    let allChoices = [];
+    try {
+        allChoices = JSON.parse(allChoicesJson);
+    } catch (e) {
+        console.error('Failed to parse allChoices JSON:', e);
+        return;
+    }
+
+    // Get currently selected values from pills
+    const pills = pillsContainer.querySelectorAll('[data-value]');
+    const selectedValues = new Set();
+    pills.forEach(function(pill) {
+        selectedValues.add(pill.dataset.value);
+    });
+
+    // Calculate remaining choices
+    const remaining = allChoices.filter(function(choice) {
+        return !selectedValues.has(choice.value);
+    });
+
+    // Rebuild dropdown options
+    dropdown.innerHTML = '';
+
+    // Add placeholder option
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Add...';
+    placeholder.selected = true;
+    placeholder.disabled = true;
+    dropdown.appendChild(placeholder);
+
+    // Add remaining choices as options
+    remaining.forEach(function(choice) {
+        const opt = document.createElement('option');
+        opt.value = choice.value;
+        opt.textContent = choice.display;
+        opt.dataset.display = choice.display;
+        dropdown.appendChild(opt);
+    });
+
+    // Show/hide dropdown based on remaining options
+    dropdown.style.display = remaining.length > 0 ? 'inline-block' : 'none';
+}
+
+// ============================================
+// Initialization
+// ============================================
+
 // Wait for the DOM to be fully loaded before initializing
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize button states for elements present on initial load

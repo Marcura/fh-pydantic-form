@@ -5,8 +5,12 @@ import fasthtml.common as fh
 
 def to_html(component) -> str:
     """Render any FastHTML component to full HTML."""
-    # fh.render returns the full markup; fall back to str() if not present
-    return getattr(fh, "render", str)(component)
+    # Use to_xml for proper HTML serialization, fall back to __html__ or str()
+    if hasattr(fh, "to_xml"):
+        return fh.to_xml(component)
+    if hasattr(component, "__html__"):
+        return component.__html__()
+    return str(component)
 
 
 def unescaped(text: str) -> str:

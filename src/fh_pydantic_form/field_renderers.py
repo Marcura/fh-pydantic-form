@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 from datetime import date, time
@@ -6,6 +7,7 @@ from enum import Enum
 from typing import (
     Any,
     List,
+    Literal,
     Optional,
     get_args,
     get_origin,
@@ -1117,6 +1119,313 @@ class LiteralFieldRenderer(BaseFieldRenderer):
 
         # Render the select element with options and attributes
         return mui.Select(*options, **select_attrs)
+
+
+class ListChoiceFieldRenderer(BaseFieldRenderer):
+    """Renderer for List[Literal[...]] and List[Enum] fields as pill tags with dropdown.
+
+    Displays selected values as removable pill/tag elements and provides
+    a dropdown to add from remaining (unselected) values. All interactions
+    are handled client-side with JavaScript - no server routes needed.
+
+    Supports:
+        - List[Literal["a", "b", "c"]] - fixed string/int choices
+        - List[MyEnum] - enum member choices
+        - Optional variants of both
+
+    Example:
+        For a field `tags: List[Literal["red", "green", "blue"]]` with
+        value `["red", "blue"]`, renders:
+        - Two pills: [red ×] [blue ×]
+        - A dropdown with only "green" available to add
+    """
+
+    def _extract_choices(self) -> tuple[List[tuple[str, str]], type | None]:
+        """Extract (display_text, form_value) pairs from the item type.
+
+        Returns:
+            Tuple of (choices list, enum_class or None)
+            Each choice is (display_text, form_value)
+        """
+        annotation = getattr(self.field_info, "annotation", None)
+        base_annotation = _get_underlying_type_if_optional(annotation)
+
+        if get_origin(base_annotation) is not list:
+            return [], None
+
+        list_args = get_args(base_annotation)
+        if not list_args:
+            return [], None
+
+        item_type = list_args[0]
+        item_type_base = _get_underlying_type_if_optional(item_type)
+
+        # Check for Literal type
+        if get_origin(item_type_base) is Literal:
+            literal_values = get_args(item_type_base)
+            # For Literal, display and form value are the same
+            return [(str(v), str(v)) for v in literal_values], None
+
+        # Check for Enum type
+        if isinstance(item_type_base, type) and issubclass(item_type_base, Enum):
+            choices = []
+            for member in item_type_base:
+                display_text = member.name.replace("_", " ").title()
+                form_value = str(member.value)
+                choices.append((display_text, form_value))
+            return choices, item_type_base
+
+        return [], None
+
+    def _normalize_selected_values(
+        self, enum_class: type | None
+    ) -> List[tuple[str, str]]:
+        """Normalize selected values to (display_text, form_value) pairs.
+
+        Args:
+            enum_class: The Enum class if item type is Enum, else None
+
+        Returns:
+            List of (display_text, form_value) tuples for selected items
+        """
+        selected = self.value if isinstance(self.value, list) else []
+        result = []
+
+        for val in selected:
+            if enum_class is not None:
+                # Handle Enum values
+                if isinstance(val, Enum):
+                    display_text = val.name.replace("_", " ").title()
+                    form_value = str(val.value)
+                else:
+                    # Try to find matching enum member by value
+                    try:
+                        member = enum_class(val)
+                        display_text = member.name.replace("_", " ").title()
+                        form_value = str(member.value)
+                    except (ValueError, KeyError):
+                        # Fallback: use raw value
+                        display_text = str(val)
+                        form_value = str(val)
+            else:
+                # Literal values - display and form value are the same
+                display_text = str(val)
+                form_value = str(val)
+
+            result.append((display_text, form_value))
+
+        return result
+
+    def render_input(self) -> FT:
+        """Render the pill tags with dropdown for List[Literal] or List[Enum] fields."""
+        # Extract all possible choices
+        all_choices, enum_class = self._extract_choices()
+
+        if not all_choices:
+            return mui.Alert(
+                "ListChoiceFieldRenderer requires List[Literal[...]] or List[Enum]",
+                cls=mui.AlertT.error,
+            )
+
+        # Normalize selected values
+        selected_pairs = self._normalize_selected_values(enum_class)
+        selected_form_values = {fv for _, fv in selected_pairs}
+
+        # Build unique container ID
+        container_id = f"{self.field_name}_pills_container"
+
+        # Build pills for selected values
+        pill_elements = []
+        for idx, (display_text, form_value) in enumerate(selected_pairs):
+            pill = self._render_pill(display_text, form_value, idx, container_id)
+            pill_elements.append(pill)
+
+        # Build dropdown for remaining (unselected) values
+        remaining = [
+            (dt, fv) for dt, fv in all_choices if fv not in selected_form_values
+        ]
+        dropdown = self._render_dropdown(remaining, container_id)
+
+        # Determine if field is required
+        has_default = get_default(self.field_info) is not _UNSET
+        is_field_required = not self.is_optional and not has_default
+
+        # Build the pills container
+        pills_container = fh.Div(
+            *pill_elements,
+            id=f"{container_id}_pills",
+            cls="flex flex-wrap gap-1",
+        )
+
+        # Store all choices as JSON for JS rebuild (handles special chars safely)
+        all_choices_json = json.dumps(
+            [{"display": dt, "value": fv} for dt, fv in all_choices]
+        )
+
+        wrapper_attrs = {
+            "id": container_id,
+            "cls": "flex flex-wrap gap-2 items-center",
+            "data-field-name": self.field_name,
+            "data-input-prefix": self.prefix,
+            "data-field-path": self._build_path_string(),
+            "data-all-choices": all_choices_json,
+            "data-pill-field": "true",  # Marker for copy JS to identify pill fields
+        }
+        if is_field_required:
+            wrapper_attrs["data-required"] = "true"
+
+        return fh.Div(
+            pills_container,
+            dropdown,
+            **wrapper_attrs,
+        )
+
+    def _render_pill(
+        self, display_text: str, form_value: str, idx: int, container_id: str
+    ) -> FT:
+        """Render a single pill element for a selected value.
+
+        Args:
+            display_text: Text to display in the pill
+            form_value: Value for the hidden form input
+            idx: Index for the hidden input name
+            container_id: Parent container ID for JS callbacks
+
+        Returns:
+            A pill element with hidden input, label, and remove button
+        """
+        input_name = f"{self.field_name}_{idx}"
+        pill_id = f"{self.field_name}_{idx}_pill"
+
+        # Hidden input for form submission (uses form_value)
+        hidden_input = fh.Input(
+            type="hidden",
+            name=input_name,
+            value=form_value,
+        )
+
+        # Build remove button attrs
+        remove_btn_attrs: dict[str, str | bool] = {
+            "type": "button",
+            "cls": "ml-1 text-xs hover:text-red-600 font-bold cursor-pointer",
+            "uk-tooltip": f"Remove '{display_text}'",
+        }
+
+        # Only add onclick handler if not disabled
+        if not self.disabled:
+            # Escape single quotes in values for JS
+            escaped_form_value = form_value.replace("'", "\\'")
+            remove_btn_attrs["onclick"] = (
+                f"window.fhpfRemoveChoicePill('{pill_id}', '{escaped_form_value}', '{container_id}')"
+            )
+        else:
+            remove_btn_attrs["disabled"] = True
+            remove_btn_attrs["cls"] = "ml-1 text-xs text-gray-400 cursor-not-allowed"
+
+        remove_btn = fh.Button("×", **remove_btn_attrs)
+
+        return fh.Span(
+            hidden_input,
+            fh.Span(display_text, cls="mr-1"),
+            remove_btn,
+            id=pill_id,
+            data_value=form_value,  # Store form value for JS matching
+            cls="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800",
+        )
+
+    def _render_dropdown(
+        self,
+        remaining_choices: List[tuple[str, str]],
+        container_id: str,
+    ) -> FT:
+        """Render dropdown for adding new values.
+
+        Args:
+            remaining_choices: (display_text, form_value) pairs not yet selected
+            container_id: Parent container ID for JS callbacks
+
+        Returns:
+            A select dropdown element
+        """
+        dropdown_id = f"{container_id}_dropdown"
+
+        # Build options - placeholder plus remaining values
+        options = [fh.Option("Add...", value="", selected=True, disabled=True)]
+        for display_text, form_value in remaining_choices:
+            options.append(
+                fh.Option(display_text, value=form_value, data_display=display_text)
+            )
+
+        # Build select attrs
+        base_style = (
+            "display: inline-block; height: 24px; padding: 0 6px; width: auto; "
+            "min-width: 80px;"
+        )
+        select_attrs: dict[str, str | bool] = {
+            "id": dropdown_id,
+            "cls": "uk-select uk-form-small text-xs",
+            "style": base_style,
+        }
+
+        # Only add onchange handler if not disabled
+        if not self.disabled:
+            select_attrs["onchange"] = (
+                f"window.fhpfAddChoicePill('{self.field_name}', this, '{container_id}')"
+            )
+        else:
+            select_attrs["disabled"] = True
+
+        # Hide dropdown if no remaining values
+        if not remaining_choices:
+            select_attrs["style"] = f"{base_style} display: none;"
+
+        return fh.Select(*options, **select_attrs)
+
+    def render(self) -> FT:
+        """Render the complete field with label and pill input."""
+        # Get the label component
+        label_component = self.render_label()
+
+        # Render the input field
+        input_component = self.render_input()
+
+        # Get the copy button if enabled
+        copy_button = self._render_comparison_copy_button()
+
+        # Vertical layout (standard)
+        field_element = fh.Div(
+            label_component,
+            input_component,
+            cls=spacing("outer_margin", self.spacing),
+        )
+
+        # Apply metrics decoration if available
+        decorated_field = self._decorate_metrics(field_element, self.metric_entry)
+
+        # If copy button exists, wrap with copy button on the right
+        if copy_button:
+            return fh.Div(
+                decorated_field,
+                copy_button,
+                cls="flex items-start gap-2 w-full",
+            )
+        return decorated_field
+
+
+# Backward compatibility alias
+ListLiteralFieldRenderer = ListChoiceFieldRenderer
+
+
+def list_choice_js() -> FT:
+    """Deprecated: JS is now included in list_manipulation_js().
+
+    Kept for backward compatibility - returns empty script.
+    """
+    return fh.Script("")
+
+
+# Backward compatibility alias
+list_literal_js = list_choice_js
 
 
 class EnumFieldRenderer(BaseFieldRenderer):
