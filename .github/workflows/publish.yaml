@@ -28,8 +28,8 @@ jobs:
       - name: Install the project
         run: uv sync --all-extras --dev
 
-      - name: Run pre-commit hooks
-        run: uv run pre-commit run -a
+      - name: Run prek hooks
+        run: uv run prek run -a
 
       - name: Run tests
         run: uv run pytest tests
