@@ -23,8 +23,12 @@ repos:
       - id: ruff-format
 
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.15.0
+  - repo: local
     hooks:
-      - id: mypy
+      - id: ty
+        name: ty check
+        entry: uvx ty check .
+        language: system
+        pass_filenames: false
+        always_run: true
 
