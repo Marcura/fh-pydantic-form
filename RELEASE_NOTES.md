@@ -1,5 +1,15 @@
 # Release Notes
 
+## Version 0.3.15 (2026-01-16)
+
+### 🔧 Bug Fixes
+
+#### ComparisonForm Copy JS
+- **FIXED**: `comparison_form_js()` output no longer mangles `const` declarations (missing spaces), which caused `ReferenceError` and broke copy operations
+- **FIXED**: Reassigned bindings in the copy logic now use `let` to avoid `Assignment to constant variable` at runtime
+
+---
+
 ## Version 0.3.14 (2026-01-16)
 
 ### 🎉 New Features
