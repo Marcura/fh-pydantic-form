@@ -1,5 +1,21 @@
 # Release Notes
 
+## Version 0.3.13 (2026-01-16)
+
+### 🔧 Bug Fixes
+
+#### Nested Pill Field Copy in ComparisonForm
+- **FIXED**: Copying nested `List[Literal]` pill fields inside `List[BaseModel]` items now works correctly
+- **FIXED**: `performListCopyByPosition()` now detects and handles pill containers (DIV elements) that don't have a `name` attribute
+- **FIXED**: Subfield copy for nested pills (e.g., `reviews[0].aspects`) now properly copies pill values
+- **FIXED**: Full list copy now preserves nested pill field values
+- **ADDED**: `copyPillContainer()` helper function to centralize pill copy logic across all copy operations
+
+### 📚 Examples
+- **ENHANCED**: `copy_example.py` now demonstrates nested pill field copy with `Review.aspects` field
+
+---
+
 ## Version 0.3.12 (2026-01-15)
 
 ### 🎉 New Features

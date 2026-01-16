@@ -84,6 +84,130 @@ function extractListIndex(pathPrefix) {
   return /^\d+$/.test(indexStr) ? parseInt(indexStr) : indexStr;
 }
 
+// Helper function to copy pill (List[Literal] or List[Enum]) field contents
+// This is used by performListCopyByPosition, subfield copy, and performStandardCopy
+function copyPillContainer(sourcePillContainer, targetPillContainer, highlightTarget) {
+  if (!sourcePillContainer || !targetPillContainer) {
+    return false;
+  }
+
+  // Get source selected values from pills
+  var sourcePillsContainer = sourcePillContainer.querySelector('[id$="_pills"]');
+  var sourceValues = [];
+  if (sourcePillsContainer) {
+    var sourcePills = sourcePillsContainer.querySelectorAll('[data-value]');
+    sourcePills.forEach(function(pill) {
+      var hiddenInput = pill.querySelector('input[type="hidden"]');
+      if (hiddenInput) {
+        sourceValues.push({
+          value: pill.dataset.value,
+          display: pill.querySelector('span.mr-1') ? pill.querySelector('span.mr-1').textContent : pill.dataset.value
+        });
+      }
+    });
+  }
+
+  // Clear target pills
+  var targetPillsContainer = targetPillContainer.querySelector('[id$="_pills"]');
+  var targetDropdown = targetPillContainer.querySelector('select');
+  var targetFieldName = targetPillContainer.dataset.fieldName;
+  var targetContainerId = targetPillContainer.id;
+
+  if (targetPillsContainer) {
+    targetPillsContainer.innerHTML = '';
+  }
+
+  // Recreate pills in target with source values
+  sourceValues.forEach(function(item, idx) {
+    var pillId = targetFieldName + '_' + idx + '_pill';
+    var inputName = targetFieldName + '_' + idx;
+
+    // Create hidden input
+    var input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = inputName;
+    input.value = item.value;
+
+    // Create label span
+    var label = document.createElement('span');
+    label.className = 'mr-1';
+    label.textContent = item.display;
+
+    // Create remove button
+    var removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'ml-1 text-xs hover:text-red-600 font-bold cursor-pointer';
+    removeBtn.textContent = '×';
+    removeBtn.onclick = function() {
+      window.fhpfRemoveChoicePill(pillId, item.value, targetContainerId);
+    };
+
+    // Create pill span
+    var pill = document.createElement('span');
+    pill.id = pillId;
+    pill.dataset.value = item.value;
+    pill.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800';
+    pill.appendChild(input);
+    pill.appendChild(label);
+    pill.appendChild(removeBtn);
+
+    targetPillsContainer.appendChild(pill);
+  });
+
+  // Rebuild the target dropdown to show remaining options
+  if (targetDropdown && typeof fhpfRebuildChoiceDropdown === 'function') {
+    // Use internal rebuild function if available
+    fhpfRebuildChoiceDropdown(targetContainerId);
+  } else if (targetDropdown) {
+    // Manual dropdown rebuild
+    var allChoicesJson = targetPillContainer.dataset.allChoices || '[]';
+    var allChoices = [];
+    try {
+      allChoices = JSON.parse(allChoicesJson);
+    } catch (e) {
+      console.error('Failed to parse pill choices:', e);
+    }
+
+    var selectedValues = new Set(sourceValues.map(function(v) { return v.value; }));
+    var remaining = allChoices.filter(function(choice) {
+      return !selectedValues.has(choice.value);
+    });
+
+    // Rebuild dropdown options
+    targetDropdown.innerHTML = '';
+    var placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Add...';
+    placeholder.selected = true;
+    placeholder.disabled = true;
+    targetDropdown.appendChild(placeholder);
+
+    remaining.forEach(function(choice) {
+      var opt = document.createElement('option');
+      opt.value = choice.value;
+      opt.textContent = choice.display;
+      opt.dataset.display = choice.display;
+      targetDropdown.appendChild(opt);
+    });
+
+    targetDropdown.style.display = remaining.length > 0 ? 'inline-block' : 'none';
+  }
+
+  // Highlight the target container briefly if requested
+  if (highlightTarget !== false) {
+    targetPillContainer.style.transition = 'background-color 0.3s';
+    targetPillContainer.style.backgroundColor = '#dbeafe';
+    setTimeout(function() {
+      targetPillContainer.style.backgroundColor = '';
+      setTimeout(function() {
+        targetPillContainer.style.transition = '';
+      }, 300);
+    }, 1500);
+  }
+
+  return true;
+}
+
 // Copy function - pure JS implementation
 window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
   try {
@@ -179,6 +303,10 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
               if (targetInputs[j].tagName === 'UK-SELECT') {
                 var nativeSelect = targetInputs[j].querySelector('select');
                 candidateName = nativeSelect ? nativeSelect.name : null;
+              } else if (targetInputs[j].dataset.pillField === 'true') {
+                // Pill containers (DIV elements) don't have a name attribute,
+                // use their ID instead which contains the form prefix
+                candidateName = targetInputs[j].id;
               } else {
                 candidateName = targetInputs[j].name;
               }
@@ -191,6 +319,28 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
           }
 
           if (sourceInput && targetInput) {
+            // Check if this is a pill field (List[Literal] or List[Enum])
+            if (sourceInput.dataset.pillField === 'true' && targetInput.dataset.pillField === 'true') {
+              // Use pill-aware copy logic
+              copyPillContainer(sourceInput, targetInput, true);
+
+              // Restore accordion states and return
+              setTimeout(function() {
+                accordionStates.forEach(function(state) {
+                  if (state.isOpen && !state.element.classList.contains('uk-open')) {
+                    state.element.classList.add('uk-open');
+                    var content = state.element.querySelector('.uk-accordion-content');
+                    if (content) {
+                      content.hidden = false;
+                      content.style.height = 'auto';
+                    }
+                  }
+                });
+                window.__fhpfCopyInProgress = false;
+              }, 100);
+              return;
+            }
+
             // Copy the value directly
             var tag = sourceInput.tagName.toUpperCase();
             var type = (sourceInput.type || '').toLowerCase();
@@ -692,6 +842,10 @@ function performListCopyByPosition(sourceListContainer, targetListContainer, sou
             if (targetInputs[j].tagName === 'UK-SELECT') {
               var nativeSelect = targetInputs[j].querySelector('select');
               candidateName = nativeSelect ? nativeSelect.name : null;
+            } else if (targetInputs[j].dataset.pillField === 'true') {
+              // Pill containers (DIV elements) don't have a name attribute,
+              // use their ID instead which contains the form prefix
+              candidateName = targetInputs[j].id;
             } else {
               candidateName = targetInputs[j].name;
             }
@@ -704,6 +858,13 @@ function performListCopyByPosition(sourceListContainer, targetListContainer, sou
         }
 
         if (!targetInput) {
+          return;
+        }
+
+        // Check if this is a pill field (List[Literal] or List[Enum])
+        if (sourceInput.dataset.pillField === 'true' && targetInput.dataset.pillField === 'true') {
+          // Use pill-aware copy logic (don't highlight each one individually during bulk copy)
+          copyPillContainer(sourceInput, targetInput, false);
           return;
         }
 
@@ -1058,6 +1219,10 @@ function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, c
         if (candidate.tagName === 'UK-SELECT') {
           var nativeSelect = candidate.querySelector('select');
           candidateName = nativeSelect ? nativeSelect.name : null;
+        } else if (candidate.dataset.pillField === 'true') {
+          // Pill containers (DIV elements) don't have a name attribute,
+          // use their ID instead which contains the form prefix
+          candidateName = candidate.id;
         } else {
           candidateName = candidate.name;
         }
@@ -1068,6 +1233,14 @@ function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, c
       }
 
       if (!targetInput) {
+        return;
+      }
+
+      // Check if this is a pill field (List[Literal] or List[Enum])
+      if (sourceInput.dataset.pillField === 'true' && targetInput.dataset.pillField === 'true') {
+        // Use pill-aware copy logic
+        copyPillContainer(sourceInput, targetInput, true);
+        copiedCount++;
         return;
       }
 

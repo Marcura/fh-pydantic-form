@@ -9,12 +9,15 @@ ComparisonForm, including:
 3. Copying entire lists (e.g., reviews)
 4. Copying simple scalar fields (e.g., name)
 5. Copying List[Literal] pill fields (e.g., categories)
+6. Copying NESTED pill fields inside List[BaseModel] items (e.g., reviews[0].aspects)
 
 Use this to test that:
 - Copying a full list item creates a NEW item in the target list
 - Copying a subfield UPDATES the existing item (doesn't create new)
 - Copying works for both numeric indices (reviews[0]) and placeholder indices (reviews[new_123])
-- Copying pill fields transfers all selected pills to target
+- Copying top-level pill fields transfers all selected pills to target
+- Copying nested pill fields (inside list items) transfers pills correctly
+- Copying a full list preserves nested pill field values
 """
 
 from typing import List, Literal
@@ -31,10 +34,15 @@ from fh_pydantic_form.comparison_form import ComparisonForm, comparison_form_js
 
 
 class Review(BaseModel):
-    """A product review with rating and comment."""
+    """A product review with rating, comment, and aspects reviewed."""
 
     rating: int = Field(default=3, ge=1, le=5, description="Rating from 1-5 stars")
     comment: str = Field(default="", description="Review comment")
+    aspects: List[Literal["Quality", "Price", "Durability", "Design", "Service"]] = (
+        Field(
+            default_factory=list, description="Aspects covered in review (nested pill)"
+        )
+    )
 
 
 class Product(BaseModel):
@@ -57,8 +65,10 @@ LEFT_DATA = Product(
     description="This is the reference product on the left side.",
     categories=["Electronics", "Home"],
     reviews=[
-        Review(rating=5, comment="Excellent quality!"),
-        Review(rating=4, comment="Good value for money."),
+        Review(
+            rating=5, comment="Excellent quality!", aspects=["Quality", "Durability"]
+        ),
+        Review(rating=4, comment="Good value for money.", aspects=["Price", "Service"]),
     ],
     tags=["featured", "sale", "popular"],
 )
@@ -69,7 +79,7 @@ RIGHT_DATA = Product(
     description="This is the generated product on the right side.",
     categories=["Clothing", "Sports", "Books"],
     reviews=[
-        Review(rating=3, comment="Average product."),
+        Review(rating=3, comment="Average product.", aspects=["Design"]),
     ],
     tags=["new", "trending"],
 )
@@ -135,7 +145,7 @@ def home():
                     fh.Ul(
                         fh.Li(
                             fh.Strong("Copy Full Item: "),
-                            "Click copy on 'reviews[0]' - should ADD a new item to target list",
+                            "Click copy on 'reviews[0]' - should ADD a new item to target list (including nested aspects pills)",
                             cls="mb-2",
                         ),
                         fh.Li(
@@ -144,8 +154,13 @@ def home():
                             cls="mb-2",
                         ),
                         fh.Li(
+                            fh.Strong("Copy Nested Pill Field: "),
+                            "Click copy on 'reviews[0].aspects' - should copy nested pills to target (Quality, Durability → Design)",
+                            cls="mb-2",
+                        ),
+                        fh.Li(
                             fh.Strong("Copy Full List: "),
-                            "Click copy on 'reviews' field header - should copy entire list",
+                            "Click copy on 'reviews' field header - should copy entire list including all nested pill values",
                             cls="mb-2",
                         ),
                         fh.Li(
@@ -154,7 +169,7 @@ def home():
                             cls="mb-2",
                         ),
                         fh.Li(
-                            fh.Strong("Copy Pill Field: "),
+                            fh.Strong("Copy Top-Level Pill Field: "),
                             "Click copy on 'categories' - should copy all selected pills to target",
                             cls="mb-2",
                         ),
@@ -236,7 +251,9 @@ if __name__ == "__main__":
     print("  - Copying full list items (adds new item)")
     print("  - Copying subfields (updates existing item)")
     print("  - Copying newly added items (new_TIMESTAMP placeholders)")
-    print("  - Copying List[Literal] pill fields (categories)")
+    print("  - Copying top-level List[Literal] pill fields (categories)")
+    print("  - Copying NESTED pill fields inside List[BaseModel] (reviews[0].aspects)")
+    print("  - Copying full lists preserves nested pill values")
     print("\nOpen http://localhost:5001 in your browser")
     print("=" * 60 + "\n")
 
