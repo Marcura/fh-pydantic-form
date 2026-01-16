@@ -388,6 +388,7 @@ class BaseFieldRenderer(MetricsRendererMixin):
         comparison_copy_enabled: bool = False,
         comparison_copy_target: Optional[str] = None,
         comparison_name: Optional[str] = None,
+        route_form_name: Optional[str] = None,
         **kwargs,  # Accept additional kwargs for extensibility
     ):
         """
@@ -409,6 +410,7 @@ class BaseFieldRenderer(MetricsRendererMixin):
             comparison_copy_enabled: If True, show copy button for this field
             comparison_copy_target: "left" or "right" - which side this field is on
             comparison_name: Name of the ComparisonForm (for copy route URLs)
+            route_form_name: Optional template form name for list routes
             **kwargs: Additional keyword arguments for extensibility
         """
         # Sanitize prefix: replace dots with underscores for valid CSS selectors in IDs
@@ -440,6 +442,7 @@ class BaseFieldRenderer(MetricsRendererMixin):
         self._cmp_copy_enabled = comparison_copy_enabled
         self._cmp_copy_target = comparison_copy_target
         self._cmp_name = comparison_name
+        self.route_form_name = route_form_name
 
         # Initialize metric entry attribute
         self.metric_entry: Optional[MetricEntry] = None
@@ -550,7 +553,7 @@ class BaseFieldRenderer(MetricsRendererMixin):
         return mui.Button(
             mui.UkIcon(arrow, cls="w-4 h-4 text-gray-500 hover:text-blue-600"),
             type="button",
-            onclick=f"window.fhpfPerformCopy('{path}', '{self.prefix}', '{self._cmp_copy_target}'); return false;",
+            onclick=f"window.fhpfPerformCopy('{path}', '{self.prefix}', '{self._cmp_copy_target}', this); return false;",
             uk_tooltip=tooltip_text,
             cls="uk-button-text uk-button-small flex-shrink-0",
             style="all: unset; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0.25rem; min-width: 1.5rem;",
@@ -1725,6 +1728,7 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
                     comparison_copy_enabled=self._cmp_copy_enabled,  # Propagate comparison copy settings
                     comparison_copy_target=self._cmp_copy_target,
                     comparison_name=self._cmp_name,
+                    route_form_name=self.route_form_name,  # Propagate template route name
                 )
 
                 nested_inputs.append(renderer.render())
@@ -1773,6 +1777,7 @@ class ListFieldRenderer(BaseFieldRenderer):
         metric_entry: Optional[MetricEntry] = None,
         metrics_dict: Optional[MetricsDict] = None,
         show_item_border: bool = True,
+        route_form_name: Optional[str] = None,
         **kwargs,  # Accept additional kwargs
     ):
         """
@@ -1791,6 +1796,7 @@ class ListFieldRenderer(BaseFieldRenderer):
             metric_entry: Optional metric entry for visual feedback
             metrics_dict: Optional full metrics dict for auto-lookup
             show_item_border: Whether to show colored borders on list items based on metrics
+            route_form_name: Optional template form name for list routes
             **kwargs: Additional keyword arguments passed to parent
         """
         super().__init__(
@@ -1805,9 +1811,17 @@ class ListFieldRenderer(BaseFieldRenderer):
             form_name=form_name,
             metric_entry=metric_entry,
             metrics_dict=metrics_dict,
+            route_form_name=route_form_name,
             **kwargs,  # Pass kwargs to parent
         )
+        self._route_form_name = route_form_name or self._form_name
         self.show_item_border = show_item_border
+
+    def _route_hx_vals(self) -> Optional[str]:
+        """Return hx-vals payload when routing through a template form."""
+        if self._route_form_name and self._route_form_name != self._form_name:
+            return json.dumps({"fhpf_form_name": self._form_name})
+        return None
 
     def _container_id(self) -> str:
         """
@@ -1922,9 +1936,20 @@ class ListFieldRenderer(BaseFieldRenderer):
             )
 
             # Use override endpoint if provided (for ComparisonForm), otherwise use standard form refresh
-            refresh_url = (
-                self._refresh_endpoint_override or f"/form/{form_name}/refresh"
-            )
+            if self._refresh_endpoint_override:
+                refresh_url = self._refresh_endpoint_override
+                refresh_vals = None
+                refresh_include = "closest form"
+            else:
+                route_form_name = (
+                    self._route_form_name if hasattr(self, "_route_form_name") else None
+                )
+                refresh_url = f"/form/{(route_form_name or form_name)}/refresh"
+                refresh_vals = None
+                refresh_include = "closest form"
+                if route_form_name and route_form_name != form_name:
+                    refresh_vals = json.dumps({"fhpf_form_name": form_name})
+                    refresh_include = f"[name^='{form_name}_']"
 
             # Get container ID for accordion state preservation
             container_id = self._container_id()
@@ -1937,7 +1962,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                 hx_target=f"#{form_name}-inputs-wrapper",
                 hx_swap="innerHTML",
                 hx_trigger="click",  # Explicit trigger on click
-                hx_include="closest form",  # Include all form fields from the enclosing form
+                hx_include=refresh_include,  # Include form fields for refresh
                 hx_preserve="scroll",
                 uk_tooltip="Refresh form display to update list summaries",
                 style="all: unset; display: inline-flex; align-items: center; cursor: pointer; padding: 0 0.5rem;",
@@ -1947,6 +1972,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                 **{
                     "hx-on::after-swap": f"window.restoreAccordionState && window.restoreAccordionState('{container_id}')"
                 },
+                **({"hx_vals": refresh_vals} if refresh_vals else {}),
             )
             action_buttons.append(refresh_icon_trigger)
 
@@ -2107,8 +2133,8 @@ class ListFieldRenderer(BaseFieldRenderer):
         if not items:
             # Use hierarchical path for URL
             add_url = (
-                f"/form/{self._form_name}/list/add/{self._list_path}"
-                if self._form_name
+                f"/form/{self._route_form_name}/list/add/{self._list_path}"
+                if self._route_form_name
                 else f"/list/add/{self.field_name}"
             )
 
@@ -2120,6 +2146,9 @@ class ListFieldRenderer(BaseFieldRenderer):
                 "hx_swap": "beforeend",
                 "type": "button",
             }
+            route_vals = self._route_hx_vals()
+            if route_vals:
+                add_button_attrs["hx_vals"] = route_vals
 
             # Only add disabled attribute if field should be disabled
             if self.disabled:
@@ -2319,6 +2348,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                         comparison_copy_enabled=self._cmp_copy_enabled,  # Propagate comparison copy settings
                         comparison_copy_target=self._cmp_copy_target,
                         comparison_name=self._cmp_name,
+                        route_form_name=self._route_form_name,  # Use template routes
                     )
                     # Add the rendered input to content elements
                     item_content_elements.append(item_renderer.render_input())
@@ -2392,6 +2422,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                                 comparison_copy_enabled=self._cmp_copy_enabled,  # Propagate comparison copy settings
                                 comparison_copy_target=self._cmp_copy_target,
                                 comparison_name=self._cmp_name,
+                                route_form_name=self._route_form_name,  # Use template routes
                             )
 
                             # Add rendered field to valid fields
@@ -2433,6 +2464,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                     metric_entry=None,  # Let auto-lookup handle it
                     metrics_dict=self.metrics_dict,  # Pass down the metrics dict
                     refresh_endpoint_override=self._refresh_endpoint_override,  # Propagate refresh override
+                    route_form_name=self._route_form_name,  # Use template routes
                 )
                 input_element = simple_renderer.render_input()
                 wrapper = fh.Div(input_element)
@@ -2442,14 +2474,14 @@ class ListFieldRenderer(BaseFieldRenderer):
             # --- Create action buttons with form-specific URLs ---
             # Generate HTMX endpoints using hierarchical paths
             delete_url = (
-                f"/form/{self._form_name}/list/delete/{self._list_path}"
-                if self._form_name
+                f"/form/{self._route_form_name}/list/delete/{self._list_path}"
+                if self._route_form_name
                 else f"/list/delete/{self.field_name}"
             )
 
             add_url = (
-                f"/form/{self._form_name}/list/add/{self._list_path}"
-                if self._form_name
+                f"/form/{self._route_form_name}/list/add/{self._list_path}"
+                if self._route_form_name
                 else f"/list/add/{self.field_name}"
             )
 
@@ -2482,6 +2514,10 @@ class ListFieldRenderer(BaseFieldRenderer):
                 "uk_tooltip": "Insert new item below",
                 "type": "button",  # Prevent form submission
             }
+            route_vals = self._route_hx_vals()
+            if route_vals:
+                delete_button_attrs["hx_vals"] = route_vals
+                add_below_button_attrs["hx_vals"] = route_vals
 
             move_up_button_attrs = {
                 "cls": "uk-button-link move-up-btn",
@@ -2563,7 +2599,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                 item_copy_button = mui.Button(
                     mui.UkIcon(arrow, cls="w-4 h-4 text-gray-500 hover:text-blue-600"),
                     type="button",
-                    onclick=f"window.fhpfPerformCopy('{item_path_string}', '{self.prefix}', '{self._cmp_copy_target}'); return false;",
+                    onclick=f"window.fhpfPerformCopy('{item_path_string}', '{self.prefix}', '{self._cmp_copy_target}', this); return false;",
                     uk_tooltip=tooltip_text,
                     cls="uk-button-text uk-button-small flex-shrink-0",
                     style="all: unset; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0.25rem; min-width: 1.5rem;",

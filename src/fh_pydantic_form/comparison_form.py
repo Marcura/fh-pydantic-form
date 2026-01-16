@@ -84,6 +84,56 @@ function extractListIndex(pathPrefix) {
   return /^\d+$/.test(indexStr) ? parseInt(indexStr) : indexStr;
 }
 
+function fhpfFormNameFromPrefix(prefix) {
+  if (!prefix) return null;
+  return prefix.replace(/_$/, '');
+}
+
+function fhpfResolveComparisonContext(triggerEl, currentPrefix) {
+  var grid = null;
+
+  if (triggerEl && triggerEl.closest) {
+    grid = triggerEl.closest('[data-fhpf-left-prefix][data-fhpf-right-prefix]');
+  }
+
+  if (!grid && currentPrefix) {
+    var grids = document.querySelectorAll('[data-fhpf-left-prefix][data-fhpf-right-prefix]');
+    for (var i = 0; i < grids.length; i++) {
+      var leftPrefix = grids[i].dataset.fhpfLeftPrefix;
+      var rightPrefix = grids[i].dataset.fhpfRightPrefix;
+      if (
+        (leftPrefix && currentPrefix.startsWith(leftPrefix)) ||
+        (rightPrefix && currentPrefix.startsWith(rightPrefix))
+      ) {
+        grid = grids[i];
+        break;
+      }
+    }
+  }
+
+  var leftPrefix = null;
+  var rightPrefix = null;
+
+  if (grid) {
+    leftPrefix = grid.dataset.fhpfLeftPrefix || null;
+    rightPrefix = grid.dataset.fhpfRightPrefix || null;
+  }
+
+  if ((!leftPrefix || !rightPrefix) && window.__fhpfComparisonPrefixes) {
+    var keys = Object.keys(window.__fhpfComparisonPrefixes);
+    if (keys.length === 1) {
+      var entry = window.__fhpfComparisonPrefixes[keys[0]];
+      leftPrefix = leftPrefix || entry.left;
+      rightPrefix = rightPrefix || entry.right;
+    }
+  }
+
+  if (!leftPrefix) leftPrefix = window.__fhpfLeftPrefix;
+  if (!rightPrefix) rightPrefix = window.__fhpfRightPrefix;
+
+  return { grid: grid, leftPrefix: leftPrefix, rightPrefix: rightPrefix };
+}
+
 // Helper function to copy pill (List[Literal] or List[Enum]) field contents
 // This is used by performListCopyByPosition, subfield copy, and performStandardCopy
 function copyPillContainer(sourcePillContainer, targetPillContainer, highlightTarget) {
@@ -209,22 +259,47 @@ function copyPillContainer(sourcePillContainer, targetPillContainer, highlightTa
 }
 
 // Copy function - pure JS implementation
-window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
+window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget, triggerEl) {
   try {
     // Set flag to prevent accordion sync
     window.__fhpfCopyInProgress = true;
 
+    // Resolve comparison context (supports multiple comparisons on the page)
+    var ctx = fhpfResolveComparisonContext(triggerEl, currentPrefix);
+    var leftPrefix = ctx.leftPrefix;
+    var rightPrefix = ctx.rightPrefix;
+    var grid = ctx.grid;
+
+    if (!leftPrefix || !rightPrefix) {
+      console.error('Copy failed: missing comparison prefixes.');
+      window.__fhpfCopyInProgress = false;
+      return;
+    }
+
+    var accordionScope = grid || document;
+
     // Save all accordion states before copy
     var accordionStates = [];
-    document.querySelectorAll('ul[uk-accordion] > li').forEach(function(li) {
+    accordionScope.querySelectorAll('ul[uk-accordion] > li').forEach(function(li) {
       accordionStates.push({
         element: li,
         isOpen: li.classList.contains('uk-open')
       });
     });
 
-    // Determine source prefix based on copy target
-    var sourcePrefix = (copyTarget === 'left') ? window.__fhpfRightPrefix : window.__fhpfLeftPrefix;
+    // Determine source/target prefixes based on copy target
+    var sourcePrefix = (copyTarget === 'left') ? rightPrefix : leftPrefix;
+    var targetPrefix = (copyTarget === 'left') ? leftPrefix : rightPrefix;
+    var targetFormName = fhpfFormNameFromPrefix(targetPrefix);
+    var htmxValues = targetFormName ? { fhpf_form_name: targetFormName } : {};
+
+    function resolveById(id) {
+      if (!id) return null;
+      if (grid && grid.querySelector) {
+        return grid.querySelector('[id=\"' + id + '\"]');
+      }
+      return document.getElementById(id);
+    }
 
     // Determine copy behavior based on path structure:
     // 1. Full list item (e.g., "reviews[0]") -> add new item to target list
@@ -245,8 +320,6 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
     if (isSubfield) {
       // For subfield copies, we need to find the corresponding target field by position
       // and perform a direct value copy (standard copy behavior)
-      var targetPrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
-
       // Extract the relative path (e.g., ".rating" from "reviews[0].rating")
       // Find the closing bracket after listFieldPath and extract what comes after
       var bracketStart = pathPrefix.indexOf('[', listFieldPath.length);
@@ -257,8 +330,8 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
       var sourceContainerId = sourcePrefix.replace(/_$/, '') + '_' + listFieldPath + '_items_container';
       var targetContainerId = targetPrefix.replace(/_$/, '') + '_' + listFieldPath + '_items_container';
 
-      var sourceListContainer = document.getElementById(sourceContainerId);
-      var targetListContainer = document.getElementById(targetContainerId);
+      var sourceListContainer = resolveById(sourceContainerId);
+      var targetListContainer = resolveById(targetContainerId);
 
       if (sourceListContainer && targetListContainer) {
         var sourceItems = sourceListContainer.querySelectorAll(':scope > li');
@@ -420,9 +493,8 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
     // CASE 1: Full list item copy - add new item to target list
     if (isFullListItem) {
       // Find target list container
-      var targetPrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
       var targetContainerId = targetPrefix.replace(/_$/, '') + '_' + listFieldPath + '_items_container';
-      var targetContainer = document.getElementById(targetContainerId);
+      var targetContainer = resolveById(targetContainerId);
 
       if (targetContainer) {
         // Find the "Add Item" button for the target list
@@ -456,13 +528,15 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
             // Use htmx.ajax to insert at specific position
             htmx.ajax('POST', addUrl, {
               target: '#' + insertBeforeElement.id,
-              swap: swapStrategy
+              swap: swapStrategy,
+              values: htmxValues
             });
           } else {
             // List is empty, insert into container
             htmx.ajax('POST', addUrl, {
               target: '#' + targetContainerId,
-              swap: 'beforeend'
+              swap: 'beforeend',
+              values: htmxValues
             });
           }
 
@@ -517,7 +591,7 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
 
             if (newlyAddedElement && newlyAddedElement.id) {
               // Use the ID we captured from the HTMX response
-              newItem = document.getElementById(newlyAddedElement.id);
+              newItem = resolveById(newlyAddedElement.id);
 
               if (newItem) {
                 // Find its position in the list
@@ -542,7 +616,6 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
 
                 // The new item might not contain the textarea with placeholder!
                 // Search the entire target container for the newest textarea with "new_" in the name
-                var targetPrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
                 var allInputsInContainer = targetContainer.querySelectorAll('[data-field-path^="' + listFieldPath + '["]');
 
                 var firstInput = null;
@@ -607,7 +680,7 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
                 var newPathPrefix = listFieldPath + '[' + actualPlaceholderIdx + ']';
 
                 // Now perform the standard copy operation with the new path
-                performStandardCopy(pathPrefix, newPathPrefix, sourcePrefix, copyTarget, accordionStates, currentPrefix);
+                performStandardCopy(pathPrefix, newPathPrefix, sourcePrefix, copyTarget, accordionStates, currentPrefix, leftPrefix, rightPrefix);
 
                 // Wait for copy to complete, then open accordion and highlight
                 // Note: We skip automatic refresh because the temporary item ID doesn't persist after refresh
@@ -710,14 +783,12 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
     (function() {
       // Detect if this is a "full list copy" of a list field:
       // we treat it as a list if both sides have containers like "<prefix>_<path>_items_container"
-      var targetPrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
-
       var baseIdPart = pathPrefix; // e.g. "addresses" or "key_features"
       var sourceContainerId = sourcePrefix.replace(/_$/, '') + '_' + baseIdPart + '_items_container';
       var targetContainerId = targetPrefix.replace(/_$/, '') + '_' + baseIdPart + '_items_container';
 
-      var sourceListContainer = document.getElementById(sourceContainerId);
-      var targetListContainer = document.getElementById(targetContainerId);
+      var sourceListContainer = resolveById(sourceContainerId);
+      var targetListContainer = resolveById(targetContainerId);
 
       // Only do length alignment if BOTH containers exist (i.e., this field is a list on both sides)
       if (sourceListContainer && targetListContainer) {
@@ -739,7 +810,7 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
               htmx.ajax('POST', addUrl, {
                 target: '#' + targetContainerId,
                 swap: 'beforeend',
-                values: {} // no-op
+                values: htmxValues
               });
               added += 1;
               cb && cb();
@@ -766,13 +837,13 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
               var currentCount = targetListContainer.querySelectorAll(':scope > li').length;
               if (settled && currentCount >= sourceCount) {
                 // Proceed with list copy by DOM position
-                performListCopyByPosition(sourceListContainer, targetListContainer, sourcePrefix, copyTarget, accordionStates, pathPrefix);
+                performListCopyByPosition(sourceListContainer, targetListContainer, sourcePrefix, copyTarget, accordionStates, pathPrefix, leftPrefix, rightPrefix);
                 return;
               }
               if (attempts >= maxAttempts) {
                 console.error('Timeout aligning list lengths for full-list copy');
                 // Still do a best-effort copy
-                performListCopyByPosition(sourceListContainer, targetListContainer, sourcePrefix, copyTarget, accordionStates, pathPrefix);
+                performListCopyByPosition(sourceListContainer, targetListContainer, sourcePrefix, copyTarget, accordionStates, pathPrefix, leftPrefix, rightPrefix);
                 return;
               }
               setTimeout(waitAndCopy, delay);
@@ -785,13 +856,13 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
           }
         } else {
           // Source has same or fewer items - use position-based copy for lists
-          performListCopyByPosition(sourceListContainer, targetListContainer, sourcePrefix, copyTarget, accordionStates, pathPrefix);
+          performListCopyByPosition(sourceListContainer, targetListContainer, sourcePrefix, copyTarget, accordionStates, pathPrefix, leftPrefix, rightPrefix);
           return;
         }
       }
 
       // Default path (non-list fields or already aligned lists)
-      performStandardCopy(pathPrefix, pathPrefix, sourcePrefix, copyTarget, accordionStates, currentPrefix);
+      performStandardCopy(pathPrefix, pathPrefix, sourcePrefix, copyTarget, accordionStates, currentPrefix, leftPrefix, rightPrefix);
     })();
 
   } catch (e) {
@@ -801,11 +872,11 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
 };
 
 // Copy list items by DOM position (handles different indices in source/target)
-function performListCopyByPosition(sourceListContainer, targetListContainer, sourcePrefix, copyTarget, accordionStates, listFieldPath) {
+function performListCopyByPosition(sourceListContainer, targetListContainer, sourcePrefix, copyTarget, accordionStates, listFieldPath, leftPrefix, rightPrefix) {
   try {
     var sourceItems = sourceListContainer.querySelectorAll(':scope > li');
     var targetItems = targetListContainer.querySelectorAll(':scope > li');
-    var targetPrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
+    var targetPrefix = (copyTarget === 'left') ? leftPrefix : rightPrefix;
 
     // Copy each source item to corresponding target item by position
     for (var i = 0; i < sourceItems.length && i < targetItems.length; i++) {
@@ -983,7 +1054,7 @@ function performListCopyByPosition(sourceListContainer, targetListContainer, sou
 }
 
 // Extracted standard copy logic to allow reuse
-function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, copyTarget, accordionStates, currentPrefix) {
+function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, copyTarget, accordionStates, currentPrefix, leftPrefix, rightPrefix) {
   try {
     // Check if this is a pill field (List[Literal] or List[Enum])
     // Must find the container that belongs to the SOURCE form (by prefix)
@@ -1009,7 +1080,7 @@ function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, c
       return null;
     }
 
-    var targetBasePrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
+    var targetBasePrefix = (copyTarget === 'left') ? leftPrefix : rightPrefix;
     var sourceMatchPrefix = currentPrefix || sourcePrefix;
     var targetMatchPrefix = targetBasePrefix;
     if (currentPrefix && sourcePrefix && currentPrefix.startsWith(sourcePrefix)) {
@@ -1337,7 +1408,7 @@ function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, c
     if (sourcePathPrefix && !sourcePathPrefix.includes('[') && sourcePathPrefix === targetPathPrefix) {
       // This is a top-level field (not a list item), check if it's a list field
       // Try to find list containers for both source and target
-      var targetPrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
+      var targetPrefix = (copyTarget === 'left') ? leftPrefix : rightPrefix;
 
       // Build container ID patterns - handle both with and without trailing underscore
       var sourceContainerIdPattern = sourcePrefix.replace(/_$/, '') + '_' + sourcePathPrefix + '_items_container';
@@ -1451,6 +1522,8 @@ window.fhpfInitComparisonSync = function initComparisonSync(){
     const cell = sourceLi.closest('[data-path]');
     if (!cell) return;
     const path = cell.dataset.path;
+    const grid = cell.closest('[data-fhpf-compare-grid="true"]');
+    const scope = grid || document;
 
     // Determine index of this <li> inside its <ul>
     const idx     = Array.prototype.indexOf.call(
@@ -1460,7 +1533,7 @@ window.fhpfInitComparisonSync = function initComparisonSync(){
     const opening = ev.type === 'show';
 
     // Mirror on the other side
-    document
+    scope
       .querySelectorAll(`[data-path="${path}"]`)
       .forEach(peerCell => {
         if (peerCell === cell) return;
@@ -1521,6 +1594,8 @@ window.fhpfInitComparisonSync = function initComparisonSync(){
     const cell = listContainer.closest('[data-path]');
     if (!cell) return;
     const path = cell.dataset.path;
+    const grid = cell.closest('[data-fhpf-compare-grid="true"]');
+    const scope = grid || document;
 
     // Determine index of this <li> within its list container
     const listAccordion = sourceLi.parentElement;
@@ -1528,7 +1603,7 @@ window.fhpfInitComparisonSync = function initComparisonSync(){
     const opening = ev.type === 'show';
 
     // Mirror on the other side
-    document
+    scope
       .querySelectorAll(`[data-path="${path}"]`)
       .forEach(peerCell => {
         if (peerCell === cell) return;
@@ -1599,9 +1674,11 @@ window.fhpfInitComparisonSync = function initComparisonSync(){
       const cell = container.closest('[data-path]');
       if (!cell) return;
       const path = cell.dataset.path;
+      const grid = cell.closest('[data-fhpf-compare-grid="true"]');
+      const scope = grid || document;
 
       // c) Find the peer's list-container by suffix match
-      document
+      scope
         .querySelectorAll(`[data-path="${path}"]`)
         .forEach(peerCell => {
           if (peerCell === cell) return;
@@ -1890,6 +1967,7 @@ class ComparisonForm(Generic[ModelType]):
                 spacing=form.spacing,
                 field_path=[field_name],
                 form_name=form.name,
+                route_form_name=getattr(form, "template_name", form.name),
                 label_color=label_color,  # Pass the label color if specified
                 metrics_dict=form.metrics_dict,  # Use form's own metrics
                 keep_skip_json_pathset=form._keep_skip_json_pathset,  # Pass keep_skip_json configuration
@@ -1942,10 +2020,21 @@ class ComparisonForm(Generic[ModelType]):
             right_wrapper,
             cls="fhpf-compare grid grid-cols-2 gap-x-6 gap-y-2 items-start",
             id=f"{self.name}-comparison-grid",
+            **{
+                "data-fhpf-compare-grid": "true",
+                "data-fhpf-compare-name": self.name,
+                "data-fhpf-left-prefix": self.left_form.base_prefix,
+                "data-fhpf-right-prefix": self.right_form.base_prefix,
+            },
         )
 
         # Emit prefix globals for the copy registry
         prefix_script = fh.Script(f"""
+window.__fhpfComparisonPrefixes = window.__fhpfComparisonPrefixes || {{}};
+window.__fhpfComparisonPrefixes[{json.dumps(self.name)}] = {{
+  left: {json.dumps(self.left_form.base_prefix)},
+  right: {json.dumps(self.right_form.base_prefix)}
+}};
 window.__fhpfLeftPrefix = {json.dumps(self.left_form.base_prefix)};
 window.__fhpfRightPrefix = {json.dumps(self.right_form.base_prefix)};
 """)

@@ -235,6 +235,37 @@ form_renderer = PydanticForm("list_model", ListModel)
 form_renderer.register_routes(app)  # Register HTMX endpoints
 ```
 
+### Dynamic Forms (template routes)
+
+If you create many forms dynamically (e.g. one per table row) and **can’t** register routes for every unique form name, you can register routes once on a “template” form and have dynamic forms route list/refresh actions through it via `template_name`.
+
+```python
+# Register routes once at startup
+template = PydanticForm("doc_template", Doc)
+template.register_routes(app)
+
+@rt("/")
+def index():
+    # Dynamic form name per row/request
+    form = PydanticForm(
+        form_name="row_1",
+        model_class=Doc,
+        template_name="doc_template",
+    )
+    return mui.Form(
+        fh.Div(
+            form.refresh_button(),
+            form.reset_button(),
+            cls="flex gap-2 mb-3",
+        ),
+        form.render_inputs(),
+    )
+```
+
+How it works:
+- List/refresh URLs are generated under `/form/<template_name>/...`.
+- The actual form instance name is sent as `fhpf_form_name`, so the template routes can render the correct prefixes.
+
 ### List Features
 
 - **Add Items:** Each list has an "Add Item" button that creates new entries
@@ -552,6 +583,10 @@ mui.Form(
 - **Refresh button** updates the form display based on current values (useful for updating list item summaries)
 - **Reset button** restores all fields to their initial values with confirmation
 - Both use HTMX for seamless updates without page reloads
+
+**Dynamic forms via `template_name`:**
+- Refresh is routed through the template form and scoped to the specific instance via `fhpf_form_name`.
+- `reset_button()` becomes client-side (restores the initial HTML snapshot). Ensure `list_manipulation_js()` is included on the page.
 
 
 ## Label Colors
@@ -877,6 +912,7 @@ comparison_form.register_routes(app)
 - **Flexible Layout**: Responsive design works on desktop and mobile
 - **Form Validation**: Standard validation works with either form
 - **Intelligent List Copying**: Copy lists between forms with automatic length adjustment
+- **Multiple Comparisons per Page**: Copy + accordion sync is scoped to each comparison grid
 
 ### Copying Between Forms
 
@@ -1094,6 +1130,7 @@ form_renderer = PydanticForm(
 | `keep_skip_json_fields` | `Optional[List[str]]` | `None` | List of SkipJsonSchema field paths to selectively show (supports dot notation for nested fields) |
 | `spacing` | `SpacingValue` | `"normal"` | Spacing theme: `"normal"`, `"compact"`, or `SpacingTheme` enum |
 | `metrics_dict` | `Optional[Dict[str, Dict]]` | `None` | Field metrics for highlighting and tooltips |
+| `template_name` | `Optional[str]` | `None` | Route name to use for list/refresh/reset actions (useful for dynamic forms with shared template routes) |
 
 ### ComparisonForm Constructor
 

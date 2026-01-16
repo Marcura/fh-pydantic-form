@@ -1,3 +1,4 @@
+import json
 import logging
 import time as pytime
 from typing import (
@@ -108,6 +109,71 @@ function updateMoveButtons(container) {
         if (downButton) downButton.disabled = (index === items.length - 1);
     });
 }
+
+// Snapshot initial form HTML for client-side reset
+window.__fhpfInitialFormHtml = window.__fhpfInitialFormHtml || {};
+
+window.fhpfCaptureInitialForms = function(root) {
+    const scope = root || document;
+    const wrappers = scope.querySelectorAll('[id$="-inputs-wrapper"]');
+    wrappers.forEach(wrapper => {
+        if (!wrapper.id) return;
+        if (window.__fhpfInitialFormHtml[wrapper.id]) return;
+        window.__fhpfInitialFormHtml[wrapper.id] = wrapper.innerHTML;
+    });
+};
+
+window.fhpfResetForm = function(wrapperId, basePrefix, confirmMessage) {
+    if (confirmMessage && !window.confirm(confirmMessage)) {
+        return false;
+    }
+
+    let wrapper = document.getElementById(wrapperId);
+    if (!wrapper && basePrefix) {
+        const candidate = document.querySelector(`[name^='${basePrefix}']`);
+        if (candidate) {
+            wrapper = candidate.closest('[id$="-inputs-wrapper"]');
+        }
+    }
+
+    if (!wrapper) {
+        console.warn('Reset target not found:', wrapperId);
+        return false;
+    }
+
+    const initialHtml = window.__fhpfInitialFormHtml
+        ? window.__fhpfInitialFormHtml[wrapper.id]
+        : null;
+    if (!initialHtml) {
+        console.warn('No initial snapshot for form:', wrapper.id);
+        return false;
+    }
+
+    wrapper.innerHTML = initialHtml;
+
+    // Re-enable move button state for any list containers inside.
+    wrapper.querySelectorAll('[id$="_items_container"]').forEach(container => {
+        updateMoveButtons(container);
+    });
+
+    // Re-process HTMX attributes on the restored subtree.
+    if (window.htmx && typeof window.htmx.process === 'function') {
+        window.htmx.process(wrapper);
+    }
+
+    // Re-initialize UIkit accordions within the restored subtree if available.
+    if (window.UIkit && UIkit.accordion) {
+        wrapper.querySelectorAll('[uk-accordion]').forEach(el => {
+            try {
+                UIkit.accordion(el);
+            } catch (e) {
+                // Ignore UIkit init errors
+            }
+        });
+    }
+
+    return false;
+};
 
 // Function to toggle all list items open or closed
 function toggleListItems(containerId) {
@@ -392,6 +458,10 @@ document.addEventListener('DOMContentLoaded', () => {
         updateMoveButtons(container);
     });
 
+    if (window.fhpfCaptureInitialForms) {
+        window.fhpfCaptureInitialForms(document);
+    }
+
     // Attach HTMX event listener to document.body for list operations
     document.body.addEventListener('htmx:afterSwap', function(event) {
         // Check if this is an insert (afterend swap)
@@ -416,6 +486,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (event.detail.target.id && event.detail.target.id.endsWith('_items_container')) {
                 updateMoveButtons(event.detail.target);
             }
+        }
+
+        if (window.fhpfCaptureInitialForms && event.detail.target) {
+            window.fhpfCaptureInitialForms(event.detail.target);
         }
     }); 
 });
@@ -456,6 +530,7 @@ class PydanticForm(Generic[ModelType]):
         keep_skip_json_fields: Optional[List[str]] = None,
         spacing: SpacingValue = SpacingTheme.NORMAL,
         metrics_dict: Optional[Dict[str, Any]] = None,
+        template_name: Optional[str] = None,
     ):
         """
         Initialize the form renderer
@@ -474,8 +549,11 @@ class PydanticForm(Generic[ModelType]):
             keep_skip_json_fields: Optional list of dot-paths for SkipJsonSchema fields to force-keep
             spacing: Spacing theme to use for form layout ("normal", "compact", or SpacingTheme enum)
             metrics_dict: Optional metrics dictionary for field-level visual feedback
+            template_name: Optional template route name to use for list actions
         """
         self.name = form_name
+        # Use template_name for routing list actions; default to own form name
+        self.template_name = template_name or form_name
         self.model_class = model_class
 
         self.initial_values_dict: Dict[str, Any] = {}
@@ -590,6 +668,7 @@ class PydanticForm(Generic[ModelType]):
             metrics_dict=metrics_dict
             if metrics_dict is not None
             else self.metrics_dict,
+            template_name=self.template_name,
         )
 
         return clone
@@ -665,6 +744,7 @@ class PydanticForm(Generic[ModelType]):
                 spacing=self.spacing,  # Pass the spacing
                 field_path=[field_name],  # Set top-level field path
                 form_name=self.name,  # Pass form name
+                route_form_name=self.template_name,  # Use template routes for list actions
                 metrics_dict=self.metrics_dict,  # Pass the metrics dict
                 keep_skip_json_pathset=self._keep_skip_json_pathset,
             )
@@ -724,8 +804,18 @@ class PydanticForm(Generic[ModelType]):
             HTML response with refreshed form inputs
         """
         form_data = await req.form()
-        form_dict = dict(form_data)
+        return self._handle_refresh_with_form_data(dict(form_data))
 
+    def _handle_refresh_with_form_data(self, form_dict: Dict[str, Any]) -> FT:
+        """
+        Refresh handler that accepts already-parsed form data.
+
+        Args:
+            form_dict: Dictionary of form field data.
+
+        Returns:
+            HTML response with refreshed form inputs.
+        """
         # Filter to only this form's fields
         form_dict = self._filter_by_prefix(form_dict)
 
@@ -735,7 +825,6 @@ class PydanticForm(Generic[ModelType]):
         alert_ft = None  # Changed to hold an FT object instead of a string
         try:
             # Use the instance's parse method directly
-
             parsed_data = self.parse(form_dict)
 
         except Exception as e:
@@ -780,11 +869,27 @@ class PydanticForm(Generic[ModelType]):
 
         # Return the FT components directly instead of creating a Response object
         if alert_ft:
-            # Return both the alert and the form inputs as a tuple
-            return (alert_ft, refreshed_inputs_component)
+            return fh.Div(alert_ft, refreshed_inputs_component)
         else:
             # Return just the form inputs
             return refreshed_inputs_component
+
+    def _clone_with_name(self, form_name: str) -> "PydanticForm":
+        """Clone this form with a new name, preserving configuration."""
+        return PydanticForm(
+            form_name=form_name,
+            model_class=self.model_class,
+            initial_values=self.initial_values_dict,
+            custom_renderers=None,  # Registry is global
+            disabled=self.disabled,
+            disabled_fields=self.disabled_fields,
+            label_colors=self.label_colors,
+            exclude_fields=self.exclude_fields,
+            keep_skip_json_fields=self.keep_skip_json_fields,
+            spacing=self.spacing,
+            metrics_dict=self.metrics_dict,
+            template_name=self.template_name,
+        )
 
     async def handle_reset_request(self) -> FT:
         """
@@ -922,9 +1027,16 @@ class PydanticForm(Generic[ModelType]):
         @app.route(refresh_route_path, methods=["POST"])
         async def _instance_specific_refresh_handler(req):
             """Handle form refresh request for this specific form instance"""
-            # Add entry point logging to confirm the route is being hit
-            # Calls the instance method to handle the logic
-            return await self.handle_refresh_request(req)
+            form_data = await req.form()
+            form_name_override = form_data.get("fhpf_form_name")
+            if not form_name_override:
+                form_name_override = req.query_params.get("fhpf_form_name")
+
+            if form_name_override and form_name_override != self.name:
+                temp_form = self._clone_with_name(form_name_override)
+                return temp_form._handle_refresh_with_form_data(dict(form_data))
+
+            return self._handle_refresh_with_form_data(dict(form_data))
 
         # --- Register the form-specific reset route ---
         reset_route_path = f"/form/{self.name}/reset"
@@ -932,7 +1044,15 @@ class PydanticForm(Generic[ModelType]):
         @app.route(reset_route_path, methods=["POST"])
         async def _instance_specific_reset_handler(req):
             """Handle form reset request for this specific form instance"""
-            # Calls the instance method to handle the logic
+            form_data = await req.form()
+            form_name_override = form_data.get("fhpf_form_name")
+            if not form_name_override:
+                form_name_override = req.query_params.get("fhpf_form_name")
+
+            if form_name_override and form_name_override != self.name:
+                temp_form = self._clone_with_name(form_name_override)
+                return await temp_form.handle_reset_request()
+
             return await self.handle_reset_request()
 
         # Try the route with a more explicit pattern
@@ -953,6 +1073,19 @@ class PydanticForm(Generic[ModelType]):
             """
             if action not in {"add", "delete"}:
                 return fh.Response(status_code=400, content="Unknown list action")
+
+            form_name_override = None
+            try:
+                form_data = await req.form()
+                form_name_override = form_data.get("fhpf_form_name")
+            except Exception:
+                form_name_override = None
+
+            if not form_name_override:
+                form_name_override = req.query_params.get("fhpf_form_name")
+
+            effective_form_name = form_name_override or self.name
+            effective_base_prefix = f"{effective_form_name}_"
 
             segments = list_path.split("/")
             try:
@@ -976,9 +1109,9 @@ class PydanticForm(Generic[ModelType]):
             # Build prefix **without** the list field itself to avoid duplication
             parts_before_list = html_parts[:-1]  # drop final segment
             if parts_before_list:
-                html_prefix = f"{self.base_prefix}{'_'.join(parts_before_list)}_"
+                html_prefix = f"{effective_base_prefix}{'_'.join(parts_before_list)}_"
             else:
-                html_prefix = self.base_prefix
+                html_prefix = effective_base_prefix
 
             # Create renderer for the list field
             renderer = ListFieldRenderer(
@@ -989,7 +1122,8 @@ class PydanticForm(Generic[ModelType]):
                 spacing=self.spacing,
                 disabled=self.disabled,
                 field_path=segments,  # Pass the full path segments
-                form_name=self.name,  # Pass the explicit form name
+                form_name=effective_form_name,  # Pass the explicit form name
+                route_form_name=self.template_name,  # Use template routes for list actions
                 metrics_dict=self.metrics_dict,  # Pass the metrics dict
                 keep_skip_json_pathset=self._keep_skip_json_pathset,
             )
@@ -1021,8 +1155,8 @@ class PydanticForm(Generic[ModelType]):
         # Define the target wrapper ID
         form_content_wrapper_id = f"{self.name}-inputs-wrapper"
 
-        # Define the target URL
-        refresh_url = f"/form/{self.name}/refresh"
+        # Define the target URL (allow template routing)
+        refresh_url = f"/form/{self.template_name}/refresh"
 
         # Base button attributes
         button_attrs = {
@@ -1042,6 +1176,9 @@ class PydanticForm(Generic[ModelType]):
                 "hx-on::after-swap": "window.restoreAllAccordionStates && window.restoreAllAccordionStates()"
             },
         }
+        if self.template_name != self.name:
+            button_attrs["hx_vals"] = json.dumps({"fhpf_form_name": self.name})
+            button_attrs["hx_include"] = f"[name^='{self.base_prefix}']"
 
         # Update with any additional attributes
         button_attrs.update(kwargs)
@@ -1066,8 +1203,8 @@ class PydanticForm(Generic[ModelType]):
         # Define the target wrapper ID
         form_content_wrapper_id = f"{self.name}-inputs-wrapper"
 
-        # Define the target URL
-        reset_url = f"/form/{self.name}/reset"
+        # Define the target URL (allow template routing)
+        reset_url = f"/form/{self.template_name}/reset"
 
         # Base button attributes
         button_attrs = {
@@ -1080,6 +1217,24 @@ class PydanticForm(Generic[ModelType]):
             "uk_tooltip": "Reset the form fields to their original values",
             "cls": mui.ButtonT.destructive,  # Use danger style to indicate destructive action
         }
+        if self.template_name != self.name:
+            # Client-side reset for dynamic forms (no server state)
+            confirm_message = (
+                "Are you sure you want to reset the form to its initial values? "
+                "Any unsaved changes will be lost."
+            )
+            wrapper_js = json.dumps(form_content_wrapper_id)
+            prefix_js = json.dumps(self.base_prefix)
+            confirm_js = json.dumps(confirm_message)
+            button_attrs = {
+                "type": "button",
+                "onclick": (
+                    "return window.fhpfResetForm ? "
+                    f"window.fhpfResetForm({wrapper_js}, {prefix_js}, {confirm_js}) : false;"
+                ),
+                "uk_tooltip": "Reset the form fields to their original values",
+                "cls": mui.ButtonT.destructive,
+            }
 
         # Update with any additional attributes
         button_attrs.update(kwargs)

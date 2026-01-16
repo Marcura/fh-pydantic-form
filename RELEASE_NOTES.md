@@ -1,5 +1,27 @@
 # Release Notes
 
+## Version 0.3.14 (2026-01-16)
+
+### 🎉 New Features
+
+#### Dynamic Forms via `template_name`
+- **NEW**: `PydanticForm(..., template_name="...")` to reuse a single registered set of routes for many dynamically named forms
+- **NEW**: Template routes accept `fhpf_form_name` to render list/refresh actions for a specific dynamic form instance
+- **NEW**: Client-side reset for dynamic forms (restores the initial HTML snapshot)
+
+### 🔧 Improvements
+
+#### ComparisonForm Multi-Instance Support
+- **IMPROVED**: Copy + accordion sync is now scoped to each comparison grid (supports multiple ComparisonForms per page)
+
+### 📚 Examples
+- **ADDED**: `examples/dynamic_forms_example.py` demonstrating template routes with dynamic forms and ComparisonForm rows
+
+### 🧪 Testing
+- **ADDED**: Integration tests for dynamic template routes (`tests/integration/test_dynamic_form_routes.py`)
+
+---
+
 ## Version 0.3.13 (2026-01-16)
 
 ### 🔧 Bug Fixes

@@ -20,6 +20,7 @@ Use this to test that:
 - Copying a full list preserves nested pill field values
 """
 
+import time
 from typing import List, Literal
 
 import fasthtml.common as fh
@@ -31,6 +32,12 @@ from fh_pydantic_form.comparison_form import ComparisonForm, comparison_form_js
 
 
 # --- Models ---
+
+# Toggle to reproduce copy issues with dynamic form names.
+# When True, form names include a dot to mimic dynamic naming patterns that can
+# break list copy (JS builds list container IDs from prefixes).
+USE_DYNAMIC_FORM_NAMES = False
+DYNAMIC_FORM_SUFFIX = f"row.{int(time.time())}"
 
 
 class Review(BaseModel):
@@ -97,20 +104,30 @@ app = fh.FastHTML(hdrs=hdrs)
 
 def create_comparison_form():
     """Create the comparison form with sample data."""
+    suffix = DYNAMIC_FORM_SUFFIX if USE_DYNAMIC_FORM_NAMES else None
+    left_form_name = "left_form"
+    right_form_name = "right_form"
+    comparison_name = "product_comparison"
+
+    if suffix:
+        left_form_name = f"{left_form_name}_{suffix}"
+        right_form_name = f"{right_form_name}_{suffix}"
+        comparison_name = f"{comparison_name}_{suffix}"
+
     left_form = PydanticForm(
-        "left_form",
+        left_form_name,
         Product,
         initial_values=LEFT_DATA,
     )
 
     right_form = PydanticForm(
-        "right_form",
+        right_form_name,
         Product,
         initial_values=RIGHT_DATA,
     )
 
     comparison = ComparisonForm(
-        "product_comparison",
+        comparison_name,
         left_form,
         right_form,
         left_label="Reference (Target)",
@@ -129,15 +146,31 @@ comparison_form = create_comparison_form()
 @app.get("/")
 def home():
     """Render the main page with comparison form."""
-    return (
-        fh.Title("Copy Example - ComparisonForm"),
-        mui.Container(
-            # Header
-            fh.H1("ComparisonForm Copy Example", cls="text-2xl font-bold mb-4"),
-            fh.P(
-                "Test the copy functionality between left and right forms.",
-                cls="text-gray-600 mb-6",
+    dynamic_notice = None
+    if USE_DYNAMIC_FORM_NAMES:
+        dynamic_notice = mui.Alert(
+            fh.Div(
+                fh.Strong("Dynamic form names enabled. "),
+                "List copy (full list or items) may fail in this mode. ",
+                "This is intentional to reproduce dynamic-name copy issues.",
             ),
+            cls=mui.AlertT.warning,
+        )
+
+    content = [
+        # Header
+        fh.H1("ComparisonForm Copy Example", cls="text-2xl font-bold mb-4"),
+        fh.P(
+            "Test the copy functionality between left and right forms.",
+            cls="text-gray-600 mb-6",
+        ),
+    ]
+    if dynamic_notice:
+        content.append(dynamic_notice)
+        content.append(fh.Div(cls="mb-4"))
+
+    content.extend(
+        [
             # Instructions
             mui.Card(
                 mui.CardHeader(fh.H3("How to Test", cls="font-semibold")),
@@ -214,6 +247,13 @@ def home():
             # Required JavaScript
             list_manipulation_js(),
             comparison_form_js(),
+        ]
+    )
+
+    return (
+        fh.Title("Copy Example - ComparisonForm"),
+        mui.Container(
+            *content,
         ),
     )
 
@@ -254,6 +294,11 @@ if __name__ == "__main__":
     print("  - Copying top-level List[Literal] pill fields (categories)")
     print("  - Copying NESTED pill fields inside List[BaseModel] (reviews[0].aspects)")
     print("  - Copying full lists preserves nested pill values")
+    if USE_DYNAMIC_FORM_NAMES:
+        print("\nDynamic form names enabled:")
+        print(f"  - Left form name: {comparison_form.left_form.name}")
+        print(f"  - Right form name: {comparison_form.right_form.name}")
+        print("  - Expect list copy/add issues when names include dots")
     print("\nOpen http://localhost:5001 in your browser")
     print("=" * 60 + "\n")
 

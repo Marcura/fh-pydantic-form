@@ -536,6 +536,45 @@ class TestCopyLeftIntegration:
         )
         assert '"left_form_"' in all_scripts, "Expected left_form_ prefix in script"
         assert '"right_form_"' in all_scripts, "Expected right_form_ prefix in script"
+        assert "__fhpfComparisonPrefixes" in all_scripts, (
+            "Expected comparison prefix registry in script"
+        )
+        assert '"review_test"' in all_scripts, (
+            "Expected comparison name in prefix registry"
+        )
+
+    def test_comparison_grid_has_prefix_data_attrs(
+        self, review_comparison_client, soup
+    ):
+        """
+        Test that comparison grid includes data attributes for prefix scoping.
+        """
+        client, comp = review_comparison_client
+        response = client.get("/")
+        assert response.status_code == 200
+
+        dom = soup(response.text)
+        grid = dom.find(id="review_test-comparison-grid")
+        assert grid is not None, "Expected comparison grid element"
+        assert grid.get("data-fhpf-compare-grid") == "true"
+        assert grid.get("data-fhpf-left-prefix") == "left_form_"
+        assert grid.get("data-fhpf-right-prefix") == "right_form_"
+
+    def test_copy_buttons_pass_trigger_element(self, review_comparison_client, soup):
+        """
+        Test that copy buttons pass the trigger element for context resolution.
+        """
+        client, comp = review_comparison_client
+        response = client.get("/")
+        assert response.status_code == 200
+
+        dom = soup(response.text)
+        copy_buttons = dom.find_all("button", onclick=re.compile(r"fhpfPerformCopy"))
+        assert copy_buttons, "Expected copy buttons to be rendered"
+        assert all(
+            re.search(r",\s*this\)\s*;?\s*return false", btn.get("onclick", ""))
+            for btn in copy_buttons
+        ), "Expected copy handlers to pass the trigger element"
 
 
 class TestCopyListItemJavaScriptLogic:
