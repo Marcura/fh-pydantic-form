@@ -8,6 +8,10 @@
 - **FIXED**: `comparison_form_js()` output no longer mangles `const` declarations (missing spaces), which caused `ReferenceError` and broke copy operations
 - **FIXED**: Reassigned bindings in the copy logic now use `let` to avoid `Assignment to constant variable` at runtime
 
+### 🧪 Testing
+- **IMPROVED**: Embedded JS moved into packaged assets for consistent syntax checks and easier unit testing
+- **ADDED**: JS syntax validation in pytest and pre-commit
+
 ---
 
 ## Version 0.3.14 (2026-01-16)

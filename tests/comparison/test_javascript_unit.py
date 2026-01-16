@@ -52,6 +52,15 @@ def find_node_binary() -> str | None:
 NODE_BINARY = find_node_binary()
 JS_TEST_DIR = Path(__file__).parent.parent.parent / "js"
 JS_TEST_SCRIPT = JS_TEST_DIR / "run-tests.js"
+ASSETS_DIR = Path(__file__).parent.parent.parent / "src" / "fh_pydantic_form" / "assets"
+
+
+def iter_js_files(root: Path) -> list[Path]:
+    return [
+        path
+        for path in root.rglob("*.js")
+        if path.is_file() and "node_modules" not in path.parts
+    ]
 
 
 @pytest.fixture
@@ -127,22 +136,26 @@ class TestJavaScriptUnit:
 
         helpers_file = JS_TEST_DIR / "src" / "comparison-helpers.js"
         assert helpers_file.exists(), f"JS helpers not found: {helpers_file}"
+        assert ASSETS_DIR.exists(), f"JS assets directory not found: {ASSETS_DIR}"
+        assert (ASSETS_DIR / "comparison-form.js").exists()
+        assert (ASSETS_DIR / "form-renderer.js").exists()
 
     def test_javascript_syntax_valid(self, node_available):
         """Verify JavaScript files have valid syntax."""
-        helpers_file = JS_TEST_DIR / "src" / "comparison-helpers.js"
+        js_files = iter_js_files(JS_TEST_DIR) + iter_js_files(ASSETS_DIR)
+        assert js_files, "No JavaScript files found for syntax checks"
 
-        # Use Node.js to check syntax
-        result = subprocess.run(
-            [node_available, "--check", str(helpers_file)],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
+        for js_file in js_files:
+            result = subprocess.run(
+                [node_available, "--check", str(js_file)],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
 
-        assert result.returncode == 0, (
-            f"JavaScript syntax error in {helpers_file}:\n{result.stderr}"
-        )
+            assert result.returncode == 0, (
+                f"JavaScript syntax error in {js_file}:\n{result.stderr}"
+            )
 
 
 class TestJavaScriptBugDocumentation:
