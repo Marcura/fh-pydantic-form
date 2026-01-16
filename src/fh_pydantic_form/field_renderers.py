@@ -8,7 +8,9 @@ from typing import (
     Any,
     List,
     Literal,
+    NamedTuple,
     Optional,
+    Type,
     get_args,
     get_origin,
 )
@@ -24,7 +26,14 @@ from fh_pydantic_form.color_utils import (
     get_metric_colors,
     robust_color_to_rgba,
 )
-from fh_pydantic_form.constants import _UNSET
+from fh_pydantic_form.constants import (
+    ATTR_ALL_CHOICES,
+    ATTR_FIELD_NAME,
+    ATTR_FIELD_PATH,
+    ATTR_INPUT_PREFIX,
+    ATTR_PILL_FIELD,
+    _UNSET,
+)
 from fh_pydantic_form.defaults import default_dict_for_model, default_for_annotation
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import (
@@ -388,6 +397,7 @@ class BaseFieldRenderer(MetricsRendererMixin):
         comparison_copy_enabled: bool = False,
         comparison_copy_target: Optional[str] = None,
         comparison_name: Optional[str] = None,
+        route_form_name: Optional[str] = None,
         **kwargs,  # Accept additional kwargs for extensibility
     ):
         """
@@ -409,6 +419,7 @@ class BaseFieldRenderer(MetricsRendererMixin):
             comparison_copy_enabled: If True, show copy button for this field
             comparison_copy_target: "left" or "right" - which side this field is on
             comparison_name: Name of the ComparisonForm (for copy route URLs)
+            route_form_name: Optional template form name for list routes
             **kwargs: Additional keyword arguments for extensibility
         """
         # Sanitize prefix: replace dots with underscores for valid CSS selectors in IDs
@@ -440,6 +451,7 @@ class BaseFieldRenderer(MetricsRendererMixin):
         self._cmp_copy_enabled = comparison_copy_enabled
         self._cmp_copy_target = comparison_copy_target
         self._cmp_name = comparison_name
+        self.route_form_name = route_form_name
 
         # Initialize metric entry attribute
         self.metric_entry: Optional[MetricEntry] = None
@@ -550,7 +562,7 @@ class BaseFieldRenderer(MetricsRendererMixin):
         return mui.Button(
             mui.UkIcon(arrow, cls="w-4 h-4 text-gray-500 hover:text-blue-600"),
             type="button",
-            onclick=f"window.fhpfPerformCopy('{path}', '{self.prefix}', '{self._cmp_copy_target}'); return false;",
+            onclick=f"window.fhpfPerformCopy('{path}', '{self.prefix}', '{self._cmp_copy_target}', this); return false;",
             uk_tooltip=tooltip_text,
             cls="uk-button-text uk-button-small flex-shrink-0",
             style="all: unset; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0.25rem; min-width: 1.5rem;",
@@ -722,7 +734,7 @@ class StringFieldRenderer(BaseFieldRenderer):
             "cls": " ".join(input_cls_parts),
             "rows": rows,
             "style": "resize: vertical; min-height: 2.5rem; padding: 0.5rem; line-height: 1.25;",
-            "data-field-path": self._build_path_string(),
+            ATTR_FIELD_PATH: self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -780,7 +792,7 @@ class NumberFieldRenderer(BaseFieldRenderer):
             if self.field_info.annotation is float
             or get_origin(self.field_info.annotation) is float
             else "1",
-            "data-field-path": self._build_path_string(),
+            ATTR_FIELD_PATH: self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -841,7 +853,7 @@ class DecimalFieldRenderer(BaseFieldRenderer):
             "required": is_field_required,
             "cls": " ".join(input_cls_parts),
             "step": "any",  # Allow arbitrary decimal precision
-            "data-field-path": self._build_path_string(),
+            ATTR_FIELD_PATH: self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -869,7 +881,7 @@ class BooleanFieldRenderer(BaseFieldRenderer):
             "id": self.field_name,
             "name": self.field_name,
             "checked": bool(self.value),
-            "data-field-path": self._build_path_string(),
+            ATTR_FIELD_PATH: self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -968,7 +980,7 @@ class DateFieldRenderer(BaseFieldRenderer):
             "placeholder": placeholder_text,
             "required": is_field_required,
             "cls": " ".join(input_cls_parts),
-            "data-field-path": self._build_path_string(),
+            ATTR_FIELD_PATH: self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -1033,7 +1045,7 @@ class TimeFieldRenderer(BaseFieldRenderer):
             "placeholder": placeholder_text,
             "required": is_field_required,
             "cls": " ".join(input_cls_parts),
-            "data-field-path": self._build_path_string(),
+            ATTR_FIELD_PATH: self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -1111,7 +1123,7 @@ class LiteralFieldRenderer(BaseFieldRenderer):
             "required": is_field_required,
             "placeholder": placeholder_text,
             "cls": " ".join(select_cls_parts),
-            "data-field-path": self._build_path_string(),
+            ATTR_FIELD_PATH: self._build_path_string(),
         }
 
         if self.disabled:
@@ -1119,6 +1131,13 @@ class LiteralFieldRenderer(BaseFieldRenderer):
 
         # Render the select element with options and attributes
         return mui.Select(*options, **select_attrs)
+
+
+class ChoiceItem(NamedTuple):
+    """A choice item with display text and form submission value."""
+
+    display_text: str
+    form_value: str
 
 
 class ListChoiceFieldRenderer(BaseFieldRenderer):
@@ -1140,12 +1159,11 @@ class ListChoiceFieldRenderer(BaseFieldRenderer):
         - A dropdown with only "green" available to add
     """
 
-    def _extract_choices(self) -> tuple[List[tuple[str, str]], type | None]:
-        """Extract (display_text, form_value) pairs from the item type.
+    def _extract_choices(self) -> tuple[List[ChoiceItem], Type[Enum] | None]:
+        """Extract ChoiceItem instances from the item type.
 
         Returns:
             Tuple of (choices list, enum_class or None)
-            Each choice is (display_text, form_value)
         """
         annotation = getattr(self.field_info, "annotation", None)
         base_annotation = _get_underlying_type_if_optional(annotation)
@@ -1164,7 +1182,7 @@ class ListChoiceFieldRenderer(BaseFieldRenderer):
         if get_origin(item_type_base) is Literal:
             literal_values = get_args(item_type_base)
             # For Literal, display and form value are the same
-            return [(str(v), str(v)) for v in literal_values], None
+            return [ChoiceItem(str(v), str(v)) for v in literal_values], None
 
         # Check for Enum type
         if isinstance(item_type_base, type) and issubclass(item_type_base, Enum):
@@ -1172,24 +1190,24 @@ class ListChoiceFieldRenderer(BaseFieldRenderer):
             for member in item_type_base:
                 display_text = member.name.replace("_", " ").title()
                 form_value = str(member.value)
-                choices.append((display_text, form_value))
+                choices.append(ChoiceItem(display_text, form_value))
             return choices, item_type_base
 
         return [], None
 
     def _normalize_selected_values(
-        self, enum_class: type | None
-    ) -> List[tuple[str, str]]:
-        """Normalize selected values to (display_text, form_value) pairs.
+        self, enum_class: Type[Enum] | None
+    ) -> List[ChoiceItem]:
+        """Normalize selected values to ChoiceItem instances.
 
         Args:
             enum_class: The Enum class if item type is Enum, else None
 
         Returns:
-            List of (display_text, form_value) tuples for selected items
+            List of ChoiceItem instances for selected items
         """
         selected = self.value if isinstance(self.value, list) else []
-        result = []
+        result: List[ChoiceItem] = []
 
         for val in selected:
             if enum_class is not None:
@@ -1212,7 +1230,7 @@ class ListChoiceFieldRenderer(BaseFieldRenderer):
                 display_text = str(val)
                 form_value = str(val)
 
-            result.append((display_text, form_value))
+            result.append(ChoiceItem(display_text, form_value))
 
         return result
 
@@ -1228,21 +1246,25 @@ class ListChoiceFieldRenderer(BaseFieldRenderer):
             )
 
         # Normalize selected values
-        selected_pairs = self._normalize_selected_values(enum_class)
-        selected_form_values = {fv for _, fv in selected_pairs}
+        selected_items = self._normalize_selected_values(enum_class)
+        selected_form_values = {item.form_value for item in selected_items}
 
         # Build unique container ID
         container_id = f"{self.field_name}_pills_container"
 
         # Build pills for selected values
         pill_elements = []
-        for idx, (display_text, form_value) in enumerate(selected_pairs):
-            pill = self._render_pill(display_text, form_value, idx, container_id)
+        for idx, item in enumerate(selected_items):
+            pill = self._render_pill(
+                item.display_text, item.form_value, idx, container_id
+            )
             pill_elements.append(pill)
 
         # Build dropdown for remaining (unselected) values
         remaining = [
-            (dt, fv) for dt, fv in all_choices if fv not in selected_form_values
+            choice
+            for choice in all_choices
+            if choice.form_value not in selected_form_values
         ]
         dropdown = self._render_dropdown(remaining, container_id)
 
@@ -1259,17 +1281,20 @@ class ListChoiceFieldRenderer(BaseFieldRenderer):
 
         # Store all choices as JSON for JS rebuild (handles special chars safely)
         all_choices_json = json.dumps(
-            [{"display": dt, "value": fv} for dt, fv in all_choices]
+            [
+                {"display": choice.display_text, "value": choice.form_value}
+                for choice in all_choices
+            ]
         )
 
         wrapper_attrs = {
             "id": container_id,
             "cls": "flex flex-wrap gap-2 items-center",
-            "data-field-name": self.field_name,
-            "data-input-prefix": self.prefix,
-            "data-field-path": self._build_path_string(),
-            "data-all-choices": all_choices_json,
-            "data-pill-field": "true",  # Marker for copy JS to identify pill fields
+            ATTR_FIELD_NAME: self.field_name,
+            ATTR_INPUT_PREFIX: self.prefix,
+            ATTR_FIELD_PATH: self._build_path_string(),
+            ATTR_ALL_CHOICES: all_choices_json,
+            ATTR_PILL_FIELD: "true",  # Marker for copy JS to identify pill fields
         }
         if is_field_required:
             wrapper_attrs["data-required"] = "true"
@@ -1335,13 +1360,13 @@ class ListChoiceFieldRenderer(BaseFieldRenderer):
 
     def _render_dropdown(
         self,
-        remaining_choices: List[tuple[str, str]],
+        remaining_choices: List[ChoiceItem],
         container_id: str,
     ) -> FT:
         """Render dropdown for adding new values.
 
         Args:
-            remaining_choices: (display_text, form_value) pairs not yet selected
+            remaining_choices: ChoiceItem instances not yet selected
             container_id: Parent container ID for JS callbacks
 
         Returns:
@@ -1351,9 +1376,13 @@ class ListChoiceFieldRenderer(BaseFieldRenderer):
 
         # Build options - placeholder plus remaining values
         options = [fh.Option("Add...", value="", selected=True, disabled=True)]
-        for display_text, form_value in remaining_choices:
+        for choice in remaining_choices:
             options.append(
-                fh.Option(display_text, value=form_value, data_display=display_text)
+                fh.Option(
+                    choice.display_text,
+                    value=choice.form_value,
+                    data_display=choice.display_text,
+                )
             )
 
         # Build select attrs
@@ -1507,7 +1536,7 @@ class EnumFieldRenderer(BaseFieldRenderer):
                 "w-full",
                 f"{spacing('input_size', self.spacing)} {spacing('input_padding', self.spacing)}".strip(),
             ),
-            "data-field-path": self._build_path_string(),
+            ATTR_FIELD_PATH: self._build_path_string(),
         }
 
         # Only add the disabled attribute if the field should actually be disabled
@@ -1725,6 +1754,7 @@ class BaseModelFieldRenderer(BaseFieldRenderer):
                     comparison_copy_enabled=self._cmp_copy_enabled,  # Propagate comparison copy settings
                     comparison_copy_target=self._cmp_copy_target,
                     comparison_name=self._cmp_name,
+                    route_form_name=self.route_form_name,  # Propagate template route name
                 )
 
                 nested_inputs.append(renderer.render())
@@ -1773,6 +1803,7 @@ class ListFieldRenderer(BaseFieldRenderer):
         metric_entry: Optional[MetricEntry] = None,
         metrics_dict: Optional[MetricsDict] = None,
         show_item_border: bool = True,
+        route_form_name: Optional[str] = None,
         **kwargs,  # Accept additional kwargs
     ):
         """
@@ -1791,6 +1822,7 @@ class ListFieldRenderer(BaseFieldRenderer):
             metric_entry: Optional metric entry for visual feedback
             metrics_dict: Optional full metrics dict for auto-lookup
             show_item_border: Whether to show colored borders on list items based on metrics
+            route_form_name: Optional template form name for list routes
             **kwargs: Additional keyword arguments passed to parent
         """
         super().__init__(
@@ -1805,9 +1837,17 @@ class ListFieldRenderer(BaseFieldRenderer):
             form_name=form_name,
             metric_entry=metric_entry,
             metrics_dict=metrics_dict,
+            route_form_name=route_form_name,
             **kwargs,  # Pass kwargs to parent
         )
+        self._route_form_name = route_form_name or self._form_name
         self.show_item_border = show_item_border
+
+    def _route_hx_vals(self) -> Optional[str]:
+        """Return hx-vals payload when routing through a template form."""
+        if self._route_form_name and self._route_form_name != self._form_name:
+            return json.dumps({"fhpf_form_name": self._form_name})
+        return None
 
     def _container_id(self) -> str:
         """
@@ -1922,9 +1962,20 @@ class ListFieldRenderer(BaseFieldRenderer):
             )
 
             # Use override endpoint if provided (for ComparisonForm), otherwise use standard form refresh
-            refresh_url = (
-                self._refresh_endpoint_override or f"/form/{form_name}/refresh"
-            )
+            if self._refresh_endpoint_override:
+                refresh_url = self._refresh_endpoint_override
+                refresh_vals = None
+                refresh_include = "closest form"
+            else:
+                route_form_name = (
+                    self._route_form_name if hasattr(self, "_route_form_name") else None
+                )
+                refresh_url = f"/form/{(route_form_name or form_name)}/refresh"
+                refresh_vals = None
+                refresh_include = "closest form"
+                if route_form_name and route_form_name != form_name:
+                    refresh_vals = json.dumps({"fhpf_form_name": form_name})
+                    refresh_include = f"[name^='{form_name}_']"
 
             # Get container ID for accordion state preservation
             container_id = self._container_id()
@@ -1937,7 +1988,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                 hx_target=f"#{form_name}-inputs-wrapper",
                 hx_swap="innerHTML",
                 hx_trigger="click",  # Explicit trigger on click
-                hx_include="closest form",  # Include all form fields from the enclosing form
+                hx_include=refresh_include,  # Include form fields for refresh
                 hx_preserve="scroll",
                 uk_tooltip="Refresh form display to update list summaries",
                 style="all: unset; display: inline-flex; align-items: center; cursor: pointer; padding: 0 0.5rem;",
@@ -1947,6 +1998,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                 **{
                     "hx-on::after-swap": f"window.restoreAccordionState && window.restoreAccordionState('{container_id}')"
                 },
+                **({"hx_vals": refresh_vals} if refresh_vals else {}),
             )
             action_buttons.append(refresh_icon_trigger)
 
@@ -2107,8 +2159,8 @@ class ListFieldRenderer(BaseFieldRenderer):
         if not items:
             # Use hierarchical path for URL
             add_url = (
-                f"/form/{self._form_name}/list/add/{self._list_path}"
-                if self._form_name
+                f"/form/{self._route_form_name}/list/add/{self._list_path}"
+                if self._route_form_name
                 else f"/list/add/{self.field_name}"
             )
 
@@ -2120,6 +2172,9 @@ class ListFieldRenderer(BaseFieldRenderer):
                 "hx_swap": "beforeend",
                 "type": "button",
             }
+            route_vals = self._route_hx_vals()
+            if route_vals:
+                add_button_attrs["hx_vals"] = route_vals
 
             # Only add disabled attribute if field should be disabled
             if self.disabled:
@@ -2319,6 +2374,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                         comparison_copy_enabled=self._cmp_copy_enabled,  # Propagate comparison copy settings
                         comparison_copy_target=self._cmp_copy_target,
                         comparison_name=self._cmp_name,
+                        route_form_name=self._route_form_name,  # Use template routes
                     )
                     # Add the rendered input to content elements
                     item_content_elements.append(item_renderer.render_input())
@@ -2392,6 +2448,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                                 comparison_copy_enabled=self._cmp_copy_enabled,  # Propagate comparison copy settings
                                 comparison_copy_target=self._cmp_copy_target,
                                 comparison_name=self._cmp_name,
+                                route_form_name=self._route_form_name,  # Use template routes
                             )
 
                             # Add rendered field to valid fields
@@ -2433,6 +2490,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                     metric_entry=None,  # Let auto-lookup handle it
                     metrics_dict=self.metrics_dict,  # Pass down the metrics dict
                     refresh_endpoint_override=self._refresh_endpoint_override,  # Propagate refresh override
+                    route_form_name=self._route_form_name,  # Use template routes
                 )
                 input_element = simple_renderer.render_input()
                 wrapper = fh.Div(input_element)
@@ -2442,14 +2500,14 @@ class ListFieldRenderer(BaseFieldRenderer):
             # --- Create action buttons with form-specific URLs ---
             # Generate HTMX endpoints using hierarchical paths
             delete_url = (
-                f"/form/{self._form_name}/list/delete/{self._list_path}"
-                if self._form_name
+                f"/form/{self._route_form_name}/list/delete/{self._list_path}"
+                if self._route_form_name
                 else f"/list/delete/{self.field_name}"
             )
 
             add_url = (
-                f"/form/{self._form_name}/list/add/{self._list_path}"
-                if self._form_name
+                f"/form/{self._route_form_name}/list/add/{self._list_path}"
+                if self._route_form_name
                 else f"/list/add/{self.field_name}"
             )
 
@@ -2482,6 +2540,10 @@ class ListFieldRenderer(BaseFieldRenderer):
                 "uk_tooltip": "Insert new item below",
                 "type": "button",  # Prevent form submission
             }
+            route_vals = self._route_hx_vals()
+            if route_vals:
+                delete_button_attrs["hx_vals"] = route_vals
+                add_below_button_attrs["hx_vals"] = route_vals
 
             move_up_button_attrs = {
                 "cls": "uk-button-link move-up-btn",
@@ -2563,7 +2625,7 @@ class ListFieldRenderer(BaseFieldRenderer):
                 item_copy_button = mui.Button(
                     mui.UkIcon(arrow, cls="w-4 h-4 text-gray-500 hover:text-blue-600"),
                     type="button",
-                    onclick=f"window.fhpfPerformCopy('{item_path_string}', '{self.prefix}', '{self._cmp_copy_target}'); return false;",
+                    onclick=f"window.fhpfPerformCopy('{item_path_string}', '{self.prefix}', '{self._cmp_copy_target}', this); return false;",
                     uk_tooltip=tooltip_text,
                     cls="uk-button-text uk-button-small flex-shrink-0",
                     style="all: unset; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0.25rem; min-width: 1.5rem;",

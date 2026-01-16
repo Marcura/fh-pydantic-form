@@ -68,8 +68,16 @@ class CustomDetailFieldRenderer(BaseFieldRenderer):
     """display value input and dropdown side by side for Detail"""
 
     def render_input(self):
-        current_value_val = self.value.get("value", "")
-        current_confidence = self.value.get("confidence", "MEDIUM")
+        current_value_val = ""
+        current_confidence = "MEDIUM"
+        if isinstance(self.value, dict):
+            current_value_val = str(self.value.get("value", "") or "")
+            current_confidence = str(self.value.get("confidence", "MEDIUM") or "MEDIUM")
+        elif self.value is not None:
+            current_value_val = str(getattr(self.value, "value", "") or "")
+            current_confidence = str(
+                getattr(self.value, "confidence", "MEDIUM") or "MEDIUM"
+            )
 
         value_input = fh.Div(
             mui.Input(

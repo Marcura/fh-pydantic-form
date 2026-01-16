@@ -25,6 +25,12 @@ import monsterui.all as mui
 from fastcore.xml import FT
 from pydantic import BaseModel
 
+from fh_pydantic_form.constants import (
+    ATTR_COMPARE_GRID,
+    ATTR_COMPARE_NAME,
+    ATTR_LEFT_PREFIX,
+    ATTR_RIGHT_PREFIX,
+)
 from fh_pydantic_form.form_renderer import PydanticForm
 from fh_pydantic_form.registry import FieldRendererRegistry
 from fh_pydantic_form.type_helpers import (
@@ -42,46 +48,107 @@ ModelType = TypeVar("ModelType", bound=BaseModel)
 def comparison_form_js():
     """JavaScript for comparison: sync accordions and handle JS-only copy operations."""
     return fh.Script(r"""
+// ==== Regex patterns for list path detection ====
+// These patterns match both numeric indices [0] and placeholder indices [new_123]
+const FHPF_RE = {
+  // Full list item: ends with [index] (no trailing content)
+  FULL_ITEM: /\[(\d+|new_\d+)\]$/,
+  // Subfield: has content after [index] (e.g., [0].field)
+  SUBFIELD: /\[(\d+|new_\d+)\]\./,
+  // Any index: matches [index] anywhere in path
+  ANY_INDEX: /\[(\d+|new_\d+)\]/,
+  // Strip index and everything after
+  STRIP_INDEX_SUFFIX: /\[(\d+|new_\d+)\].*$/,
+  // Pure numeric string
+  NUMERIC: /^\d+$/
+};
+
 // Helper functions for list item path detection
-// FIXED: Now matches both numeric indices AND new_ placeholder indices
-// FIXED: Only matches FULL list items (path ends with ]), not subfields
 function isListItemPath(pathPrefix) {
   // Check if path is a full list item: ends with [index] where index is numeric or new_*
   // e.g., "reviews[0]" or "reviews[new_123]" -> true
   // e.g., "reviews[0].rating" or "reviews" -> false
-  return /\[(\d+|new_\d+)\]$/.test(pathPrefix);
+  return FHPF_RE.FULL_ITEM.test(pathPrefix);
 }
 
-// NEW: Check if path is a subfield of a list item (has content after [index])
 function isListSubfieldPath(pathPrefix) {
+  // Check if path is a subfield of a list item (has content after [index])
   // e.g., "reviews[0].rating" or "reviews[new_123].comment" -> true
   // e.g., "reviews[0]" or "reviews" -> false
-  return /\[(\d+|new_\d+)\]\./.test(pathPrefix);
+  return FHPF_RE.SUBFIELD.test(pathPrefix);
 }
 
-// FIXED: Check if path contains ANY list index (for general list detection)
 function hasListIndex(pathPrefix) {
-  return /\[(\d+|new_\d+)\]/.test(pathPrefix);
+  // Check if path contains ANY list index (for general list detection)
+  return FHPF_RE.ANY_INDEX.test(pathPrefix);
 }
 
 function extractListFieldPath(pathPrefix) {
   // Extract the list field path without the index
   // e.g., "addresses[0]" -> "addresses"
   // e.g., "addresses[new_123].street" -> "addresses"
-  // FIXED: Now handles new_ placeholder indices
-  return pathPrefix.replace(/\[(\d+|new_\d+)\].*$/, '');
+  return pathPrefix.replace(FHPF_RE.STRIP_INDEX_SUFFIX, '');
 }
 
 function extractListIndex(pathPrefix) {
   // Extract the index from path
   // e.g., "addresses[0].street" -> 0
   // e.g., "addresses[new_123]" -> "new_123"
-  // FIXED: Now handles new_ placeholder indices
-  var match = pathPrefix.match(/\[(\d+|new_\d+)\]/);
+  const match = pathPrefix.match(FHPF_RE.ANY_INDEX);
   if (!match) return null;
-  var indexStr = match[1];
+  const indexStr = match[1];
   // Return numeric index as number, placeholder as string
-  return /^\d+$/.test(indexStr) ? parseInt(indexStr) : indexStr;
+  return FHPF_RE.NUMERIC.test(indexStr) ? parseInt(indexStr) : indexStr;
+}
+
+function fhpfFormNameFromPrefix(prefix) {
+  if (!prefix) return null;
+  return prefix.replace(/_$/, '');
+}
+
+function fhpfResolveComparisonContext(triggerEl, currentPrefix) {
+  let grid = null;
+
+  if (triggerEl && triggerEl.closest) {
+    grid = triggerEl.closest('[data-fhpf-left-prefix][data-fhpf-right-prefix]');
+  }
+
+  if (!grid && currentPrefix) {
+    const grids = document.querySelectorAll('[data-fhpf-left-prefix][data-fhpf-right-prefix]');
+    for (let i = 0; i < grids.length; i++) {
+      const gridLeftPrefix = grids[i].dataset.fhpfLeftPrefix;
+      const gridRightPrefix = grids[i].dataset.fhpfRightPrefix;
+      if (
+        (gridLeftPrefix && currentPrefix.startsWith(gridLeftPrefix)) ||
+        (gridRightPrefix && currentPrefix.startsWith(gridRightPrefix))
+      ) {
+        grid = grids[i];
+        break;
+      }
+    }
+  }
+
+  let leftPrefix = null;
+  let rightPrefix = null;
+
+  if (grid) {
+    leftPrefix = grid.dataset.fhpfLeftPrefix || null;
+    rightPrefix = grid.dataset.fhpfRightPrefix || null;
+  }
+
+  if ((!leftPrefix || !rightPrefix) && window.__fhpfComparisonPrefixes) {
+    const keys = Object.keys(window.__fhpfComparisonPrefixes);
+    if (keys.length === 1) {
+      const entry = window.__fhpfComparisonPrefixes[keys[0]];
+      leftPrefix = leftPrefix || entry.left;
+      rightPrefix = rightPrefix || entry.right;
+    }
+  }
+
+  if (!leftPrefix) leftPrefix = window.__fhpfLeftPrefix;
+  if (!rightPrefix) rightPrefix = window.__fhpfRightPrefix;
+
+  return { grid: grid, leftPrefix: leftPrefix, rightPrefix: rightPrefix };
 }
 
 // Helper function to copy pill (List[Literal] or List[Enum]) field contents
@@ -92,12 +159,12 @@ function copyPillContainer(sourcePillContainer, targetPillContainer, highlightTa
   }
 
   // Get source selected values from pills
-  var sourcePillsContainer = sourcePillContainer.querySelector('[id$="_pills"]');
-  var sourceValues = [];
+  const sourcePillsContainer = sourcePillContainer.querySelector('[id$="_pills"]');
+  const sourceValues = [];
   if (sourcePillsContainer) {
-    var sourcePills = sourcePillsContainer.querySelectorAll('[data-value]');
+    const sourcePills = sourcePillsContainer.querySelectorAll('[data-value]');
     sourcePills.forEach(function(pill) {
-      var hiddenInput = pill.querySelector('input[type="hidden"]');
+      const hiddenInput = pill.querySelector('input[type="hidden"]');
       if (hiddenInput) {
         sourceValues.push({
           value: pill.dataset.value,
@@ -108,10 +175,10 @@ function copyPillContainer(sourcePillContainer, targetPillContainer, highlightTa
   }
 
   // Clear target pills
-  var targetPillsContainer = targetPillContainer.querySelector('[id$="_pills"]');
-  var targetDropdown = targetPillContainer.querySelector('select');
-  var targetFieldName = targetPillContainer.dataset.fieldName;
-  var targetContainerId = targetPillContainer.id;
+  const targetPillsContainer = targetPillContainer.querySelector('[id$="_pills"]');
+  const targetDropdown = targetPillContainer.querySelector('select');
+  const targetFieldName = targetPillContainer.dataset.fieldName;
+  const targetContainerId = targetPillContainer.id;
 
   if (targetPillsContainer) {
     targetPillsContainer.innerHTML = '';
@@ -119,22 +186,22 @@ function copyPillContainer(sourcePillContainer, targetPillContainer, highlightTa
 
   // Recreate pills in target with source values
   sourceValues.forEach(function(item, idx) {
-    var pillId = targetFieldName + '_' + idx + '_pill';
-    var inputName = targetFieldName + '_' + idx;
+    const pillId = targetFieldName + '_' + idx + '_pill';
+    const inputName = targetFieldName + '_' + idx;
 
     // Create hidden input
-    var input = document.createElement('input');
+    const input = document.createElement('input');
     input.type = 'hidden';
     input.name = inputName;
     input.value = item.value;
 
     // Create label span
-    var label = document.createElement('span');
+    const label = document.createElement('span');
     label.className = 'mr-1';
     label.textContent = item.display;
 
     // Create remove button
-    var removeBtn = document.createElement('button');
+    const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
     removeBtn.className = 'ml-1 text-xs hover:text-red-600 font-bold cursor-pointer';
     removeBtn.textContent = '×';
@@ -143,7 +210,7 @@ function copyPillContainer(sourcePillContainer, targetPillContainer, highlightTa
     };
 
     // Create pill span
-    var pill = document.createElement('span');
+    const pill = document.createElement('span');
     pill.id = pillId;
     pill.dataset.value = item.value;
     pill.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800';
@@ -160,22 +227,22 @@ function copyPillContainer(sourcePillContainer, targetPillContainer, highlightTa
     fhpfRebuildChoiceDropdown(targetContainerId);
   } else if (targetDropdown) {
     // Manual dropdown rebuild
-    var allChoicesJson = targetPillContainer.dataset.allChoices || '[]';
-    var allChoices = [];
+    const allChoicesJson = targetPillContainer.dataset.allChoices || '[]';
+    let allChoices = [];
     try {
       allChoices = JSON.parse(allChoicesJson);
     } catch (e) {
       console.error('Failed to parse pill choices:', e);
     }
 
-    var selectedValues = new Set(sourceValues.map(function(v) { return v.value; }));
-    var remaining = allChoices.filter(function(choice) {
+    const selectedValues = new Set(sourceValues.map(function(v) { return v.value; }));
+    const remaining = allChoices.filter(function(choice) {
       return !selectedValues.has(choice.value);
     });
 
     // Rebuild dropdown options
     targetDropdown.innerHTML = '';
-    var placeholder = document.createElement('option');
+    const placeholder = document.createElement('option');
     placeholder.value = '';
     placeholder.textContent = 'Add...';
     placeholder.selected = true;
@@ -183,7 +250,7 @@ function copyPillContainer(sourcePillContainer, targetPillContainer, highlightTa
     targetDropdown.appendChild(placeholder);
 
     remaining.forEach(function(choice) {
-      var opt = document.createElement('option');
+      const opt = document.createElement('option');
       opt.value = choice.value;
       opt.textContent = choice.display;
       opt.dataset.display = choice.display;
@@ -209,31 +276,56 @@ function copyPillContainer(sourcePillContainer, targetPillContainer, highlightTa
 }
 
 // Copy function - pure JS implementation
-window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
+window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget, triggerEl) {
   try {
     // Set flag to prevent accordion sync
     window.__fhpfCopyInProgress = true;
 
+    // Resolve comparison context (supports multiple comparisons on the page)
+    const ctx = fhpfResolveComparisonContext(triggerEl, currentPrefix);
+    const leftPrefix = ctx.leftPrefix;
+    const rightPrefix = ctx.rightPrefix;
+    const grid = ctx.grid;
+
+    if (!leftPrefix || !rightPrefix) {
+      console.error('Copy failed: missing comparison prefixes.');
+      window.__fhpfCopyInProgress = false;
+      return;
+    }
+
+    const accordionScope = grid || document;
+
     // Save all accordion states before copy
-    var accordionStates = [];
-    document.querySelectorAll('ul[uk-accordion] > li').forEach(function(li) {
+    const accordionStates = [];
+    accordionScope.querySelectorAll('ul[uk-accordion] > li').forEach(function(li) {
       accordionStates.push({
         element: li,
         isOpen: li.classList.contains('uk-open')
       });
     });
 
-    // Determine source prefix based on copy target
-    var sourcePrefix = (copyTarget === 'left') ? window.__fhpfRightPrefix : window.__fhpfLeftPrefix;
+    // Determine source/target prefixes based on copy target
+    const sourcePrefix = (copyTarget === 'left') ? rightPrefix : leftPrefix;
+    const targetPrefix = (copyTarget === 'left') ? leftPrefix : rightPrefix;
+    const targetFormName = fhpfFormNameFromPrefix(targetPrefix);
+    const htmxValues = targetFormName ? { fhpf_form_name: targetFormName } : {};
+
+    function resolveById(id) {
+      if (!id) return null;
+      if (grid && grid.querySelector) {
+        return grid.querySelector('[id=\"' + id + '\"]');
+      }
+      return document.getElementById(id);
+    }
 
     // Determine copy behavior based on path structure:
     // 1. Full list item (e.g., "reviews[0]") -> add new item to target list
     // 2. Subfield of list item (e.g., "reviews[0].rating") -> update existing subfield
     // 3. Regular field (e.g., "name" or "reviews") -> standard copy
-    var isFullListItem = isListItemPath(pathPrefix);
-    var isSubfield = isListSubfieldPath(pathPrefix);
-    var listFieldPath = null;
-    var listIndex = null;
+    const isFullListItem = isListItemPath(pathPrefix);
+    const isSubfield = isListSubfieldPath(pathPrefix);
+    let listFieldPath = null;
+    let listIndex = null;
 
     if (isFullListItem || isSubfield) {
       listFieldPath = extractListFieldPath(pathPrefix);
@@ -245,33 +337,31 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
     if (isSubfield) {
       // For subfield copies, we need to find the corresponding target field by position
       // and perform a direct value copy (standard copy behavior)
-      var targetPrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
-
       // Extract the relative path (e.g., ".rating" from "reviews[0].rating")
       // Find the closing bracket after listFieldPath and extract what comes after
-      var bracketStart = pathPrefix.indexOf('[', listFieldPath.length);
-      var bracketEnd = pathPrefix.indexOf(']', bracketStart);
-      var relativePath = (bracketEnd >= 0) ? pathPrefix.substring(bracketEnd + 1) : '';
+      constbracketStart = pathPrefix.indexOf('[', listFieldPath.length);
+      constbracketEnd = pathPrefix.indexOf(']', bracketStart);
+      constrelativePath = (bracketEnd >= 0) ? pathPrefix.substring(bracketEnd + 1) : '';
 
       // Find source and target list containers to map by position
-      var sourceContainerId = sourcePrefix.replace(/_$/, '') + '_' + listFieldPath + '_items_container';
-      var targetContainerId = targetPrefix.replace(/_$/, '') + '_' + listFieldPath + '_items_container';
+      constsourceContainerId = sourcePrefix.replace(/_$/, '') + '_' + listFieldPath + '_items_container';
+      consttargetContainerId = targetPrefix.replace(/_$/, '') + '_' + listFieldPath + '_items_container';
 
-      var sourceListContainer = document.getElementById(sourceContainerId);
-      var targetListContainer = document.getElementById(targetContainerId);
+      constsourceListContainer = resolveById(sourceContainerId);
+      consttargetListContainer = resolveById(targetContainerId);
 
       if (sourceListContainer && targetListContainer) {
-        var sourceItems = sourceListContainer.querySelectorAll(':scope > li');
-        var targetItems = targetListContainer.querySelectorAll(':scope > li');
+        constsourceItems = sourceListContainer.querySelectorAll(':scope > li');
+        consttargetItems = targetListContainer.querySelectorAll(':scope > li');
 
         // Find the position of the source item
-        var sourcePosition = -1;
+        constsourcePosition = -1;
         if (typeof listIndex === 'number') {
           sourcePosition = listIndex;
         } else if (typeof listIndex === 'string' && listIndex.startsWith('new_')) {
           // For placeholder indices, find by searching for the element with this path
-          for (var i = 0; i < sourceItems.length; i++) {
-            var inputs = sourceItems[i].querySelectorAll('[data-field-path^="' + pathPrefix.replace(/\.[^.]+$/, '') + '"]');
+          for (let i = 0; i < sourceItems.length; i++) {
+            constinputs = sourceItems[i].querySelectorAll('[data-field-path^="' + pathPrefix.replace(/\.[^.]+$/, '') + '"]');
             if (inputs.length > 0) {
               sourcePosition = i;
               break;
@@ -281,27 +371,27 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
 
         // If we found a valid source position and target has that position, perform the copy
         if (sourcePosition >= 0 && sourcePosition < targetItems.length) {
-          var sourceItem = sourceItems[sourcePosition];
-          var targetItem = targetItems[sourcePosition];
+          constsourceItem = sourceItems[sourcePosition];
+          consttargetItem = targetItems[sourcePosition];
 
           // Find the source input with this exact path
-          var sourceInput = sourceItem.querySelector('[data-field-path="' + pathPrefix + '"]');
+          constsourceInput = sourceItem.querySelector('[data-field-path="' + pathPrefix + '"]');
 
           // Find the target input with matching relative path
-          var targetInputs = targetItem.querySelectorAll('[data-field-path]');
-          var targetInput = null;
+          consttargetInputs = targetItem.querySelectorAll('[data-field-path]');
+          consttargetInput = null;
 
-          for (var j = 0; j < targetInputs.length; j++) {
-            var targetFp = targetInputs[j].getAttribute('data-field-path');
-            var tBracketStart = targetFp.indexOf('[', listFieldPath.length);
-            var tBracketEnd = targetFp.indexOf(']', tBracketStart);
-            var targetRelative = (tBracketEnd >= 0) ? targetFp.substring(tBracketEnd + 1) : '';
+          for (let j = 0; j < targetInputs.length; j++) {
+            consttargetFp = targetInputs[j].getAttribute('data-field-path');
+            consttBracketStart = targetFp.indexOf('[', listFieldPath.length);
+            consttBracketEnd = targetFp.indexOf(']', tBracketStart);
+            consttargetRelative = (tBracketEnd >= 0) ? targetFp.substring(tBracketEnd + 1) : '';
 
             if (targetRelative === relativePath) {
               // Verify it belongs to target form
-              var candidateName = null;
+              constcandidateName = null;
               if (targetInputs[j].tagName === 'UK-SELECT') {
-                var nativeSelect = targetInputs[j].querySelector('select');
+                constnativeSelect = targetInputs[j].querySelector('select');
                 candidateName = nativeSelect ? nativeSelect.name : null;
               } else if (targetInputs[j].dataset.pillField === 'true') {
                 // Pill containers (DIV elements) don't have a name attribute,
@@ -329,7 +419,7 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
                 accordionStates.forEach(function(state) {
                   if (state.isOpen && !state.element.classList.contains('uk-open')) {
                     state.element.classList.add('uk-open');
-                    var content = state.element.querySelector('.uk-accordion-content');
+                    constcontent = state.element.querySelector('.uk-accordion-content');
                     if (content) {
                       content.hidden = false;
                       content.style.height = 'auto';
@@ -342,8 +432,8 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
             }
 
             // Copy the value directly
-            var tag = sourceInput.tagName.toUpperCase();
-            var type = (sourceInput.type || '').toLowerCase();
+            consttag = sourceInput.tagName.toUpperCase();
+            consttype = (sourceInput.type || '').toLowerCase();
 
             if (type === 'checkbox') {
               targetInput.checked = sourceInput.checked;
@@ -351,15 +441,15 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
               targetInput.value = sourceInput.value;
               targetInput.dispatchEvent(new Event('change', { bubbles: true }));
             } else if (tag === 'UK-SELECT') {
-              var srcSelect = sourceInput.querySelector('select');
-              var tgtSelect = targetInput.querySelector('select');
+              constsrcSelect = sourceInput.querySelector('select');
+              consttgtSelect = targetInput.querySelector('select');
               if (srcSelect && tgtSelect) {
-                var srcVal = srcSelect.value;
-                for (var k = 0; k < tgtSelect.options.length; k++) {
+                constsrcVal = srcSelect.value;
+                for (let k = 0; k < tgtSelect.options.length; k++) {
                   tgtSelect.options[k].removeAttribute('selected');
                   tgtSelect.options[k].selected = false;
                 }
-                for (var k = 0; k < tgtSelect.options.length; k++) {
+                for (let k = 0; k < tgtSelect.options.length; k++) {
                   if (tgtSelect.options[k].value === srcVal) {
                     tgtSelect.options[k].setAttribute('selected', 'selected');
                     tgtSelect.options[k].selected = true;
@@ -368,8 +458,8 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
                     break;
                   }
                 }
-                var srcBtn = sourceInput.querySelector('button');
-                var tgtBtn = targetInput.querySelector('button');
+                constsrcBtn = sourceInput.querySelector('button');
+                consttgtBtn = targetInput.querySelector('button');
                 if (srcBtn && tgtBtn) {
                   tgtBtn.innerHTML = srcBtn.innerHTML;
                 }
@@ -404,7 +494,7 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
         accordionStates.forEach(function(state) {
           if (state.isOpen && !state.element.classList.contains('uk-open')) {
             state.element.classList.add('uk-open');
-            var content = state.element.querySelector('.uk-accordion-content');
+            constcontent = state.element.querySelector('.uk-accordion-content');
             if (content) {
               content.hidden = false;
               content.style.height = 'auto';
@@ -420,28 +510,27 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
     // CASE 1: Full list item copy - add new item to target list
     if (isFullListItem) {
       // Find target list container
-      var targetPrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
-      var targetContainerId = targetPrefix.replace(/_$/, '') + '_' + listFieldPath + '_items_container';
-      var targetContainer = document.getElementById(targetContainerId);
+      consttargetContainerId = targetPrefix.replace(/_$/, '') + '_' + listFieldPath + '_items_container';
+      consttargetContainer = resolveById(targetContainerId);
 
       if (targetContainer) {
         // Find the "Add Item" button for the target list
-        var targetAddButton = targetContainer.parentElement.querySelector('button[hx-post*="/list/add/"]');
+        consttargetAddButton = targetContainer.parentElement.querySelector('button[hx-post*="/list/add/"]');
 
         if (targetAddButton) {
           // Capture the target list items BEFORE adding the new one
-          var targetListItemsBeforeAdd = Array.from(targetContainer.querySelectorAll(':scope > li'));
-          var targetLengthBefore = targetListItemsBeforeAdd.length;
+          consttargetListItemsBeforeAdd = Array.from(targetContainer.querySelectorAll(':scope > li'));
+          consttargetLengthBefore = targetListItemsBeforeAdd.length;
 
           // Determine the target position: insert after the source item's index, or at end if target is shorter
-          var sourceIndex = listIndex;  // The index from the source path (e.g., reviews[2] -> 2)
-          var insertAfterIndex = Math.min(sourceIndex, targetLengthBefore - 1);
+          constsourceIndex = listIndex;  // The index from the source path (e.g., reviews[2] -> 2)
+          constinsertAfterIndex = Math.min(sourceIndex, targetLengthBefore - 1);
 
           // Get the URL from the add button
-          var addUrl = targetAddButton.getAttribute('hx-post');
+          constaddUrl = targetAddButton.getAttribute('hx-post');
 
           // Determine the insertion point
-          var insertBeforeElement = null;
+          constinsertBeforeElement = null;
           if (insertAfterIndex >= 0 && insertAfterIndex < targetLengthBefore - 1) {
             // Insert after insertAfterIndex, which means before insertAfterIndex+1
             insertBeforeElement = targetListItemsBeforeAdd[insertAfterIndex + 1];
@@ -452,31 +541,33 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
 
           // Make the HTMX request with custom swap target
           if (insertBeforeElement) {
-            var swapStrategy = (insertAfterIndex >= targetLengthBefore - 1) ? 'afterend' : 'beforebegin';
+            constswapStrategy = (insertAfterIndex >= targetLengthBefore - 1) ? 'afterend' : 'beforebegin';
             // Use htmx.ajax to insert at specific position
             htmx.ajax('POST', addUrl, {
               target: '#' + insertBeforeElement.id,
-              swap: swapStrategy
+              swap: swapStrategy,
+              values: htmxValues
             });
           } else {
             // List is empty, insert into container
             htmx.ajax('POST', addUrl, {
               target: '#' + targetContainerId,
-              swap: 'beforeend'
+              swap: 'beforeend',
+              values: htmxValues
             });
           }
 
           // Wait for HTMX to complete the swap AND settle, then copy values
-          var copyCompleted = false;
-          var htmxSettled = false;
-          var newlyAddedElement = null;
+          constcopyCompleted = false;
+          consthtmxSettled = false;
+          constnewlyAddedElement = null;
 
           // Listen for HTMX afterSwap event on the container to capture the newly added element
           targetContainer.addEventListener('htmx:afterSwap', function onSwap(evt) {
             // Parse the response to get the new element's ID
-            var tempDiv = document.createElement('div');
+            consttempDiv = document.createElement('div');
             tempDiv.innerHTML = evt.detail.xhr.response;
-            var newElement = tempDiv.firstElementChild;
+            constnewElement = tempDiv.firstElementChild;
             if (newElement && newElement.id) {
               newlyAddedElement = newElement;
             }
@@ -488,14 +579,14 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
             document.body.removeEventListener('htmx:afterSettle', onSettle);
           }, { once: true });
 
-          var maxAttempts = 100; // 100 attempts with exponential backoff = ~10 seconds total
-          var attempts = 0;
+          constmaxAttempts = 100; // 100 attempts with exponential backoff = ~10 seconds total
+          constattempts = 0;
 
-          var checkAndCopy = function() {
+          constcheckAndCopy = function() {
             attempts++;
 
             // Calculate delay with exponential backoff: 50ms, 50ms, 100ms, 100ms, 200ms, ...
-            var delay = Math.min(50 * Math.pow(2, Math.floor(attempts / 2)), 500);
+            constdelay = Math.min(50 * Math.pow(2, Math.floor(attempts / 2)), 500);
 
             // Wait for HTMX to settle before proceeding
             if (!htmxSettled && attempts < maxAttempts) {
@@ -511,17 +602,17 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
             }
 
             // Find the newly added item using the ID we captured
-            var targetItems = targetContainer.querySelectorAll(':scope > li');
-            var newItem = null;
-            var newItemIndex = -1;
+            consttargetItems = targetContainer.querySelectorAll(':scope > li');
+            constnewItem = null;
+            constnewItemIndex = -1;
 
             if (newlyAddedElement && newlyAddedElement.id) {
               // Use the ID we captured from the HTMX response
-              newItem = document.getElementById(newlyAddedElement.id);
+              newItem = resolveById(newlyAddedElement.id);
 
               if (newItem) {
                 // Find its position in the list
-                for (var i = 0; i < targetItems.length; i++) {
+                for (let i = 0; i < targetItems.length; i++) {
                   if (targetItems[i] === newItem) {
                     newItemIndex = i;
                     break;
@@ -534,7 +625,7 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
             if (newItem) {
 
               // Wait until the new item has input fields (indicating HTMX swap is complete)
-              var newItemInputs = newItem.querySelectorAll('[data-field-path]');
+              constnewItemInputs = newItem.querySelectorAll('[data-field-path]');
 
               if (newItemInputs.length > 0) {
                 // New item is ready, now copy values from source item
@@ -542,19 +633,18 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
 
                 // The new item might not contain the textarea with placeholder!
                 // Search the entire target container for the newest textarea with "new_" in the name
-                var targetPrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
-                var allInputsInContainer = targetContainer.querySelectorAll('[data-field-path^="' + listFieldPath + '["]');
+                constallInputsInContainer = targetContainer.querySelectorAll('[data-field-path^="' + listFieldPath + '["]');
 
-                var firstInput = null;
-                var newestTimestamp = 0;
+                constfirstInput = null;
+                constnewestTimestamp = 0;
 
-                for (var i = 0; i < allInputsInContainer.length; i++) {
-                  var inputName = allInputsInContainer[i].name || allInputsInContainer[i].id;
+                for (let i = 0; i < allInputsInContainer.length; i++) {
+                  constinputName = allInputsInContainer[i].name || allInputsInContainer[i].id;
                   if (inputName && inputName.startsWith(targetPrefix.replace(/_$/, '') + '_' + listFieldPath + '_new_')) {
                     // Extract timestamp from name
-                    var match = inputName.match(/new_(\d+)/);
+                    constmatch = inputName.match(/new_(\d+)/);
                     if (match) {
-                      var timestamp = parseInt(match[1]);
+                      consttimestamp = parseInt(match[1]);
                       if (timestamp > newestTimestamp) {
                         newestTimestamp = timestamp;
                         firstInput = allInputsInContainer[i];
@@ -567,26 +657,26 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
                   firstInput = newItemInputs[0];
                 }
 
-                var firstInputPath = firstInput.getAttribute('data-field-path');
-                var firstInputName = firstInput.name || firstInput.id;
+                constfirstInputPath = firstInput.getAttribute('data-field-path');
+                constfirstInputName = firstInput.name || firstInput.id;
 
                 // Extract placeholder from name
                 // Pattern: "prefix_listfield_PLACEHOLDER" or "prefix_listfield_PLACEHOLDER_fieldname"
                 // For simple list items: "annotated_truth_key_features_new_123"
                 // For BaseModel list items: "annotated_truth_reviews_new_123_rating"
                 // We want just the placeholder part (new_123)
-                var searchStr = '_' + listFieldPath + '_';
-                var idx = firstInputName.indexOf(searchStr);
-                var actualPlaceholderIdx = null;
+                constsearchStr = '_' + listFieldPath + '_';
+                constidx = firstInputName.indexOf(searchStr);
+                constactualPlaceholderIdx = null;
 
                 if (idx >= 0) {
-                  var afterListField = firstInputName.substring(idx + searchStr.length);
+                  constafterListField = firstInputName.substring(idx + searchStr.length);
 
                   // For BaseModel items with nested fields, the placeholder is between listfield and the next underscore
                   // Check if this looks like a nested field by checking if there's another underscore after "new_"
                   if (afterListField.startsWith('new_')) {
                     // Extract just "new_TIMESTAMP" part - stop at the next underscore after the timestamp
-                    var parts = afterListField.split('_');
+                    constparts = afterListField.split('_');
                     if (parts.length >= 2) {
                       // parts[0] = "new", parts[1] = timestamp, parts[2+] = field names
                       actualPlaceholderIdx = parts[0] + '_' + parts[1];
@@ -604,35 +694,35 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
                 }
 
                 // Use the actual placeholder index from the name attribute
-                var newPathPrefix = listFieldPath + '[' + actualPlaceholderIdx + ']';
+                constnewPathPrefix = listFieldPath + '[' + actualPlaceholderIdx + ']';
 
                 // Now perform the standard copy operation with the new path
-                performStandardCopy(pathPrefix, newPathPrefix, sourcePrefix, copyTarget, accordionStates, currentPrefix);
+                performStandardCopy(pathPrefix, newPathPrefix, sourcePrefix, copyTarget, accordionStates, currentPrefix, leftPrefix, rightPrefix);
 
                 // Wait for copy to complete, then open accordion and highlight
                 // Note: We skip automatic refresh because the temporary item ID doesn't persist after refresh
                 // User can manually click the refresh button to update counts/summaries if needed
-                var waitForCopyComplete = function() {
+                constwaitForCopyComplete = function() {
                   if (!window.__fhpfCopyInProgress) {
                     // Copy operation is complete, now open and highlight the new item
                     setTimeout(function() {
                       // Re-find the item (it might have been affected by accordion restoration)
-                      var copiedItem = document.getElementById(newItem.id);
+                      constcopiedItem = document.getElementById(newItem.id);
 
                       if (copiedItem && window.UIkit) {
                         // Open the newly created accordion item
                         if (!copiedItem.classList.contains('uk-open')) {
-                          var accordionParent = copiedItem.parentElement;
+                          constaccordionParent = copiedItem.parentElement;
                           if (accordionParent && accordionParent.hasAttribute('uk-accordion')) {
-                            var accordionComponent = UIkit.accordion(accordionParent);
+                            constaccordionComponent = UIkit.accordion(accordionParent);
                             if (accordionComponent) {
-                              var itemIndex = Array.from(accordionParent.children).indexOf(copiedItem);
+                              constitemIndex = Array.from(accordionParent.children).indexOf(copiedItem);
                               accordionComponent.toggle(itemIndex, false);  // false = don't animate
                             }
                           } else {
                             // Manual fallback
                             copiedItem.classList.add('uk-open');
-                            var content = copiedItem.querySelector('.uk-accordion-content');
+                            constcontent = copiedItem.querySelector('.uk-accordion-content');
                             if (content) {
                               content.hidden = false;
                               content.style.display = '';
@@ -710,69 +800,67 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
     (function() {
       // Detect if this is a "full list copy" of a list field:
       // we treat it as a list if both sides have containers like "<prefix>_<path>_items_container"
-      var targetPrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
+      constbaseIdPart = pathPrefix; // e.g. "addresses" or "key_features"
+      constsourceContainerId = sourcePrefix.replace(/_$/, '') + '_' + baseIdPart + '_items_container';
+      consttargetContainerId = targetPrefix.replace(/_$/, '') + '_' + baseIdPart + '_items_container';
 
-      var baseIdPart = pathPrefix; // e.g. "addresses" or "key_features"
-      var sourceContainerId = sourcePrefix.replace(/_$/, '') + '_' + baseIdPart + '_items_container';
-      var targetContainerId = targetPrefix.replace(/_$/, '') + '_' + baseIdPart + '_items_container';
-
-      var sourceListContainer = document.getElementById(sourceContainerId);
-      var targetListContainer = document.getElementById(targetContainerId);
+      constsourceListContainer = resolveById(sourceContainerId);
+      consttargetListContainer = resolveById(targetContainerId);
 
       // Only do length alignment if BOTH containers exist (i.e., this field is a list on both sides)
       if (sourceListContainer && targetListContainer) {
-        var sourceCount = sourceListContainer.querySelectorAll(':scope > li').length;
-        var targetCount = targetListContainer.querySelectorAll(':scope > li').length;
+        constsourceCount = sourceListContainer.querySelectorAll(':scope > li').length;
+        consttargetCount = targetListContainer.querySelectorAll(':scope > li').length;
 
         // If source has more items, add missing ones BEFORE copying values (case 3)
         if (sourceCount > targetCount) {
-          var addBtn = targetListContainer.parentElement.querySelector('button[hx-post*="/list/add/"]');
+          constaddBtn = targetListContainer.parentElement.querySelector('button[hx-post*="/list/add/"]');
           if (addBtn) {
-            var addUrl = addBtn.getAttribute('hx-post');
-            var toAdd = sourceCount - targetCount;
+            constaddUrl = addBtn.getAttribute('hx-post');
+            consttoAdd = sourceCount - targetCount;
 
             // Queue the required number of additions at the END
             // We'll use htmx.ajax with target=container and swap=beforeend
             // Then wait for HTMX to settle and for the DOM to reflect the new length.
-            var added = 0;
-            var addOne = function(cb) {
+            constadded = 0;
+            constaddOne = function(cb) {
               htmx.ajax('POST', addUrl, {
                 target: '#' + targetContainerId,
                 swap: 'beforeend',
-                values: {} // no-op
+                values: htmxValues
               });
               added += 1;
               cb && cb();
             };
 
             // Fire additions synchronously; HTMX will queue them
-            for (var i = 0; i < toAdd; i++) addOne();
+            for (let i = 0; i < toAdd; i++) addOne();
 
             // Wait for afterSettle AND correct length, then perform the copy
-            var attempts = 0, maxAttempts = 120; // ~6s @ 50ms backoff
-            var settled = false;
+            constattempts = 0, maxAttempts = 120; // ~6s @ 50ms backoff
+            constsettled = false;
 
             // Capture settle event once
-            var onSettle = function onSettleOnce() {
+            constonSettle = function onSettleOnce() {
               settled = true;
               document.body.removeEventListener('htmx:afterSettle', onSettleOnce);
             };
             document.body.addEventListener('htmx:afterSettle', onSettle);
 
-            var waitAndCopy = function() {
+            constwaitAndCopy = function() {
               attempts++;
-              var delay = Math.min(50 * Math.pow(1.15, attempts), 250);
+              constdelay = Math.min(50 * Math.pow(1.15, attempts), 250);
 
-              var currentCount = targetListContainer.querySelectorAll(':scope > li').length;
+              constcurrentCount = targetListContainer.querySelectorAll(':scope > li').length;
               if (settled && currentCount >= sourceCount) {
                 // Proceed with list copy by DOM position
-                performListCopyByPosition(sourceListContainer, targetListContainer, sourcePrefix, copyTarget, accordionStates, pathPrefix);
+                performListCopyByPosition(sourceListContainer, targetListContainer, sourcePrefix, copyTarget, accordionStates, pathPrefix, leftPrefix, rightPrefix);
                 return;
               }
               if (attempts >= maxAttempts) {
                 console.error('Timeout aligning list lengths for full-list copy');
                 // Still do a best-effort copy
-                performListCopyByPosition(sourceListContainer, targetListContainer, sourcePrefix, copyTarget, accordionStates, pathPrefix);
+                performListCopyByPosition(sourceListContainer, targetListContainer, sourcePrefix, copyTarget, accordionStates, pathPrefix, leftPrefix, rightPrefix);
                 return;
               }
               setTimeout(waitAndCopy, delay);
@@ -785,13 +873,13 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
           }
         } else {
           // Source has same or fewer items - use position-based copy for lists
-          performListCopyByPosition(sourceListContainer, targetListContainer, sourcePrefix, copyTarget, accordionStates, pathPrefix);
+          performListCopyByPosition(sourceListContainer, targetListContainer, sourcePrefix, copyTarget, accordionStates, pathPrefix, leftPrefix, rightPrefix);
           return;
         }
       }
 
       // Default path (non-list fields or already aligned lists)
-      performStandardCopy(pathPrefix, pathPrefix, sourcePrefix, copyTarget, accordionStates, currentPrefix);
+      performStandardCopy(pathPrefix, pathPrefix, sourcePrefix, copyTarget, accordionStates, currentPrefix, leftPrefix, rightPrefix);
     })();
 
   } catch (e) {
@@ -801,46 +889,46 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget) {
 };
 
 // Copy list items by DOM position (handles different indices in source/target)
-function performListCopyByPosition(sourceListContainer, targetListContainer, sourcePrefix, copyTarget, accordionStates, listFieldPath) {
+function performListCopyByPosition(sourceListContainer, targetListContainer, sourcePrefix, copyTarget, accordionStates, listFieldPath, leftPrefix, rightPrefix) {
   try {
-    var sourceItems = sourceListContainer.querySelectorAll(':scope > li');
-    var targetItems = targetListContainer.querySelectorAll(':scope > li');
-    var targetPrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
+    constsourceItems = sourceListContainer.querySelectorAll(':scope > li');
+    consttargetItems = targetListContainer.querySelectorAll(':scope > li');
+    consttargetPrefix = (copyTarget === 'left') ? leftPrefix : rightPrefix;
 
     // Copy each source item to corresponding target item by position
-    for (var i = 0; i < sourceItems.length && i < targetItems.length; i++) {
-      var sourceItem = sourceItems[i];
-      var targetItem = targetItems[i];
+    for (let i = 0; i < sourceItems.length && i < targetItems.length; i++) {
+      constsourceItem = sourceItems[i];
+      consttargetItem = targetItems[i];
 
       // Find all inputs within this source item
-      var sourceInputs = sourceItem.querySelectorAll('[data-field-path]');
+      constsourceInputs = sourceItem.querySelectorAll('[data-field-path]');
 
       Array.from(sourceInputs).forEach(function(sourceInput) {
-        var sourceFp = sourceInput.getAttribute('data-field-path');
+        constsourceFp = sourceInput.getAttribute('data-field-path');
 
         // Extract the field path relative to the list item
         // e.g., "addresses[0].street" -> ".street"
         // or "tags[0]" -> ""
         // Find the closing bracket after listFieldPath and extract what comes after
-        var bracketStart = sourceFp.indexOf('[', listFieldPath.length);
-        var bracketEnd = sourceFp.indexOf(']', bracketStart);
-        var relativePath = (bracketEnd >= 0) ? sourceFp.substring(bracketEnd + 1) : '';
+        constbracketStart = sourceFp.indexOf('[', listFieldPath.length);
+        constbracketEnd = sourceFp.indexOf(']', bracketStart);
+        constrelativePath = (bracketEnd >= 0) ? sourceFp.substring(bracketEnd + 1) : '';
 
         // Find the corresponding input in the target item by looking for the same relative path
-        var targetInputs = targetItem.querySelectorAll('[data-field-path]');
-        var targetInput = null;
+        consttargetInputs = targetItem.querySelectorAll('[data-field-path]');
+        consttargetInput = null;
 
-        for (var j = 0; j < targetInputs.length; j++) {
-          var targetFp = targetInputs[j].getAttribute('data-field-path');
-          var tBracketStart = targetFp.indexOf('[', listFieldPath.length);
-          var tBracketEnd = targetFp.indexOf(']', tBracketStart);
-          var targetRelativePath = (tBracketEnd >= 0) ? targetFp.substring(tBracketEnd + 1) : '';
+        for (let j = 0; j < targetInputs.length; j++) {
+          consttargetFp = targetInputs[j].getAttribute('data-field-path');
+          consttBracketStart = targetFp.indexOf('[', listFieldPath.length);
+          consttBracketEnd = targetFp.indexOf(']', tBracketStart);
+          consttargetRelativePath = (tBracketEnd >= 0) ? targetFp.substring(tBracketEnd + 1) : '';
 
           if (targetRelativePath === relativePath) {
             // Verify it belongs to the target form
-            var candidateName = null;
+            constcandidateName = null;
             if (targetInputs[j].tagName === 'UK-SELECT') {
-              var nativeSelect = targetInputs[j].querySelector('select');
+              constnativeSelect = targetInputs[j].querySelector('select');
               candidateName = nativeSelect ? nativeSelect.name : null;
             } else if (targetInputs[j].dataset.pillField === 'true') {
               // Pill containers (DIV elements) don't have a name attribute,
@@ -869,27 +957,27 @@ function performListCopyByPosition(sourceListContainer, targetListContainer, sou
         }
 
         // Copy the value
-        var tag = sourceInput.tagName.toUpperCase();
-        var type = (sourceInput.type || '').toLowerCase();
+        consttag = sourceInput.tagName.toUpperCase();
+        consttype = (sourceInput.type || '').toLowerCase();
 
         if (type === 'checkbox') {
           targetInput.checked = sourceInput.checked;
         } else if (tag === 'SELECT') {
           targetInput.value = sourceInput.value;
         } else if (tag === 'UK-SELECT') {
-          var sourceNativeSelect = sourceInput.querySelector('select');
-          var targetNativeSelect = targetInput.querySelector('select');
+          constsourceNativeSelect = sourceInput.querySelector('select');
+          consttargetNativeSelect = targetInput.querySelector('select');
           if (sourceNativeSelect && targetNativeSelect) {
-            var sourceValue = sourceNativeSelect.value;
+            constsourceValue = sourceNativeSelect.value;
 
             // Clear all selected attributes
-            for (var k = 0; k < targetNativeSelect.options.length; k++) {
+            for (let k = 0; k < targetNativeSelect.options.length; k++) {
               targetNativeSelect.options[k].removeAttribute('selected');
               targetNativeSelect.options[k].selected = false;
             }
 
             // Find and set the matching option
-            for (var k = 0; k < targetNativeSelect.options.length; k++) {
+            for (let k = 0; k < targetNativeSelect.options.length; k++) {
               if (targetNativeSelect.options[k].value === sourceValue) {
                 targetNativeSelect.options[k].setAttribute('selected', 'selected');
                 targetNativeSelect.options[k].selected = true;
@@ -900,14 +988,14 @@ function performListCopyByPosition(sourceListContainer, targetListContainer, sou
             }
 
             // Update the button display
-            var sourceButton = sourceInput.querySelector('button');
-            var targetButton = targetInput.querySelector('button');
+            constsourceButton = sourceInput.querySelector('button');
+            consttargetButton = targetInput.querySelector('button');
             if (sourceButton && targetButton) {
               targetButton.innerHTML = sourceButton.innerHTML;
             }
           }
         } else if (tag === 'TEXTAREA') {
-          var valueToSet = sourceInput.value;
+          constvalueToSet = sourceInput.value;
           targetInput.value = '';
           targetInput.textContent = '';
           targetInput.innerHTML = '';
@@ -916,8 +1004,8 @@ function performListCopyByPosition(sourceListContainer, targetListContainer, sou
           targetInput.innerHTML = valueToSet;
           targetInput.setAttribute('value', valueToSet);
 
-          var inputEvent = new Event('input', { bubbles: true });
-          var changeEvent = new Event('change', { bubbles: true });
+          constinputEvent = new Event('input', { bubbles: true });
+          constchangeEvent = new Event('change', { bubbles: true });
           targetInput.dispatchEvent(inputEvent);
           targetInput.dispatchEvent(changeEvent);
 
@@ -936,7 +1024,7 @@ function performListCopyByPosition(sourceListContainer, targetListContainer, sou
     }
 
     // Remove excess items from target if source has fewer items
-    for (var i = targetItems.length - 1; i >= sourceItems.length; i--) {
+    for (let i = targetItems.length - 1; i >= sourceItems.length; i--) {
       targetItems[i].remove();
     }
 
@@ -944,15 +1032,15 @@ function performListCopyByPosition(sourceListContainer, targetListContainer, sou
     setTimeout(function() {
       accordionStates.forEach(function(state) {
         if (state.isOpen && !state.element.classList.contains('uk-open')) {
-          var accordionParent = state.element.parentElement;
+          constaccordionParent = state.element.parentElement;
           if (accordionParent && window.UIkit) {
-            var accordionComponent = UIkit.accordion(accordionParent);
+            constaccordionComponent = UIkit.accordion(accordionParent);
             if (accordionComponent) {
-              var itemIndex = Array.from(accordionParent.children).indexOf(state.element);
+              constitemIndex = Array.from(accordionParent.children).indexOf(state.element);
               accordionComponent.toggle(itemIndex, true);
             } else {
               state.element.classList.add('uk-open');
-              var content = state.element.querySelector('.uk-accordion-content');
+              constcontent = state.element.querySelector('.uk-accordion-content');
               if (content) {
                 content.hidden = false;
                 content.style.height = 'auto';
@@ -966,9 +1054,9 @@ function performListCopyByPosition(sourceListContainer, targetListContainer, sou
 
       // Trigger a refresh on the target list field to update counts and titles
       // Find the refresh button for the target list field
-      var targetListFieldWrapper = targetListContainer.closest('[data-path]');
+      consttargetListFieldWrapper = targetListContainer.closest('[data-path]');
       if (targetListFieldWrapper) {
-        var refreshButton = targetListFieldWrapper.querySelector('button[hx-post*="/refresh"]');
+        constrefreshButton = targetListFieldWrapper.querySelector('button[hx-post*="/refresh"]');
         if (refreshButton && window.htmx) {
           // Trigger the HTMX refresh
           htmx.trigger(refreshButton, 'click');
@@ -983,7 +1071,7 @@ function performListCopyByPosition(sourceListContainer, targetListContainer, sou
 }
 
 // Extracted standard copy logic to allow reuse
-function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, copyTarget, accordionStates, currentPrefix) {
+function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, copyTarget, accordionStates, currentPrefix, leftPrefix, rightPrefix) {
   try {
     // Check if this is a pill field (List[Literal] or List[Enum])
     // Must find the container that belongs to the SOURCE form (by prefix)
@@ -994,14 +1082,14 @@ function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, c
 
     function findPillContainer(candidates, matchPrefix) {
       if (!matchPrefix) return null;
-      var normalizedPrefix = normalizePrefix(matchPrefix);
-      for (var i = 0; i < candidates.length; i++) {
-        var candidate = candidates[i];
-        var dataPrefix = candidate.dataset.inputPrefix;
+      constnormalizedPrefix = normalizePrefix(matchPrefix);
+      for (let i = 0; i < candidates.length; i++) {
+        constcandidate = candidates[i];
+        constdataPrefix = candidate.dataset.inputPrefix;
         if (dataPrefix && dataPrefix === matchPrefix) {
           return candidate;
         }
-        var candidateId = candidate.id;
+        constcandidateId = candidate.id;
         if (candidateId && normalizedPrefix && candidateId.startsWith(normalizedPrefix)) {
           return candidate;
         }
@@ -1009,27 +1097,27 @@ function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, c
       return null;
     }
 
-    var targetBasePrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
-    var sourceMatchPrefix = currentPrefix || sourcePrefix;
-    var targetMatchPrefix = targetBasePrefix;
+    consttargetBasePrefix = (copyTarget === 'left') ? leftPrefix : rightPrefix;
+    constsourceMatchPrefix = currentPrefix || sourcePrefix;
+    consttargetMatchPrefix = targetBasePrefix;
     if (currentPrefix && sourcePrefix && currentPrefix.startsWith(sourcePrefix)) {
       targetMatchPrefix = targetBasePrefix + currentPrefix.substring(sourcePrefix.length);
     }
 
-    var sourcePillCandidates = document.querySelectorAll(
+    constsourcePillCandidates = document.querySelectorAll(
       '[data-field-path="' + sourcePathPrefix + '"][data-pill-field="true"]'
     );
-    var sourcePillContainer = findPillContainer(sourcePillCandidates, sourceMatchPrefix);
+    constsourcePillContainer = findPillContainer(sourcePillCandidates, sourceMatchPrefix);
 
     if (sourcePillContainer) {
       // Find corresponding target pill container
-      var targetPillContainer = null;
+      consttargetPillContainer = null;
 
       // Find target by data-field-path that belongs to target form (not source)
-      var pillCandidates = document.querySelectorAll('[data-field-path="' + targetPathPrefix + '"][data-pill-field="true"]');
+      constpillCandidates = document.querySelectorAll('[data-field-path="' + targetPathPrefix + '"][data-pill-field="true"]');
       targetPillContainer = findPillContainer(pillCandidates, targetMatchPrefix);
       if (!targetPillContainer && sourcePillContainer && pillCandidates.length > 1) {
-        for (var i = 0; i < pillCandidates.length; i++) {
+        for (let i = 0; i < pillCandidates.length; i++) {
           if (pillCandidates[i] !== sourcePillContainer) {
             targetPillContainer = pillCandidates[i];
             break;
@@ -1038,124 +1126,15 @@ function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, c
       }
 
       if (targetPillContainer) {
-        // Get source selected values from pills
-        var sourcePillsContainer = sourcePillContainer.querySelector('[id$="_pills"]');
-        var sourceValues = [];
-        if (sourcePillsContainer) {
-          var sourcePills = sourcePillsContainer.querySelectorAll('[data-value]');
-          sourcePills.forEach(function(pill) {
-            var hiddenInput = pill.querySelector('input[type="hidden"]');
-            if (hiddenInput) {
-              sourceValues.push({
-                value: pill.dataset.value,
-                display: pill.querySelector('span.mr-1') ? pill.querySelector('span.mr-1').textContent : pill.dataset.value
-              });
-            }
-          });
-        }
-
-        // Clear target pills
-        var targetPillsContainer = targetPillContainer.querySelector('[id$="_pills"]');
-        var targetDropdown = targetPillContainer.querySelector('select');
-        var targetFieldName = targetPillContainer.dataset.fieldName;
-        var targetContainerId = targetPillContainer.id;
-
-        if (targetPillsContainer) {
-          targetPillsContainer.innerHTML = '';
-        }
-
-        // Recreate pills in target with source values
-        sourceValues.forEach(function(item, idx) {
-          var pillId = targetFieldName + '_' + idx + '_pill';
-          var inputName = targetFieldName + '_' + idx;
-
-          // Create hidden input
-          var input = document.createElement('input');
-          input.type = 'hidden';
-          input.name = inputName;
-          input.value = item.value;
-
-          // Create label span
-          var label = document.createElement('span');
-          label.className = 'mr-1';
-          label.textContent = item.display;
-
-          // Create remove button
-          var removeBtn = document.createElement('button');
-          removeBtn.type = 'button';
-          removeBtn.className = 'ml-1 text-xs hover:text-red-600 font-bold cursor-pointer';
-          removeBtn.textContent = '×';
-          removeBtn.onclick = function() {
-            window.fhpfRemoveChoicePill(pillId, item.value, targetContainerId);
-          };
-
-          // Create pill span
-          var pill = document.createElement('span');
-          pill.id = pillId;
-          pill.dataset.value = item.value;
-          pill.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800';
-          pill.appendChild(input);
-          pill.appendChild(label);
-          pill.appendChild(removeBtn);
-
-          targetPillsContainer.appendChild(pill);
-        });
-
-        // Rebuild the target dropdown to show remaining options
-        if (targetDropdown && typeof fhpfRebuildChoiceDropdown === 'function') {
-          // Use internal rebuild function if available
-          fhpfRebuildChoiceDropdown(targetContainerId);
-        } else if (targetDropdown) {
-          // Manual dropdown rebuild
-          var allChoicesJson = targetPillContainer.dataset.allChoices || '[]';
-          var allChoices = [];
-          try {
-            allChoices = JSON.parse(allChoicesJson);
-          } catch (e) {
-            console.error('Failed to parse pill choices:', e);
-          }
-
-          var selectedValues = new Set(sourceValues.map(function(v) { return v.value; }));
-          var remaining = allChoices.filter(function(choice) {
-            return !selectedValues.has(choice.value);
-          });
-
-          // Rebuild dropdown options
-          targetDropdown.innerHTML = '';
-          var placeholder = document.createElement('option');
-          placeholder.value = '';
-          placeholder.textContent = 'Add...';
-          placeholder.selected = true;
-          placeholder.disabled = true;
-          targetDropdown.appendChild(placeholder);
-
-          remaining.forEach(function(choice) {
-            var opt = document.createElement('option');
-            opt.value = choice.value;
-            opt.textContent = choice.display;
-            opt.dataset.display = choice.display;
-            targetDropdown.appendChild(opt);
-          });
-
-          targetDropdown.style.display = remaining.length > 0 ? 'inline-block' : 'none';
-        }
-
-        // Highlight the target container briefly
-        targetPillContainer.style.transition = 'background-color 0.3s';
-        targetPillContainer.style.backgroundColor = '#dbeafe';
-        setTimeout(function() {
-          targetPillContainer.style.backgroundColor = '';
-          setTimeout(function() {
-            targetPillContainer.style.transition = '';
-          }, 300);
-        }, 1500);
+        // Use the shared copyPillContainer helper
+        copyPillContainer(sourcePillContainer, targetPillContainer, true);
 
         // Restore accordion states
         setTimeout(function() {
           accordionStates.forEach(function(state) {
             if (state.isOpen && !state.element.classList.contains('uk-open')) {
               state.element.classList.add('uk-open');
-              var content = state.element.querySelector('.uk-accordion-content');
+              constcontent = state.element.querySelector('.uk-accordion-content');
               if (content) {
                 content.hidden = false;
                 content.style.height = 'auto';
@@ -1170,17 +1149,17 @@ function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, c
     }
 
     // Find all inputs with matching data-field-path from source
-    var allInputs = document.querySelectorAll('[data-field-path]');
-    var sourceInputs = Array.from(allInputs).filter(function(el) {
-      var fp = el.getAttribute('data-field-path');
+    constallInputs = document.querySelectorAll('[data-field-path]');
+    constsourceInputs = Array.from(allInputs).filter(function(el) {
+      constfp = el.getAttribute('data-field-path');
       if (!(fp === sourcePathPrefix || fp.startsWith(sourcePathPrefix + '.') || fp.startsWith(sourcePathPrefix + '['))) {
         return false;
       }
 
       // Check if this element belongs to the source form
-      var elementName = null;
+      constelementName = null;
       if (el.tagName === 'UK-SELECT') {
-        var nativeSelect = el.querySelector('select');
+        constnativeSelect = el.querySelector('select');
         elementName = nativeSelect ? nativeSelect.name : null;
       } else {
         elementName = el.name;
@@ -1190,15 +1169,15 @@ function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, c
     });
 
     // Track updated selects to fire change events later
-    var updatedSelects = [];
+    constupdatedSelects = [];
 
-    var copiedCount = 0;
+    constcopiedCount = 0;
     sourceInputs.forEach(function(sourceInput) {
-      var sourceFp = sourceInput.getAttribute('data-field-path');
+      constsourceFp = sourceInput.getAttribute('data-field-path');
 
       // Map source field path to target field path
       // If sourcePathPrefix != targetPathPrefix (list item case), we need to remap
-      var targetFp = sourceFp;
+      consttargetFp = sourceFp;
       if (sourcePathPrefix !== targetPathPrefix) {
         // Replace the source path prefix with target path prefix
         if (sourceFp === sourcePathPrefix) {
@@ -1211,13 +1190,13 @@ function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, c
       }
 
       // Find target by data-field-path, then verify it's NOT from the source form
-      var candidates = document.querySelectorAll('[data-field-path="' + targetFp + '"]');
-      var targetInput = null;
-      for (var i = 0; i < candidates.length; i++) {
-        var candidate = candidates[i];
-        var candidateName = null;
+      constcandidates = document.querySelectorAll('[data-field-path="' + targetFp + '"]');
+      consttargetInput = null;
+      for (let i = 0; i < candidates.length; i++) {
+        constcandidate = candidates[i];
+        constcandidateName = null;
         if (candidate.tagName === 'UK-SELECT') {
-          var nativeSelect = candidate.querySelector('select');
+          constnativeSelect = candidate.querySelector('select');
           candidateName = nativeSelect ? nativeSelect.name : null;
         } else if (candidate.dataset.pillField === 'true') {
           // Pill containers (DIV elements) don't have a name attribute,
@@ -1244,8 +1223,8 @@ function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, c
         return;
       }
 
-      var tag = sourceInput.tagName.toUpperCase();
-      var type = (sourceInput.type || '').toLowerCase();
+      consttag = sourceInput.tagName.toUpperCase();
+      consttype = (sourceInput.type || '').toLowerCase();
 
       if (type === 'checkbox') {
         targetInput.checked = sourceInput.checked;
@@ -1253,31 +1232,31 @@ function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, c
         targetInput.value = sourceInput.value;
         updatedSelects.push(targetInput);
       } else if (tag === 'UK-SELECT') {
-        var sourceNativeSelect = sourceInput.querySelector('select');
-        var targetNativeSelect = targetInput.querySelector('select');
+        constsourceNativeSelect = sourceInput.querySelector('select');
+        consttargetNativeSelect = targetInput.querySelector('select');
         if (sourceNativeSelect && targetNativeSelect) {
-          var sourceValue = sourceNativeSelect.value;
+          constsourceValue = sourceNativeSelect.value;
 
           // First, clear all selected attributes
-          for (var i = 0; i < targetNativeSelect.options.length; i++) {
-            targetNativeSelect.options[i].removeAttribute('selected');
-            targetNativeSelect.options[i].selected = false;
+          for (let optIdx = 0; optIdx < targetNativeSelect.options.length; optIdx++) {
+            targetNativeSelect.options[optIdx].removeAttribute('selected');
+            targetNativeSelect.options[optIdx].selected = false;
           }
 
           // Find and set the matching option
-          for (var i = 0; i < targetNativeSelect.options.length; i++) {
-            if (targetNativeSelect.options[i].value === sourceValue) {
-              targetNativeSelect.options[i].setAttribute('selected', 'selected');
-              targetNativeSelect.options[i].selected = true;
-              targetNativeSelect.selectedIndex = i;
+          for (let optIdx = 0; optIdx < targetNativeSelect.options.length; optIdx++) {
+            if (targetNativeSelect.options[optIdx].value === sourceValue) {
+              targetNativeSelect.options[optIdx].setAttribute('selected', 'selected');
+              targetNativeSelect.options[optIdx].selected = true;
+              targetNativeSelect.selectedIndex = optIdx;
               targetNativeSelect.value = sourceValue;
               break;
             }
           }
 
           // Update the button display
-          var sourceButton = sourceInput.querySelector('button');
-          var targetButton = targetInput.querySelector('button');
+          constsourceButton = sourceInput.querySelector('button');
+          consttargetButton = targetInput.querySelector('button');
           if (sourceButton && targetButton) {
             targetButton.innerHTML = sourceButton.innerHTML;
           }
@@ -1287,7 +1266,7 @@ function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, c
         }
       } else if (tag === 'TEXTAREA') {
         // Set value multiple ways to ensure it sticks
-        var valueToSet = sourceInput.value;
+        constvalueToSet = sourceInput.value;
 
         // First, completely clear the textarea
         targetInput.value = '';
@@ -1308,8 +1287,8 @@ function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, c
         targetInput.setAttribute('value', valueToSet);
 
         // Trigger input and change events to notify any UI components
-        var inputEvent = new Event('input', { bubbles: true });
-        var changeEvent = new Event('change', { bubbles: true });
+        constinputEvent = new Event('input', { bubbles: true });
+        constchangeEvent = new Event('change', { bubbles: true });
         targetInput.dispatchEvent(inputEvent);
         targetInput.dispatchEvent(changeEvent);
 
@@ -1337,23 +1316,23 @@ function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, c
     if (sourcePathPrefix && !sourcePathPrefix.includes('[') && sourcePathPrefix === targetPathPrefix) {
       // This is a top-level field (not a list item), check if it's a list field
       // Try to find list containers for both source and target
-      var targetPrefix = (copyTarget === 'left') ? window.__fhpfLeftPrefix : window.__fhpfRightPrefix;
+      consttargetPrefix = (copyTarget === 'left') ? leftPrefix : rightPrefix;
 
       // Build container ID patterns - handle both with and without trailing underscore
-      var sourceContainerIdPattern = sourcePrefix.replace(/_$/, '') + '_' + sourcePathPrefix + '_items_container';
-      var targetContainerIdPattern = targetPrefix.replace(/_$/, '') + '_' + targetPathPrefix + '_items_container';
+      constsourceContainerIdPattern = sourcePrefix.replace(/_$/, '') + '_' + sourcePathPrefix + '_items_container';
+      consttargetContainerIdPattern = targetPrefix.replace(/_$/, '') + '_' + targetPathPrefix + '_items_container';
 
-      var sourceListContainer = document.getElementById(sourceContainerIdPattern);
-      var targetListContainer = document.getElementById(targetContainerIdPattern);
+      constsourceListContainer = document.getElementById(sourceContainerIdPattern);
+      consttargetListContainer = document.getElementById(targetContainerIdPattern);
 
       if (sourceListContainer && targetListContainer) {
         // Both containers exist, this is a list field
         // Count list items in source and target
-        var sourceItemCount = sourceListContainer.querySelectorAll(':scope > li').length;
-        var targetItems = targetListContainer.querySelectorAll(':scope > li');
+        constsourceItemCount = sourceListContainer.querySelectorAll(':scope > li').length;
+        consttargetItems = targetListContainer.querySelectorAll(':scope > li');
 
         // Remove excess items from target (from end backwards)
-        for (var i = targetItems.length - 1; i >= sourceItemCount; i--) {
+        for (let i = targetItems.length - 1; i >= sourceItemCount; i--) {
           targetItems[i].remove();
         }
       }
@@ -1364,16 +1343,16 @@ function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, c
       accordionStates.forEach(function(state) {
         if (state.isOpen && !state.element.classList.contains('uk-open')) {
           // Use UIkit's toggle API to properly open the accordion
-          var accordionParent = state.element.parentElement;
+          constaccordionParent = state.element.parentElement;
           if (accordionParent && window.UIkit) {
-            var accordionComponent = UIkit.accordion(accordionParent);
+            constaccordionComponent = UIkit.accordion(accordionParent);
             if (accordionComponent) {
-              var itemIndex = Array.from(accordionParent.children).indexOf(state.element);
+              constitemIndex = Array.from(accordionParent.children).indexOf(state.element);
               accordionComponent.toggle(itemIndex, true);
             } else {
               // Fallback to manual class manipulation
               state.element.classList.add('uk-open');
-              var content = state.element.querySelector('.uk-accordion-content');
+              constcontent = state.element.querySelector('.uk-accordion-content');
               if (content) {
                 content.hidden = false;
                 content.style.height = 'auto';
@@ -1408,9 +1387,9 @@ window.fhpfInitComparisonSync = function initComparisonSync(){
   // Fix native select name attributes (MonsterUI puts name on uk-select, not native select)
   // IMPORTANT: Remove name from uk-select to avoid duplicate form submission
   document.querySelectorAll('uk-select[name]').forEach(function(ukSelect) {
-    var nativeSelect = ukSelect.querySelector('select');
+    constnativeSelect = ukSelect.querySelector('select');
     if (nativeSelect) {
-      var ukSelectName = ukSelect.getAttribute('name');
+      constukSelectName = ukSelect.getAttribute('name');
       if (!nativeSelect.name && ukSelectName) {
         nativeSelect.name = ukSelectName;
         // Remove name from uk-select to prevent duplicate submission
@@ -1451,6 +1430,8 @@ window.fhpfInitComparisonSync = function initComparisonSync(){
     const cell = sourceLi.closest('[data-path]');
     if (!cell) return;
     const path = cell.dataset.path;
+    const grid = cell.closest('[data-fhpf-compare-grid="true"]');
+    const scope = grid || document;
 
     // Determine index of this <li> inside its <ul>
     const idx     = Array.prototype.indexOf.call(
@@ -1460,7 +1441,7 @@ window.fhpfInitComparisonSync = function initComparisonSync(){
     const opening = ev.type === 'show';
 
     // Mirror on the other side
-    document
+    scope
       .querySelectorAll(`[data-path="${path}"]`)
       .forEach(peerCell => {
         if (peerCell === cell) return;
@@ -1521,6 +1502,8 @@ window.fhpfInitComparisonSync = function initComparisonSync(){
     const cell = listContainer.closest('[data-path]');
     if (!cell) return;
     const path = cell.dataset.path;
+    const grid = cell.closest('[data-fhpf-compare-grid="true"]');
+    const scope = grid || document;
 
     // Determine index of this <li> within its list container
     const listAccordion = sourceLi.parentElement;
@@ -1528,7 +1511,7 @@ window.fhpfInitComparisonSync = function initComparisonSync(){
     const opening = ev.type === 'show';
 
     // Mirror on the other side
-    document
+    scope
       .querySelectorAll(`[data-path="${path}"]`)
       .forEach(peerCell => {
         if (peerCell === cell) return;
@@ -1599,9 +1582,11 @@ window.fhpfInitComparisonSync = function initComparisonSync(){
       const cell = container.closest('[data-path]');
       if (!cell) return;
       const path = cell.dataset.path;
+      const grid = cell.closest('[data-fhpf-compare-grid="true"]');
+      const scope = grid || document;
 
       // c) Find the peer's list-container by suffix match
-      document
+      scope
         .querySelectorAll(`[data-path="${path}"]`)
         .forEach(peerCell => {
           if (peerCell === cell) return;
@@ -1890,6 +1875,7 @@ class ComparisonForm(Generic[ModelType]):
                 spacing=form.spacing,
                 field_path=[field_name],
                 form_name=form.name,
+                route_form_name=getattr(form, "template_name", form.name),
                 label_color=label_color,  # Pass the label color if specified
                 metrics_dict=form.metrics_dict,  # Use form's own metrics
                 keep_skip_json_pathset=form._keep_skip_json_pathset,  # Pass keep_skip_json configuration
@@ -1942,10 +1928,21 @@ class ComparisonForm(Generic[ModelType]):
             right_wrapper,
             cls="fhpf-compare grid grid-cols-2 gap-x-6 gap-y-2 items-start",
             id=f"{self.name}-comparison-grid",
+            **{
+                ATTR_COMPARE_GRID: "true",
+                ATTR_COMPARE_NAME: self.name,
+                ATTR_LEFT_PREFIX: self.left_form.base_prefix,
+                ATTR_RIGHT_PREFIX: self.right_form.base_prefix,
+            },
         )
 
         # Emit prefix globals for the copy registry
         prefix_script = fh.Script(f"""
+window.__fhpfComparisonPrefixes = window.__fhpfComparisonPrefixes || {{}};
+window.__fhpfComparisonPrefixes[{json.dumps(self.name)}] = {{
+  left: {json.dumps(self.left_form.base_prefix)},
+  right: {json.dumps(self.right_form.base_prefix)}
+}};
 window.__fhpfLeftPrefix = {json.dumps(self.left_form.base_prefix)};
 window.__fhpfRightPrefix = {json.dumps(self.right_form.base_prefix)};
 """)
