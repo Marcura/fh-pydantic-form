@@ -87,6 +87,7 @@ dev = [
     "pytest-asyncio>=1.0.0",
     "beautifulsoup4>=4.13.4",
     "pytest-benchmark>=5.1.0",
+    "ty>=0.0.12",
 ]
 
 [tool.ty.environment]

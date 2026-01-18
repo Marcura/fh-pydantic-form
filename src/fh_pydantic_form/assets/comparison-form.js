@@ -528,13 +528,22 @@ function fhpfCopyItemTree(sourceItemEl, targetItemEl, ctx, done) {
       var pair = pairs[pairIndex];
       var srcLis = pair.sourceContainer.querySelectorAll(':scope > li');
       var tgtLis = pair.targetContainer.querySelectorAll(':scope > li');
-      var itemCount = Math.min(srcLis.length, tgtLis.length);
+      var srcCount = srcLis.length;
+      var tgtCount = tgtLis.length;
+      var itemCount = Math.min(srcCount, tgtCount);
 
       // Process items within this pair sequentially
       var itemIdx = 0;
 
       function processNextItem() {
         if (itemIdx >= itemCount) {
+          // After copying all matching items, truncate excess target items
+          // (if target has more items than source)
+          var currentTgtLis = pair.targetContainer.querySelectorAll(':scope > li');
+          for (var i = currentTgtLis.length - 1; i >= srcCount; i--) {
+            currentTgtLis[i].remove();
+          }
+
           pairIndex++;
           processNextPair();
           return;
@@ -1533,8 +1542,34 @@ function performListCopyByPosition(sourceListContainer, targetListContainer, sou
     let itemIndex = 0;
 
     function processNextItem() {
-      if (itemIndex >= sourceItems.length || itemIndex >= targetItems.length) {
-        // All items processed, restore accordion states
+      if (itemIndex >= sourceItems.length) {
+        // All source items processed
+        // Truncate excess target items (if target was longer than source)
+        for (let i = targetItems.length - 1; i >= sourceItems.length; i--) {
+          targetItems[i].remove();
+        }
+
+        // Restore accordion states
+        setTimeout(function() {
+          accordionStates.forEach(function(state) {
+            if (state.isOpen && !state.element.classList.contains('uk-open')) {
+              state.element.classList.add('uk-open');
+              const content = state.element.querySelector('.uk-accordion-content');
+              if (content) {
+                content.hidden = false;
+                content.style.height = 'auto';
+              }
+            }
+          });
+          window.__fhpfCopyInProgress = false;
+        }, 100);
+        return;
+      }
+
+      // If we've run out of target items but still have source items,
+      // we can't copy them (would need to add items first, which is handled elsewhere)
+      if (itemIndex >= targetItems.length) {
+        // Restore accordion states and exit
         setTimeout(function() {
           accordionStates.forEach(function(state) {
             if (state.isOpen && !state.element.classList.contains('uk-open')) {

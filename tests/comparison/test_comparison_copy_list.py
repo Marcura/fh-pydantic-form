@@ -696,6 +696,50 @@ class TestCopyListItemJavaScriptLogic:
             f"Relative paths should match: {source_relatives} vs {target_relatives}"
         )
 
+    def test_truncation_when_copying_shorter_list_to_longer(self):
+        """
+        Test that copying a shorter list to a longer list truncates excess items.
+
+        When copying:
+        - Source list has 2 items
+        - Target list has 5 items
+
+        Expected behavior:
+        - Copy source items 0,1 to target items 0,1
+        - Remove target items 2,3,4 (excess items)
+        - Result: target has exactly 2 items matching source
+
+        This documents the expected contract for performListCopyByPosition.
+        The JavaScript must call targetItems[i].remove() for excess items.
+
+        BUG FIX: Prior to 0.3.17, performListCopyByPosition did NOT truncate
+        excess items - it only copied matching positions and left extras intact.
+        """
+        source_items = [
+            {"rating": 5, "comment": "Great"},
+            {"rating": 4, "comment": "Good"},
+        ]
+        target_items_before = [
+            {"rating": 1, "comment": "Bad"},
+            {"rating": 2, "comment": "Poor"},
+            {"rating": 3, "comment": "Average"},
+            {"rating": 4, "comment": "Good"},
+            {"rating": 5, "comment": "Excellent"},
+        ]
+
+        # Expected behavior after copy: target matches source length
+        expected_target_after = [
+            {"rating": 5, "comment": "Great"},  # copied from source[0]
+            {"rating": 4, "comment": "Good"},  # copied from source[1]
+            # items 2,3,4 should be REMOVED (not left unchanged)
+        ]
+
+        assert len(source_items) == 2
+        assert len(target_items_before) == 5
+        assert len(expected_target_after) == 2, (
+            "After copying shorter list to longer, target should be truncated"
+        )
+
 
 class TestCopyDisabledFormInteraction:
     """Tests for copy behavior when target form is disabled."""

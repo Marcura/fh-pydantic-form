@@ -16,6 +16,13 @@
 - **FIXED**: Deep copy logic matches nested containers by list path rather than DOM order
 - **FIXED**: List containers now include `data-list-path` for deterministic nested list pairing
 
+#### ComparisonForm List Truncation
+- **FIXED**: Copying a shorter list to a longer list now truncates excess target items (e.g., copying 2 items to a 5-item list results in 2 items, not 5)
+- **FIXED**: Nested lists within copied items are also truncated (e.g., copying a Section with 1 paragraph to one with 2 paragraphs now results in 1 paragraph)
+
+### 📦 Dependencies
+- **ADDED**: `ty` type checker to dev dependencies for consistent type checking in CI
+
 ### 🧪 Testing
 - **IMPROVED**: Recursive copy tests now assert `data-list-path` contracts and add‑button matching for nested lists
 - **IMPROVED**: Consolidated nested list tests to reduce duplication and focus simple list tests on core behavior
