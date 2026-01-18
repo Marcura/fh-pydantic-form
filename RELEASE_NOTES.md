@@ -1,5 +1,34 @@
 # Release Notes
 
+## Version 0.3.17 (2026-01-18)
+
+### ⚠️ Breaking Changes
+
+#### Python Version Requirements
+- **DROPPED**: Python 3.10 and 3.11 support
+- **REQUIRED**: Python 3.12 or higher now required
+- **REASON**: Upstream `fastcore` dependency now uses Python 3.12+ syntax (f-string expressions with backslashes)
+
+### 🔧 Bug Fixes
+
+#### ComparisonForm Recursive Copy
+- **FIXED**: Nested list copy now resolves the correct add button by exact list path (avoids picking nested lists)
+- **FIXED**: Deep copy logic matches nested containers by list path rather than DOM order
+- **FIXED**: List containers now include `data-list-path` for deterministic nested list pairing
+
+#### ComparisonForm List Truncation
+- **FIXED**: Copying a shorter list to a longer list now truncates excess target items (e.g., copying 2 items to a 5-item list results in 2 items, not 5)
+- **FIXED**: Nested lists within copied items are also truncated (e.g., copying a Section with 1 paragraph to one with 2 paragraphs now results in 1 paragraph)
+
+### 📦 Dependencies
+- **ADDED**: `ty` type checker to dev dependencies for consistent type checking in CI
+
+### 🧪 Testing
+- **IMPROVED**: Recursive copy tests now assert `data-list-path` contracts and add‑button matching for nested lists
+- **IMPROVED**: Consolidated nested list tests to reduce duplication and focus simple list tests on core behavior
+
+---
+
 ## Version 0.3.15 (2026-01-16)
 
 ### 🔧 Bug Fixes
