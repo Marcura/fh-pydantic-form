@@ -1,6 +1,13 @@
 # Release Notes
 
-## Version 0.3.16 (2026-01-18)
+## Version 0.3.17 (2026-01-18)
+
+### ⚠️ Breaking Changes
+
+#### Python Version Requirements
+- **DROPPED**: Python 3.10 and 3.11 support
+- **REQUIRED**: Python 3.12 or higher now required
+- **REASON**: Upstream `fastcore` dependency now uses Python 3.12+ syntax (f-string expressions with backslashes)
 
 ### 🔧 Bug Fixes
 
