@@ -2149,6 +2149,7 @@ class ListFieldRenderer(BaseFieldRenderer):
         accordion = mui.Accordion(
             *item_elements,
             id=container_id,
+            data_list_path=self._list_path,
             multiple=True,  # Allow multiple items to be open at once
             collapsible=True,  # Make it collapsible
             cls=accordion_cls.strip(),  # Add space between items and accordion content styling
@@ -2209,6 +2210,7 @@ class ListFieldRenderer(BaseFieldRenderer):
             # so HTMX can target it when adding new items
             accordion = fh.Ul(
                 id=container_id,
+                data_list_path=self._list_path,
                 cls="uk-accordion " + accordion_cls.strip(),
                 uk_accordion="multiple: true; collapsible: true",
             )

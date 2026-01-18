@@ -1977,3 +1977,209 @@ class TestListItemVsSubfieldDetection:
                 f"Should not match full: {path}"
             )
             assert re.search(subfield_pattern, path), f"Should match subfield: {path}"
+
+
+class TestNestedBaseModelWithMultipleLists:
+    """
+    Tests for BaseModels that have multiple List fields at the same level.
+
+    This can cause selector confusion when multiple add buttons exist as siblings.
+    """
+
+    @pytest.fixture
+    def multi_list_models(self):
+        """
+        Create a model with multiple List fields at the same level.
+        """
+
+        class Person(BaseModel):
+            """Person with multiple list fields."""
+
+            name: str = ""
+            emails: List[str] = Field(default_factory=list)
+            phones: List[str] = Field(default_factory=list)
+            addresses: List[str] = Field(default_factory=list)
+
+        class Team(BaseModel):
+            """Team with list of people (each having multiple lists)."""
+
+            team_name: str = ""
+            members: List[Person] = Field(default_factory=list)
+
+        return {"Person": Person, "Team": Team}
+
+    @pytest.fixture
+    def multi_list_comparison_client(self, multi_list_models):
+        """Create a ComparisonForm with multiple sibling lists."""
+        from fh_pydantic_form.comparison_form import ComparisonForm, comparison_form_js
+
+        Person = multi_list_models["Person"]
+        Team = multi_list_models["Team"]
+
+        left_values = Team(
+            team_name="Left Team",
+            members=[
+                Person(
+                    name="Alice",
+                    emails=["alice@example.com"],
+                    phones=["123-456"],
+                    addresses=["123 Main St"],
+                ),
+            ],
+        )
+
+        right_values = Team(
+            team_name="Right Team",
+            members=[
+                Person(
+                    name="Bob",
+                    emails=["bob@example.com"],
+                    phones=["789-012"],
+                    addresses=["456 Oak Ave"],
+                ),
+            ],
+        )
+
+        left_form = PydanticForm("multi_left", Team, initial_values=left_values)
+        right_form = PydanticForm("multi_right", Team, initial_values=right_values)
+
+        comp = ComparisonForm(
+            "multi_test",
+            left_form,
+            right_form,
+            copy_left=True,
+            copy_right=True,
+        )
+
+        app, rt = fh.fast_app(
+            hdrs=[
+                mui.Theme.blue.headers(),
+                list_manipulation_js(),
+                comparison_form_js(),
+            ],
+            pico=False,
+            live=False,
+        )
+        comp.register_routes(app)
+
+        @rt("/")
+        def get():
+            return fh.Div(
+                comp.form_wrapper(comp.render_inputs()),
+                comparison_form_js(),
+            )
+
+        return TestClient(app), comp
+
+    def test_multiple_sibling_list_containers_exist(
+        self, multi_list_comparison_client, soup
+    ):
+        """
+        Test that multiple sibling list containers are created correctly.
+        """
+        client, comp = multi_list_comparison_client
+        response = client.get("/")
+        assert response.status_code == 200
+
+        dom = soup(response.text)
+
+        # members[0] should have three sibling list containers
+        emails_container = dom.find(id="multi_left_members_0_emails_items_container")
+        phones_container = dom.find(id="multi_left_members_0_phones_items_container")
+        addresses_container = dom.find(
+            id="multi_left_members_0_addresses_items_container"
+        )
+
+        assert emails_container is not None, "Expected emails container"
+        assert phones_container is not None, "Expected phones container"
+        assert addresses_container is not None, "Expected addresses container"
+
+    def test_sibling_list_add_buttons_have_distinct_paths(
+        self, multi_list_comparison_client, soup
+    ):
+        """
+        Test that sibling lists have distinct add button paths.
+        """
+        client, comp = multi_list_comparison_client
+        response = client.get("/")
+        assert response.status_code == 200
+
+        dom = soup(response.text)
+
+        add_buttons = dom.find_all(
+            "button", attrs={"hx-post": re.compile(r"/list/add/members/0/")}
+        )
+        add_urls = [btn.get("hx-post", "") for btn in add_buttons]
+
+        # Should have distinct paths for each list
+        emails_urls = [u for u in add_urls if u.endswith("/emails")]
+        phones_urls = [u for u in add_urls if u.endswith("/phones")]
+        addresses_urls = [u for u in add_urls if u.endswith("/addresses")]
+
+        assert emails_urls, f"Expected emails add button, found: {add_urls}"
+        assert phones_urls, f"Expected phones add button, found: {add_urls}"
+        assert addresses_urls, f"Expected addresses add button, found: {add_urls}"
+
+    def test_correct_add_button_selected_for_each_sibling_list(
+        self, multi_list_comparison_client, soup
+    ):
+        """
+        Test that the fixed selector finds the correct button for each sibling list.
+        """
+        client, comp = multi_list_comparison_client
+        response = client.get("/")
+        assert response.status_code == 200
+
+        dom = soup(response.text)
+
+        # For each sibling list, verify the correct button would be found
+        sibling_lists = ["emails", "phones", "addresses"]
+
+        for list_name in sibling_lists:
+            container_id = f"multi_left_members_0_{list_name}_items_container"
+            container = dom.find(id=container_id)
+            assert container is not None, f"Expected container {container_id}"
+
+            parent = container.parent
+            assert parent is not None
+
+            # Find all add buttons
+            all_buttons = parent.find_all(
+                "button", attrs={"hx-post": re.compile(r"/list/add/")}
+            )
+            all_urls = [btn.get("hx-post", "") for btn in all_buttons]
+
+            # The fixed selector uses endsWith
+            expected_suffix = f"/list/add/members/0/{list_name}"
+            correct_buttons = [u for u in all_urls if u.endswith(expected_suffix)]
+
+            assert correct_buttons, (
+                f"Expected button ending with '{expected_suffix}' for {list_name}, "
+                f"found: {all_urls}"
+            )
+
+    def test_copying_member_with_multiple_lists(
+        self, multi_list_comparison_client, htmx_headers, soup
+    ):
+        """
+        Test that copying a member (with multiple nested lists) works correctly.
+        """
+        client, comp = multi_list_comparison_client
+
+        # Add a new member
+        response = client.post(
+            "/form/multi_left/list/add/members",
+            headers=htmx_headers,
+        )
+        assert response.status_code == 200
+
+        dom = soup(response.text)
+
+        # New member should have containers for all three lists
+        new_item = dom.find("li")
+        assert new_item is not None
+
+        # Check for nested list containers in the new item
+        new_item_html = str(new_item)
+        assert "emails_items_container" in new_item_html or "emails" in new_item_html
+        assert "phones_items_container" in new_item_html or "phones" in new_item_html

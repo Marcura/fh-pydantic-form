@@ -52,6 +52,507 @@ function extractListIndex(pathPrefix) {
   return FHPF_RE.NUMERIC.test(indexStr) ? parseInt(indexStr) : indexStr;
 }
 
+function extractInnermostListFieldPath(pathPrefix) {
+  // Extract the innermost list field path (for nested lists)
+  // e.g., "sections[0].paragraphs[1].text" -> "sections[0].paragraphs"
+  // e.g., "sections[0].paragraphs[1]" -> "sections[0].paragraphs"
+  // e.g., "sections[0].title" -> "sections"
+  // e.g., "addresses[0]" -> "addresses"
+
+  // Find the last [index] pattern and strip it + everything after
+  const lastBracketIdx = pathPrefix.lastIndexOf('[');
+  if (lastBracketIdx === -1) return pathPrefix;
+
+  // Get everything before the last [
+  let basePath = pathPrefix.substring(0, lastBracketIdx);
+
+  // Remove trailing dot if present
+  if (basePath.endsWith('.')) {
+    basePath = basePath.substring(0, basePath.length - 1);
+  }
+
+  return basePath;
+}
+
+function extractInnermostListIndex(pathPrefix) {
+  // Extract the innermost list index from path
+  // e.g., "sections[0].paragraphs[1].text" -> 1
+  // e.g., "sections[0].paragraphs[new_123]" -> "new_123"
+  // e.g., "sections[0].paragraphs[1]" -> 1
+  // e.g., "addresses[0]" -> 0
+
+  // Find all [index] patterns and get the last one
+  const matches = pathPrefix.match(/\[(\d+|new_\d+)\]/g);
+  if (!matches || matches.length === 0) return null;
+
+  const lastMatch = matches[matches.length - 1];
+  const indexStr = lastMatch.slice(1, -1); // Remove [ and ]
+
+  return FHPF_RE.NUMERIC.test(indexStr) ? parseInt(indexStr) : indexStr;
+}
+
+function pathToContainerIdPart(pathWithIndices) {
+  // Convert a path with indices to container ID format
+  // e.g., "sections[0].paragraphs" -> "sections_0_paragraphs"
+  // e.g., "sections" -> "sections"
+  return pathWithIndices
+    .replace(/\[(\d+|new_\d+)\]/g, '_$1')  // [0] -> _0, [new_123] -> _new_123
+    .replace(/\./g, '_');  // . -> _
+}
+
+function pathToUrlPart(pathWithIndices) {
+  // Convert a path with indices to URL format for HTMX routes
+  // e.g., "sections[0].paragraphs" -> "sections/0/paragraphs"
+  // e.g., "sections" -> "sections"
+  return pathWithIndices
+    .replace(/\[(\d+|new_\d+)\]/g, '/$1')  // [0] -> /0, [new_123] -> /new_123
+    .replace(/\./g, '/');  // . -> /
+}
+
+// ==== Deep copy helpers for recursive nested list copying ====
+
+function fhpfNormalizeListPath(listPath) {
+  if (!listPath) return null;
+  const segments = listPath.split('/');
+  const normalized = segments.map(function(seg) {
+    if (/^\d+$/.test(seg) || /^new_\d+$/.test(seg)) {
+      return '*';
+    }
+    return seg;
+  });
+  return normalized.join('/');
+}
+
+function fhpfListPathFromContainer(containerEl) {
+  // Return list path in URL format (slash-separated) for this container.
+  if (!containerEl) return null;
+
+  if (containerEl.dataset && containerEl.dataset.listPath) {
+    return containerEl.dataset.listPath;
+  }
+
+  // Fallback: derive from the first owned field in the first list item.
+  const firstItem = containerEl.querySelector(':scope > li');
+  if (!firstItem) return null;
+
+  const candidates = firstItem.querySelectorAll('[data-field-path]');
+  const owned = Array.from(candidates).filter(function(el) {
+    return fhpfOwningListItem(el) === firstItem;
+  });
+
+  if (owned.length === 0) return null;
+
+  const fp = owned[0].getAttribute('data-field-path');
+  if (!fp) return null;
+
+  const listPathWithIndices = extractInnermostListFieldPath(fp);
+  return listPathWithIndices ? pathToUrlPart(listPathWithIndices) : null;
+}
+
+function fhpfNormalizeListAddUrl(addUrl) {
+  // Normalize add button URL to create a stable key for pairing containers
+  // e.g., "/list/add/sections/0/paragraphs/new_123/tags" -> "sections/*/paragraphs/*/tags"
+  // This allows matching containers even when indices differ (0 vs new_123)
+  if (!addUrl) return null;
+
+  // Strip everything up to and including "/list/add/"
+  const listAddIdx = addUrl.indexOf('/list/add/');
+  if (listAddIdx === -1) return null;
+
+  const pathPart = addUrl.substring(listAddIdx + '/list/add/'.length);
+
+  // Split by "/" and replace numeric/placeholder indices with "*"
+  const segments = pathPart.split('/');
+  const normalized = segments.map(function(seg) {
+    if (/^\d+$/.test(seg) || /^new_\d+$/.test(seg)) {
+      return '*';
+    }
+    return seg;
+  });
+
+  return normalized.join('/');
+}
+
+function fhpfGetAddButtonForContainer(containerEl) {
+  // Get the add button for a list container
+  // Search in parent element first (typical DOM structure)
+  if (!containerEl || !containerEl.parentElement) return null;
+  const buttons = containerEl.parentElement.querySelectorAll('button[hx-post*="/list/add/"]');
+  const listPath = fhpfListPathFromContainer(containerEl);
+
+  if (listPath) {
+    const expectedSuffix = '/list/add/' + listPath;
+    const match = Array.from(buttons).find(function(btn) {
+      return (btn.getAttribute('hx-post') || '').endsWith(expectedSuffix);
+    });
+    if (match) return match;
+  }
+
+  const targetMatch = Array.from(buttons).find(function(btn) {
+    return (btn.getAttribute('hx-target') || '') === ('#' + containerEl.id);
+  });
+  if (targetMatch) return targetMatch;
+
+  return buttons.length ? buttons[0] : null;
+}
+
+function fhpfListKeyForContainer(containerEl) {
+  // Get a stable key for a container based on its add button URL
+  const listPath = fhpfListPathFromContainer(containerEl);
+  if (listPath) return fhpfNormalizeListPath(listPath);
+  const btn = fhpfGetAddButtonForContainer(containerEl);
+  const url = btn ? btn.getAttribute('hx-post') : null;
+  return url ? fhpfNormalizeListAddUrl(url) : null;
+}
+
+function fhpfOwningListItem(el) {
+  // Get the closest list item (li) that owns this element
+  // An element is "owned" by the list item that is its closest ancestor within an items_container
+  if (!el) return null;
+  return el.closest('[id$="_items_container"] > li');
+}
+
+function fhpfFindImmediateNestedListContainers(itemEl) {
+  // Find nested list containers that are IMMEDIATE children of this item
+  // (not nested within deeper list items)
+  // This filters out containers owned by nested list items
+  if (!itemEl) return [];
+
+  const allContainers = itemEl.querySelectorAll('[id$="_items_container"]');
+  return Array.from(allContainers).filter(function(container) {
+    // A container is "immediate" if its owning list item is exactly itemEl
+    const owner = fhpfOwningListItem(container);
+    return owner === itemEl;
+  });
+}
+
+function fhpfPollUntil(conditionFn, options, done) {
+  // Generic polling helper - wait until condition is true
+  // options: { maxAttempts, baseDelayMs, maxDelayMs }
+  var maxAttempts = (options && options.maxAttempts) || 60;
+  var baseDelayMs = (options && options.baseDelayMs) || 50;
+  var maxDelayMs = (options && options.maxDelayMs) || 250;
+  var attempts = 0;
+
+  function check() {
+    attempts++;
+    if (conditionFn()) {
+      done(true);  // success
+      return;
+    }
+    if (attempts >= maxAttempts) {
+      console.warn('fhpfPollUntil: max attempts reached');
+      done(false);  // timeout
+      return;
+    }
+    // Exponential backoff with cap
+    var delay = Math.min(baseDelayMs * Math.pow(1.15, attempts), maxDelayMs);
+    setTimeout(check, delay);
+  }
+
+  setTimeout(check, baseDelayMs);
+}
+
+function fhpfComputeNestedAlignments(sourceItemEl, targetItemEl, ctx) {
+  // Discover which immediate nested lists need items added
+  // Returns array of { key, sourceContainer, targetContainer, addUrl, toAdd }
+  var alignments = [];
+
+  // Get immediate source containers
+  var sourceContainers = fhpfFindImmediateNestedListContainers(sourceItemEl);
+  if (sourceContainers.length === 0) return alignments;
+
+  // Get immediate target containers and build a map by key
+  var targetContainers = fhpfFindImmediateNestedListContainers(targetItemEl);
+  var targetByKey = {};
+  targetContainers.forEach(function(tgt) {
+    var key = fhpfListKeyForContainer(tgt);
+    if (key) {
+      targetByKey[key] = tgt;
+    }
+  });
+
+  // Match source containers to target containers by key
+  sourceContainers.forEach(function(srcContainer) {
+    var key = fhpfListKeyForContainer(srcContainer);
+    if (!key) return;
+
+    var tgtContainer = targetByKey[key];
+    if (!tgtContainer) return;
+
+    var srcCount = srcContainer.querySelectorAll(':scope > li').length;
+    var tgtCount = tgtContainer.querySelectorAll(':scope > li').length;
+
+    if (srcCount > tgtCount) {
+      var addBtn = fhpfGetAddButtonForContainer(tgtContainer);
+      if (addBtn) {
+        alignments.push({
+          key: key,
+          sourceContainer: srcContainer,
+          targetContainer: tgtContainer,
+          addUrl: addBtn.getAttribute('hx-post'),
+          toAdd: srcCount - tgtCount
+        });
+      }
+    }
+  });
+
+  return alignments;
+}
+
+function fhpfAlignContainers(alignments, ctx, done) {
+  // Execute adds for all alignments and wait until counts match
+  if (alignments.length === 0) {
+    done();
+    return;
+  }
+
+  var htmxValues = ctx.htmxValues || {};
+
+  // Fire all HTMX adds
+  alignments.forEach(function(al) {
+    for (var i = 0; i < al.toAdd; i++) {
+      htmx.ajax('POST', al.addUrl, {
+        target: '#' + al.targetContainer.id,
+        swap: 'beforeend',
+        values: htmxValues
+      });
+    }
+  });
+
+  // Poll until all containers have expected counts
+  fhpfPollUntil(function() {
+    for (var i = 0; i < alignments.length; i++) {
+      var al = alignments[i];
+      var srcCount = al.sourceContainer.querySelectorAll(':scope > li').length;
+      var tgtCount = al.targetContainer.querySelectorAll(':scope > li').length;
+      if (tgtCount < srcCount) {
+        return false;
+      }
+    }
+    return true;
+  }, { maxAttempts: 60, baseDelayMs: 50, maxDelayMs: 250 }, function(success) {
+    if (!success) {
+      console.warn('fhpfAlignContainers: timeout waiting for alignment');
+    }
+    done();
+  });
+}
+
+function fhpfCopyOwnedFields(sourceItemEl, targetItemEl, ctx) {
+  // Copy only the input fields that are directly owned by sourceItemEl
+  // (not fields within nested list items)
+  // Uses relative path (after last ]) to match fields, making it index-agnostic
+  var sourcePrefix = ctx.sourcePrefix;
+
+  var allSourceFields = sourceItemEl.querySelectorAll('[data-field-path]');
+  var ownedSourceFields = Array.from(allSourceFields).filter(function(el) {
+    return fhpfOwningListItem(el) === sourceItemEl;
+  });
+
+  ownedSourceFields.forEach(function(sourceInput) {
+    var sourceFp = sourceInput.getAttribute('data-field-path');
+
+    // Extract relative path: everything after the last ]
+    // e.g., "sections[0].title" -> ".title"
+    // e.g., "tags[0]" -> ""
+    var lastBracket = sourceFp.lastIndexOf(']');
+    var relativePath = (lastBracket >= 0) ? sourceFp.substring(lastBracket + 1) : sourceFp;
+
+    // Find matching target field by relative path
+    var allTargetFields = targetItemEl.querySelectorAll('[data-field-path]');
+    var ownedTargetFields = Array.from(allTargetFields).filter(function(el) {
+      return fhpfOwningListItem(el) === targetItemEl;
+    });
+
+    var targetInput = null;
+    for (var i = 0; i < ownedTargetFields.length; i++) {
+      var tgtFp = ownedTargetFields[i].getAttribute('data-field-path');
+      var tgtLastBracket = tgtFp.lastIndexOf(']');
+      var tgtRelativePath = (tgtLastBracket >= 0) ? tgtFp.substring(tgtLastBracket + 1) : tgtFp;
+
+      if (tgtRelativePath === relativePath) {
+        // Verify it's not from source form
+        var candidateName = null;
+        if (ownedTargetFields[i].tagName === 'UK-SELECT') {
+          var nativeSelect = ownedTargetFields[i].querySelector('select');
+          candidateName = nativeSelect ? nativeSelect.name : null;
+        } else if (ownedTargetFields[i].dataset.pillField === 'true') {
+          candidateName = ownedTargetFields[i].id;
+        } else {
+          candidateName = ownedTargetFields[i].name;
+        }
+
+        if (candidateName && !candidateName.startsWith(sourcePrefix)) {
+          targetInput = ownedTargetFields[i];
+          break;
+        }
+      }
+    }
+
+    if (!targetInput) return;
+
+    // Check if this is a pill field
+    if (sourceInput.dataset.pillField === 'true' && targetInput.dataset.pillField === 'true') {
+      copyPillContainer(sourceInput, targetInput, false);
+      return;
+    }
+
+    // Copy the value using existing logic
+    var tag = sourceInput.tagName.toUpperCase();
+    var type = (sourceInput.type || '').toLowerCase();
+
+    if (type === 'checkbox') {
+      targetInput.checked = sourceInput.checked;
+    } else if (tag === 'SELECT') {
+      targetInput.value = sourceInput.value;
+      targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+    } else if (tag === 'UK-SELECT') {
+      var srcSelect = sourceInput.querySelector('select');
+      var tgtSelect = targetInput.querySelector('select');
+      if (srcSelect && tgtSelect) {
+        var srcVal = srcSelect.value;
+        for (var k = 0; k < tgtSelect.options.length; k++) {
+          tgtSelect.options[k].removeAttribute('selected');
+          tgtSelect.options[k].selected = false;
+        }
+        for (var k = 0; k < tgtSelect.options.length; k++) {
+          if (tgtSelect.options[k].value === srcVal) {
+            tgtSelect.options[k].setAttribute('selected', 'selected');
+            tgtSelect.options[k].selected = true;
+            tgtSelect.selectedIndex = k;
+            tgtSelect.value = srcVal;
+            break;
+          }
+        }
+        var srcBtn = sourceInput.querySelector('button');
+        var tgtBtn = targetInput.querySelector('button');
+        if (srcBtn && tgtBtn) {
+          tgtBtn.innerHTML = srcBtn.innerHTML;
+        }
+        tgtSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    } else if (tag === 'TEXTAREA') {
+      var valueToSet = sourceInput.value;
+      targetInput.value = '';
+      targetInput.textContent = '';
+      targetInput.innerHTML = '';
+      targetInput.value = valueToSet;
+      targetInput.textContent = valueToSet;
+      targetInput.innerHTML = valueToSet;
+      targetInput.setAttribute('value', valueToSet);
+      targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+      targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+      try {
+        targetInput.focus();
+        targetInput.blur();
+      } catch (e) {
+        // Ignore
+      }
+    } else {
+      targetInput.value = sourceInput.value;
+      targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+      targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  });
+}
+
+function fhpfPairNestedContainersByKey(sourceItemEl, targetItemEl) {
+  // Pair immediate nested containers between source and target by their normalized key
+  // Returns array of { key, sourceContainer, targetContainer }
+  var pairs = [];
+
+  var sourceContainers = fhpfFindImmediateNestedListContainers(sourceItemEl);
+  var targetContainers = fhpfFindImmediateNestedListContainers(targetItemEl);
+
+  // Build target map by key
+  var targetByKey = {};
+  targetContainers.forEach(function(tgt) {
+    var key = fhpfListKeyForContainer(tgt);
+    if (key) {
+      targetByKey[key] = tgt;
+    }
+  });
+
+  // Match source containers
+  sourceContainers.forEach(function(srcContainer) {
+    var key = fhpfListKeyForContainer(srcContainer);
+    if (!key) return;
+
+    var tgtContainer = targetByKey[key];
+    if (tgtContainer) {
+      pairs.push({
+        key: key,
+        sourceContainer: srcContainer,
+        targetContainer: tgtContainer
+      });
+    }
+  });
+
+  return pairs;
+}
+
+function fhpfCopyItemTree(sourceItemEl, targetItemEl, ctx, done) {
+  // Deep module: copies an item and all nested lists recursively by DOM position
+  // This is the main recursive driver for deep copying
+  //
+  // Flow:
+  // 1. Align immediate nested lists (add missing items)
+  // 2. Copy owned fields on this item
+  // 3. For each nested list container pair, recurse into child items
+
+  // Step 1: Compute and execute alignments for immediate nested lists
+  var alignments = fhpfComputeNestedAlignments(sourceItemEl, targetItemEl, ctx);
+
+  fhpfAlignContainers(alignments, ctx, function() {
+    // Step 2: Copy fields owned directly by this item
+    fhpfCopyOwnedFields(sourceItemEl, targetItemEl, ctx);
+
+    // Step 3: Recurse into nested list items
+    var pairs = fhpfPairNestedContainersByKey(sourceItemEl, targetItemEl);
+
+    if (pairs.length === 0) {
+      done();
+      return;
+    }
+
+    // Process pairs sequentially to avoid HTMX burst storms
+    var pairIndex = 0;
+
+    function processNextPair() {
+      if (pairIndex >= pairs.length) {
+        done();
+        return;
+      }
+
+      var pair = pairs[pairIndex];
+      var srcLis = pair.sourceContainer.querySelectorAll(':scope > li');
+      var tgtLis = pair.targetContainer.querySelectorAll(':scope > li');
+      var itemCount = Math.min(srcLis.length, tgtLis.length);
+
+      // Process items within this pair sequentially
+      var itemIdx = 0;
+
+      function processNextItem() {
+        if (itemIdx >= itemCount) {
+          pairIndex++;
+          processNextPair();
+          return;
+        }
+
+        fhpfCopyItemTree(srcLis[itemIdx], tgtLis[itemIdx], ctx, function() {
+          itemIdx++;
+          processNextItem();
+        });
+      }
+
+      processNextItem();
+    }
+
+    processNextPair();
+  });
+}
+
 function fhpfFormNameFromPrefix(prefix) {
   if (!prefix) return null;
   return prefix.replace(/_$/, '');
@@ -270,33 +771,57 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget, trigger
     }
 
     // Determine copy behavior based on path structure:
-    // 1. Full list item (e.g., "reviews[0]") -> add new item to target list
+    // 1. Full list item (e.g., "reviews[0]" or "sections[0].paragraphs[1]") -> add new item to target list
     // 2. Subfield of list item (e.g., "reviews[0].rating") -> update existing subfield
     // 3. Regular field (e.g., "name" or "reviews") -> standard copy
+    //
+    // IMPORTANT: For nested lists like "sections[0].paragraphs[1]":
+    // - isFullListItem = true (ends with [1])
+    // - isSubfield = true (has [0]. in middle)
+    // We must check isFullListItem FIRST because nested list items should be treated as CASE 1
     const isFullListItem = isListItemPath(pathPrefix);
     const isSubfield = isListSubfieldPath(pathPrefix);
+
+    // Use innermost functions for nested list support
+    // e.g., "sections[0].paragraphs[1]" -> listFieldPath="sections[0].paragraphs", listIndex=1
     let listFieldPath = null;
     let listIndex = null;
 
     if (isFullListItem || isSubfield) {
-      listFieldPath = extractListFieldPath(pathPrefix);
-      listIndex = extractListIndex(pathPrefix);
+      listFieldPath = extractInnermostListFieldPath(pathPrefix);
+      listIndex = extractInnermostListIndex(pathPrefix);
     }
 
     // CASE 2: Subfield copy - update existing item's subfield (NOT create new item)
-    // This is the fix for the bug where copying reviews[0].rating created a new item
-    if (isSubfield) {
+    // Only applies when it's a subfield AND NOT a full list item
+    // (nested list items like sections[0].paragraphs[1] have both flags true, but should be CASE 1)
+    //
+    // IMPORTANT: Also skip CASE 2 if pathPrefix itself is a nested list field (e.g., "sections[0].paragraphs")
+    // Those should be handled by CASE 3 (full list copy), not as a subfield.
+    // We detect this by checking if pathPrefix has a corresponding items_container.
+    let isNestedListField = false;
+    if (isSubfield && !isFullListItem) {
+      const pathContainerIdPart = pathToContainerIdPart(pathPrefix);
+      const pathContainerId = sourcePrefix.replace(/_$/, '') + '_' + pathContainerIdPart + '_items_container';
+      if (resolveById(pathContainerId)) {
+        isNestedListField = true;  // pathPrefix is a list field, skip CASE 2
+      }
+    }
+
+    if (isSubfield && !isFullListItem && !isNestedListField) {
       // For subfield copies, we need to find the corresponding target field by position
       // and perform a direct value copy (standard copy behavior)
-      // Extract the relative path (e.g., ".rating" from "reviews[0].rating")
-      // Find the closing bracket after listFieldPath and extract what comes after
-      const bracketStart = pathPrefix.indexOf('[', listFieldPath.length);
-      const bracketEnd = pathPrefix.indexOf(']', bracketStart);
-      const relativePath = (bracketEnd >= 0) ? pathPrefix.substring(bracketEnd + 1) : '';
+      // Extract the relative path (e.g., ".text" from "sections[0].paragraphs[1].text")
+      // We find the LAST closing bracket and extract what comes after
+      const lastBracketEnd = pathPrefix.lastIndexOf(']');
+      const relativePath = (lastBracketEnd >= 0) ? pathPrefix.substring(lastBracketEnd + 1) : '';
 
-      // Find source and target list containers to map by position
-      const sourceContainerId = sourcePrefix.replace(/_$/, '') + '_' + listFieldPath + '_items_container';
-      const targetContainerId = targetPrefix.replace(/_$/, '') + '_' + listFieldPath + '_items_container';
+      // Find source and target list containers using the innermost list path
+      // e.g., for "sections[0].paragraphs[1].text", listFieldPath="sections[0].paragraphs"
+      // Container ID: "left_doc_sections_0_paragraphs_items_container"
+      const containerIdPart = pathToContainerIdPart(listFieldPath);
+      const sourceContainerId = sourcePrefix.replace(/_$/, '') + '_' + containerIdPart + '_items_container';
+      const targetContainerId = targetPrefix.replace(/_$/, '') + '_' + containerIdPart + '_items_container';
 
       const sourceListContainer = resolveById(sourceContainerId);
       const targetListContainer = resolveById(targetContainerId);
@@ -334,9 +859,9 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget, trigger
 
           for (let j = 0; j < targetInputs.length; j++) {
             let targetFp = targetInputs[j].getAttribute('data-field-path');
-            const tBracketStart = targetFp.indexOf('[', listFieldPath.length);
-            const tBracketEnd = targetFp.indexOf(']', tBracketStart);
-            const targetRelative = (tBracketEnd >= 0) ? targetFp.substring(tBracketEnd + 1) : '';
+            // Extract relative path from target using last bracket (same as source)
+            const tLastBracketEnd = targetFp.lastIndexOf(']');
+            const targetRelative = (tLastBracketEnd >= 0) ? targetFp.substring(tLastBracketEnd + 1) : '';
 
             if (targetRelative === relativePath) {
               // Verify it belongs to target form
@@ -460,13 +985,44 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget, trigger
 
     // CASE 1: Full list item copy - add new item to target list
     if (isFullListItem) {
-      // Find target list container
-      const targetContainerId = targetPrefix.replace(/_$/, '') + '_' + listFieldPath + '_items_container';
+      // Find source and target list containers using innermost list path
+      // e.g., for "sections[0].paragraphs[1]", listFieldPath="sections[0].paragraphs"
+      // Container ID: "left_doc_sections_0_paragraphs_items_container"
+      const containerIdPart = pathToContainerIdPart(listFieldPath);
+      const sourceContainerId = sourcePrefix.replace(/_$/, '') + '_' + containerIdPart + '_items_container';
+      const targetContainerId = targetPrefix.replace(/_$/, '') + '_' + containerIdPart + '_items_container';
+      const sourceContainer = resolveById(sourceContainerId);
       const targetContainer = resolveById(targetContainerId);
 
+      // Find the source item by index
+      let sourceItemEl = null;
+      if (sourceContainer) {
+        const sourceItems = sourceContainer.querySelectorAll(':scope > li');
+        if (typeof listIndex === 'number' && listIndex < sourceItems.length) {
+          sourceItemEl = sourceItems[listIndex];
+        } else if (typeof listIndex === 'string' && listIndex.startsWith('new_')) {
+          // For placeholder indices, find by searching for an element with this path
+          for (let i = 0; i < sourceItems.length; i++) {
+            const inputs = sourceItems[i].querySelectorAll('[data-field-path^="' + pathPrefix + '"]');
+            if (inputs.length > 0) {
+              sourceItemEl = sourceItems[i];
+              break;
+            }
+          }
+        }
+      }
+
       if (targetContainer) {
-        // Find the "Add Item" button for the target list
-        const targetAddButton = targetContainer.parentElement.querySelector('button[hx-post*="/list/add/"]');
+        // Find the "Add Item" button for the target list by matching exact path
+        // We must use endsWith to avoid matching nested list buttons like
+        // /list/add/sections/0/mentioned_clause_numbers when we want /list/add/sections/0/paragraphs
+        // URL format: "sections[0].paragraphs" -> "sections/0/paragraphs"
+        const urlPathPart = pathToUrlPart(listFieldPath);
+        const addButtons = targetContainer.parentElement.querySelectorAll('button[hx-post*="/list/add/"]');
+        const expectedSuffix = '/list/add/' + urlPathPart;
+        const targetAddButton = Array.from(addButtons).find(btn =>
+          (btn.getAttribute('hx-post') || '').endsWith(expectedSuffix)
+        );
 
         if (targetAddButton) {
           // Capture the target list items BEFORE adding the new one
@@ -591,7 +1147,9 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget, trigger
 
                 for (let i = 0; i < allInputsInContainer.length; i++) {
                   const inputName = allInputsInContainer[i].name || allInputsInContainer[i].id;
-                  if (inputName && inputName.startsWith(targetPrefix.replace(/_$/, '') + '_' + listFieldPath + '_new_')) {
+                  // Input names use underscore format, so use containerIdPart (not listFieldPath)
+                  // e.g., "left_doc_sections_0_paragraphs_new_123_text"
+                  if (inputName && inputName.startsWith(targetPrefix.replace(/_$/, '') + '_' + containerIdPart + '_new_')) {
                     // Extract timestamp from name
                     const match = inputName.match(/new_(\d+)/);
                     if (match) {
@@ -614,9 +1172,10 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget, trigger
                 // Extract placeholder from name
                 // Pattern: "prefix_listfield_PLACEHOLDER" or "prefix_listfield_PLACEHOLDER_fieldname"
                 // For simple list items: "annotated_truth_key_features_new_123"
-                // For BaseModel list items: "annotated_truth_reviews_new_123_rating"
+                // For BaseModel list items: "annotated_truth_sections_0_paragraphs_new_123_text"
                 // We want just the placeholder part (new_123)
-                const searchStr = '_' + listFieldPath + '_';
+                // Use containerIdPart (underscore format) since we're matching against name attribute
+                const searchStr = '_' + containerIdPart + '_';
                 const idx = firstInputName.indexOf(searchStr);
                 let actualPlaceholderIdx = null;
 
@@ -647,17 +1206,30 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget, trigger
                 // Use the actual placeholder index from the name attribute
                 const newPathPrefix = listFieldPath + '[' + actualPlaceholderIdx + ']';
 
-                // Now perform the standard copy operation with the new path
-                performStandardCopy(pathPrefix, newPathPrefix, sourcePrefix, copyTarget, accordionStates, currentPrefix, leftPrefix, rightPrefix);
+                // Use fhpfCopyItemTree for deep recursive copying (handles nested lists)
+                if (sourceItemEl && newItem) {
+                  const ctx = {
+                    sourcePrefix: sourcePrefix,
+                    targetPrefix: targetPrefix,
+                    htmxValues: htmxValues
+                  };
 
-                // Wait for copy to complete, then open accordion and highlight
-                // Note: We skip automatic refresh because the temporary item ID doesn't persist after refresh
-                // User can manually click the refresh button to update counts/summaries if needed
-                const waitForCopyComplete = function() {
-                  if (!window.__fhpfCopyInProgress) {
-                    // Copy operation is complete, now open and highlight the new item
+                  fhpfCopyItemTree(sourceItemEl, newItem, ctx, function() {
+                    // Deep copy complete, restore accordion states
+                    accordionStates.forEach(function(state) {
+                      if (state.isOpen && !state.element.classList.contains('uk-open')) {
+                        state.element.classList.add('uk-open');
+                        const content = state.element.querySelector('.uk-accordion-content');
+                        if (content) {
+                          content.hidden = false;
+                          content.style.height = 'auto';
+                        }
+                      }
+                    });
+                    window.__fhpfCopyInProgress = false;
+
+                    // Open accordion and highlight the new item
                     setTimeout(function() {
-                      // Re-find the item (it might have been affected by accordion restoration)
                       const copiedItem = document.getElementById(newItem.id);
 
                       if (copiedItem && window.UIkit) {
@@ -684,18 +1256,15 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget, trigger
                         // Apply visual highlight
                         setTimeout(function() {
                           copiedItem.style.transition = 'all 0.3s ease-in-out';
-                          copiedItem.style.backgroundColor = '#dbeafe'; // Light blue background
-                          copiedItem.style.borderLeft = '4px solid #3b82f6'; // Blue left border
+                          copiedItem.style.backgroundColor = '#dbeafe';
+                          copiedItem.style.borderLeft = '4px solid #3b82f6';
                           copiedItem.style.borderRadius = '4px';
 
-                          // Scroll into view
                           copiedItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
-                          // Fade out the highlight after 3 seconds
                           setTimeout(function() {
                             copiedItem.style.backgroundColor = '';
                             copiedItem.style.borderLeft = '';
-                            // Remove inline styles after transition
                             setTimeout(function() {
                               copiedItem.style.transition = '';
                               copiedItem.style.borderRadius = '';
@@ -704,14 +1273,12 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget, trigger
                         }, 100);
                       }
                     }, 100);
-                  } else {
-                    // Still in progress, check again in 50ms
-                    setTimeout(waitForCopyComplete, 50);
-                  }
-                };
-
-                // Start checking after a small delay
-                setTimeout(waitForCopyComplete, 100);
+                  });
+                } else {
+                  // Fallback: use performStandardCopy if source item not found
+                  console.warn('CASE 1: sourceItemEl not found, falling back to performStandardCopy');
+                  performStandardCopy(pathPrefix, newPathPrefix, sourcePrefix, copyTarget, accordionStates, currentPrefix, leftPrefix, rightPrefix);
+                }
 
               } else if (attempts < maxAttempts) {
                 // Not ready yet, try again with exponential backoff
@@ -751,7 +1318,8 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget, trigger
     (function() {
       // Detect if this is a "full list copy" of a list field:
       // we treat it as a list if both sides have containers like "<prefix>_<path>_items_container"
-      const baseIdPart = pathPrefix; // e.g. "addresses" or "key_features"
+      // For nested lists like "sections[0].paragraphs", convert to container ID format
+      const baseIdPart = pathToContainerIdPart(pathPrefix); // e.g. "addresses" or "sections_0_paragraphs"
       const sourceContainerId = sourcePrefix.replace(/_$/, '') + '_' + baseIdPart + '_items_container';
       const targetContainerId = targetPrefix.replace(/_$/, '') + '_' + baseIdPart + '_items_container';
 
@@ -765,7 +1333,14 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget, trigger
 
         // If source has more items, add missing ones BEFORE copying values (case 3)
         if (sourceCount > targetCount) {
-          const addBtn = targetListContainer.parentElement.querySelector('button[hx-post*="/list/add/"]');
+          // Find the correct add button by matching exact path suffix
+          // (same fix as CASE 1 - avoid matching nested list buttons)
+          const urlPathPart = pathToUrlPart(pathPrefix);
+          const addButtons = targetListContainer.parentElement.querySelectorAll('button[hx-post*="/list/add/"]');
+          const expectedSuffix = '/list/add/' + urlPathPart;
+          const addBtn = Array.from(addButtons).find(btn =>
+            (btn.getAttribute('hx-post') || '').endsWith(expectedSuffix)
+          );
           if (addBtn) {
             const addUrl = addBtn.getAttribute('hx-post');
             const toAdd = sourceCount - targetCount;
@@ -839,20 +1414,165 @@ window.fhpfPerformCopy = function(pathPrefix, currentPrefix, copyTarget, trigger
   }
 };
 
+// Align nested list counts within a pair of items, then copy values
+// This handles cases like paragraphs with tags: List[str] where the tag counts differ
+function alignNestedListsAndCopy(sourceItem, targetItem, sourcePrefix, targetPrefix, listFieldPath, itemIndex, htmxValues, callback) {
+  // Find all nested list containers within the source item
+  const sourceNestedContainers = sourceItem.querySelectorAll('[id$="_items_container"]');
+  const nestedLists = [];
+
+  sourceNestedContainers.forEach(function(srcContainer) {
+    // Extract the nested list path from the container ID
+    // e.g., "left_doc_sections_0_paragraphs_0_tags_items_container" -> need to find corresponding target
+    const srcId = srcContainer.id;
+    // Replace source prefix with target prefix to get target container ID
+    const srcPrefixNoUnderscore = sourcePrefix.replace(/_$/, '');
+    const tgtPrefixNoUnderscore = targetPrefix.replace(/_$/, '');
+    const tgtId = srcId.replace(srcPrefixNoUnderscore, tgtPrefixNoUnderscore);
+
+    const tgtContainer = document.getElementById(tgtId);
+    if (tgtContainer) {
+      const srcCount = srcContainer.querySelectorAll(':scope > li').length;
+      const tgtCount = tgtContainer.querySelectorAll(':scope > li').length;
+
+      if (srcCount > tgtCount) {
+        // Find the add button for this nested list
+        const addBtn = fhpfGetAddButtonForContainer(tgtContainer);
+        if (addBtn) {
+          nestedLists.push({
+            sourceContainer: srcContainer,
+            targetContainer: tgtContainer,
+            targetContainerId: tgtId,
+            toAdd: srcCount - tgtCount,
+            addUrl: addBtn.getAttribute('hx-post')
+          });
+        }
+      }
+    }
+  });
+
+  if (nestedLists.length === 0) {
+    // No nested lists need alignment, proceed with callback
+    callback();
+    return;
+  }
+
+  // Add items to all nested lists that need alignment
+  let totalToAdd = 0;
+  nestedLists.forEach(function(nl) { totalToAdd += nl.toAdd; });
+
+  nestedLists.forEach(function(nl) {
+    for (let i = 0; i < nl.toAdd; i++) {
+      htmx.ajax('POST', nl.addUrl, {
+        target: '#' + nl.targetContainerId,
+        swap: 'beforeend',
+        values: htmxValues
+      });
+    }
+  });
+
+  // Wait for all additions to complete
+  let settled = false;
+  const onSettle = function onSettleOnce() {
+    settled = true;
+    document.body.removeEventListener('htmx:afterSettle', onSettleOnce);
+  };
+  document.body.addEventListener('htmx:afterSettle', onSettle);
+
+  let attempts = 0;
+  const maxAttempts = 60;
+
+  const waitForAlignment = function() {
+    attempts++;
+
+    // Check if all nested lists are aligned
+    let allAligned = true;
+    nestedLists.forEach(function(nl) {
+      const currentCount = nl.targetContainer.querySelectorAll(':scope > li').length;
+      const expectedCount = nl.sourceContainer.querySelectorAll(':scope > li').length;
+      if (currentCount < expectedCount) {
+        allAligned = false;
+      }
+    });
+
+    if (settled && allAligned) {
+      callback();
+      return;
+    }
+
+    if (attempts >= maxAttempts) {
+      console.warn('Timeout aligning nested lists, proceeding anyway');
+      callback();
+      return;
+    }
+
+    setTimeout(waitForAlignment, 50);
+  };
+
+  setTimeout(waitForAlignment, 50);
+}
+
 // Copy list items by DOM position (handles different indices in source/target)
+// Now uses fhpfCopyItemTree for deep recursive copying
 function performListCopyByPosition(sourceListContainer, targetListContainer, sourcePrefix, copyTarget, accordionStates, listFieldPath, leftPrefix, rightPrefix) {
   try {
     const sourceItems = sourceListContainer.querySelectorAll(':scope > li');
     const targetItems = targetListContainer.querySelectorAll(':scope > li');
     const targetPrefix = (copyTarget === 'left') ? leftPrefix : rightPrefix;
+    const targetFormName = fhpfFormNameFromPrefix(targetPrefix);
+    const htmxValues = targetFormName ? { fhpf_form_name: targetFormName } : {};
 
-    // Copy each source item to corresponding target item by position
-    for (let i = 0; i < sourceItems.length && i < targetItems.length; i++) {
-      const sourceItem = sourceItems[i];
-      const targetItem = targetItems[i];
+    // Create context for the deep copy module
+    const ctx = {
+      sourcePrefix: sourcePrefix,
+      targetPrefix: targetPrefix,
+      htmxValues: htmxValues
+    };
 
-      // Find all inputs within this source item
-      const sourceInputs = sourceItem.querySelectorAll('[data-field-path]');
+    // Process items sequentially using the deep copy module
+    let itemIndex = 0;
+
+    function processNextItem() {
+      if (itemIndex >= sourceItems.length || itemIndex >= targetItems.length) {
+        // All items processed, restore accordion states
+        setTimeout(function() {
+          accordionStates.forEach(function(state) {
+            if (state.isOpen && !state.element.classList.contains('uk-open')) {
+              state.element.classList.add('uk-open');
+              const content = state.element.querySelector('.uk-accordion-content');
+              if (content) {
+                content.hidden = false;
+                content.style.height = 'auto';
+              }
+            }
+          });
+          window.__fhpfCopyInProgress = false;
+        }, 100);
+        return;
+      }
+
+      const sourceItem = sourceItems[itemIndex];
+      const targetItem = targetItems[itemIndex];
+
+      // Use fhpfCopyItemTree for deep recursive copying
+      fhpfCopyItemTree(sourceItem, targetItem, ctx, function() {
+        itemIndex++;
+        processNextItem();
+      });
+    }
+
+    processNextItem();
+
+  } catch (e) {
+    window.__fhpfCopyInProgress = false;
+    throw e;
+  }
+}
+
+// Copy values between a pair of list items
+function copyItemValues(sourceItem, targetItem, sourcePrefix, targetPrefix, listFieldPath) {
+    // Find all inputs within this source item
+    const sourceInputs = sourceItem.querySelectorAll('[data-field-path]');
 
       Array.from(sourceInputs).forEach(function(sourceInput) {
         const sourceFp = sourceInput.getAttribute('data-field-path');
@@ -972,54 +1692,8 @@ function performListCopyByPosition(sourceListContainer, targetListContainer, sou
           targetInput.dispatchEvent(new Event('change', { bubbles: true }));
         }
       });
-    }
-
-    // Remove excess items from target if source has fewer items
-    for (let i = targetItems.length - 1; i >= sourceItems.length; i--) {
-      targetItems[i].remove();
-    }
-
-    // Restore accordion states
-    setTimeout(function() {
-      accordionStates.forEach(function(state) {
-        if (state.isOpen && !state.element.classList.contains('uk-open')) {
-          const accordionParent = state.element.parentElement;
-          if (accordionParent && window.UIkit) {
-            const accordionComponent = UIkit.accordion(accordionParent);
-            if (accordionComponent) {
-              const itemIndex = Array.from(accordionParent.children).indexOf(state.element);
-              accordionComponent.toggle(itemIndex, true);
-            } else {
-              state.element.classList.add('uk-open');
-              const content = state.element.querySelector('.uk-accordion-content');
-              if (content) {
-                content.hidden = false;
-                content.style.height = 'auto';
-              }
-            }
-          }
-        }
-      });
-
-      window.__fhpfCopyInProgress = false;
-
-      // Trigger a refresh on the target list field to update counts and titles
-      // Find the refresh button for the target list field
-      const targetListFieldWrapper = targetListContainer.closest('[data-path]');
-      if (targetListFieldWrapper) {
-        const refreshButton = targetListFieldWrapper.querySelector('button[hx-post*="/refresh"]');
-        if (refreshButton && window.htmx) {
-          // Trigger the HTMX refresh
-          htmx.trigger(refreshButton, 'click');
-        }
-      }
-    }, 150);
-
-  } catch (e) {
-    window.__fhpfCopyInProgress = false;
-    throw e;
-  }
 }
+
 
 // Extracted standard copy logic to allow reuse
 function performStandardCopy(sourcePathPrefix, targetPathPrefix, sourcePrefix, copyTarget, accordionStates, currentPrefix, leftPrefix, rightPrefix) {
