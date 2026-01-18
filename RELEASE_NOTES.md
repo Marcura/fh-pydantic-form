@@ -1,5 +1,20 @@
 # Release Notes
 
+## Version 0.3.16 (2026-01-18)
+
+### 🔧 Bug Fixes
+
+#### ComparisonForm Recursive Copy
+- **FIXED**: Nested list copy now resolves the correct add button by exact list path (avoids picking nested lists)
+- **FIXED**: Deep copy logic matches nested containers by list path rather than DOM order
+- **FIXED**: List containers now include `data-list-path` for deterministic nested list pairing
+
+### 🧪 Testing
+- **IMPROVED**: Recursive copy tests now assert `data-list-path` contracts and add‑button matching for nested lists
+- **IMPROVED**: Consolidated nested list tests to reduce duplication and focus simple list tests on core behavior
+
+---
+
 ## Version 0.3.15 (2026-01-16)
 
 ### 🔧 Bug Fixes
