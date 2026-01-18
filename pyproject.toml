@@ -50,7 +50,8 @@ markers = [
     "enum: tests specifically for enum field functionality",
     "unit: fast unit tests with minimal dependencies",
     "e2e: end to end tests, somewhat slow",
-    "comparison: comparison form tests"
+    "comparison: comparison form tests",
+    "playwright: browser-driven tests that require Playwright"
 ]
 
 [build-system]
@@ -80,6 +81,7 @@ exclude = [
 dev = [
     "prek>=0.2.28",
     "pytest>=8.3.5",
+    "pytest-playwright>=0.6.2",
     "ruff>=0.11.6",
     "httpx>=0.27.0",
     "hypothesis>=6.135.4",
@@ -88,6 +90,7 @@ dev = [
     "beautifulsoup4>=4.13.4",
     "pytest-benchmark>=5.1.0",
     "ty>=0.0.12",
+    "uvicorn>=0.30.0",
 ]
 
 [tool.ty.environment]
