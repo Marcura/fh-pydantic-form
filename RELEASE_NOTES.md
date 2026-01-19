@@ -1,6 +1,6 @@
 # Release Notes
 
-## Version 0.3.17 (2026-01-18)
+## Version 0.3.16 (2026-01-19)
 
 ### ⚠️ Breaking Changes
 
