@@ -914,6 +914,47 @@ comparison_form.register_routes(app)
 - **Intelligent List Copying**: Copy lists between forms with automatic length adjustment
 - **Multiple Comparisons per Page**: Copy + accordion sync is scoped to each comparison grid
 
+### Dynamic ComparisonForms (template routes)
+
+If you create many ComparisonForms dynamically (e.g., one per table row) and **can't** register routes for every unique form, you can register routes once on a "template" ComparisonForm and have dynamic instances route refresh/reset actions through it via `template_name`.
+
+```python
+# Register routes once at startup via a template ComparisonForm
+template_left = PydanticForm("template_left", Doc)
+template_right = PydanticForm("template_right", Doc)
+template_comp = ComparisonForm(
+    name="compare_template",  # Routes registered under this name
+    left_form=template_left,
+    right_form=template_right,
+    # template_name defaults to "compare_template"
+)
+template_comp.register_routes(app)
+
+# Dynamic ComparisonForms per row/request - NO register_routes() needed
+for row_id in row_ids:
+    left = PydanticForm(
+        f"left_{row_id}", Doc,
+        template_name="template_left",  # Reuse PydanticForm routes
+    )
+    right = PydanticForm(
+        f"right_{row_id}", Doc,
+        template_name="template_right",
+    )
+    comparison = ComparisonForm(
+        name=f"compare_{row_id}",
+        left_form=left,
+        right_form=right,
+        template_name="compare_template",  # Reference the template's name
+    )
+    # Render comparison.render_inputs() - routes are shared via template_name
+```
+
+How it works:
+- Refresh URLs are generated under `/compare/<template_name>/...`
+- The actual form instance name is sent as `fhpf_form_name`, so the template routes can render the correct prefixes
+- Same pattern as `PydanticForm.template_name` for list manipulation routes
+- For dynamic instances, reset buttons use the client-side snapshot reset so each row resets to its own initial values
+
 ### Copying Between Forms
 
 The ComparisonForm provides granular copy functionality at multiple levels. When you enable copy buttons (via `copy_left=True` or `copy_right=True`), each field, nested model, and list item gets its own copy button for maximum flexibility:
@@ -1141,6 +1182,9 @@ form_renderer = PydanticForm(
 | `right_form` | `PydanticForm` | Required | Form to display on the right side |
 | `left_label` | `str` | `"Left"` | Label for the left form |
 | `right_label` | `str` | `"Right"` | Label for the right form |
+| `copy_left` | `bool` | `False` | Show copy buttons on right form to copy TO left |
+| `copy_right` | `bool` | `False` | Show copy buttons on left form to copy TO right |
+| `template_name` | `Optional[str]` | `None` | Route name to use for refresh/reset actions (useful for dynamic forms with shared template routes) |
 
 ### PydanticForm Methods
 

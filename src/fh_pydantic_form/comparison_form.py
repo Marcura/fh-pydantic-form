@@ -11,9 +11,11 @@ import re
 from copy import deepcopy
 from typing import (
     Any,
+    cast,
     Dict,
     Generic,
     List,
+    Literal,
     Optional,
     Type,
     TypeVar,
@@ -44,6 +46,7 @@ logger = logging.getLogger(__name__)
 
 # TypeVar for generic model typing
 ModelType = TypeVar("ModelType", bound=BaseModel)
+Side = Literal["left", "right"]
 
 
 def comparison_form_js():
@@ -72,6 +75,7 @@ class ComparisonForm(Generic[ModelType]):
         right_label: str = "Generated",
         copy_left: bool = False,
         copy_right: bool = False,
+        template_name: Optional[str] = None,
     ):
         """
         Initialize the comparison form
@@ -84,6 +88,10 @@ class ComparisonForm(Generic[ModelType]):
             right_label: Label for right column
             copy_left: If True, show copy buttons in right column to copy to left
             copy_right: If True, show copy buttons in left column to copy to right
+            template_name: Optional template name for routing refresh/reset actions.
+                If provided, routes will be registered and URLs generated using this name
+                instead of `name`. This allows multiple ComparisonForm instances to share
+                the same registered routes (same pattern as PydanticForm.template_name).
 
         Raises:
             ValueError: If the two forms are not based on the same model class
@@ -96,6 +104,7 @@ class ComparisonForm(Generic[ModelType]):
             )
 
         self.name = name
+        self.template_name = template_name or name
         self.left_form = left_form
         self.right_form = right_form
         self.model_class = left_form.model_class  # Convenience reference
@@ -215,6 +224,7 @@ class ComparisonForm(Generic[ModelType]):
         header_label: str,
         start_order: int,
         wrapper_id: str,
+        side: Side,
     ) -> FT:
         """
         Render a single column with CSS order values for grid alignment
@@ -267,8 +277,8 @@ class ComparisonForm(Generic[ModelType]):
 
                 renderer_cls = StringFieldRenderer
 
-            # Determine comparison-specific refresh endpoint
-            comparison_refresh = f"/compare/{self.name}/{'left' if form is self.left_form else 'right'}/refresh"
+            # Determine comparison-specific refresh endpoint (use template_name for shared routes)
+            comparison_refresh = f"/compare/{self.template_name}/{side}/refresh"
 
             # Get label color for this field if specified
             label_color = (
@@ -279,7 +289,7 @@ class ComparisonForm(Generic[ModelType]):
 
             # Determine comparison copy settings
             # Show copy buttons on the SOURCE form (the form you're copying FROM)
-            is_left_column = form is self.left_form
+            is_left_column = side == "left"
 
             # If copy_left is enabled, show button on RIGHT form to copy TO left
             # If copy_right is enabled, show button on LEFT form to copy TO right
@@ -352,6 +362,7 @@ class ComparisonForm(Generic[ModelType]):
             header_label=self.left_label,
             start_order=0,
             wrapper_id=f"{self.left_form.name}-inputs-wrapper",
+            side="left",
         )
 
         # Render right column with wrapper
@@ -360,6 +371,7 @@ class ComparisonForm(Generic[ModelType]):
             header_label=self.right_label,
             start_order=1,
             wrapper_id=f"{self.right_form.name}-inputs-wrapper",
+            side="right",
         )
 
         # Create the grid container with both wrappers
@@ -403,23 +415,36 @@ window.__fhpfRightPrefix = {json.dumps(self.right_form.base_prefix)};
         # Register comparison-specific reset/refresh routes
         def create_reset_handler(
             form: PydanticForm[ModelType],
-            side: str,
+            side: Side,
             label: str,
         ):
             """Factory function to create reset handler with proper closure"""
 
             async def handler(req):
                 """Reset one side of the comparison form"""
+                # Check for dynamic form name override
+                form_data = await req.form()
+                form_name_override = form_data.get("fhpf_form_name")
+                if not form_name_override:
+                    form_name_override = req.query_params.get("fhpf_form_name")
+
+                # Use cloned form if name differs (dynamic form scenario)
+                if form_name_override and form_name_override != form.name:
+                    effective_form = form._clone_with_name(form_name_override)
+                else:
+                    effective_form = form
+
                 # Reset the form state
-                await form.handle_reset_request()
+                await effective_form.handle_reset_request()
 
                 # Render the entire column with proper ordering
                 start_order = 0 if side == "left" else 1
                 wrapper = self._render_column(
-                    form=form,
+                    form=effective_form,
                     header_label=label,
                     start_order=start_order,
-                    wrapper_id=f"{form.name}-inputs-wrapper",
+                    wrapper_id=f"{effective_form.name}-inputs-wrapper",
+                    side=side,
                 )
                 return wrapper
 
@@ -427,33 +452,37 @@ window.__fhpfRightPrefix = {json.dumps(self.right_form.base_prefix)};
 
         def create_refresh_handler(
             form: PydanticForm[ModelType],
-            side: str,
+            side: Side,
             label: str,
         ):
             """Factory function to create refresh handler with proper closure"""
 
             async def handler(req):
                 """Refresh one side of the comparison form"""
-                # Refresh the form state and capture any warnings
-                refresh_result = await form.handle_refresh_request(req)
+                # Check for dynamic form name override
+                form_data = await req.form()
+                form_name_override = form_data.get("fhpf_form_name")
+                if not form_name_override:
+                    form_name_override = req.query_params.get("fhpf_form_name")
+
+                # Use cloned form if name differs (dynamic form scenario)
+                if form_name_override and form_name_override != form.name:
+                    effective_form = form._clone_with_name(form_name_override)
+                    effective_form._handle_refresh_with_form_data(dict(form_data))
+                else:
+                    effective_form = form
+                    effective_form._handle_refresh_with_form_data(dict(form_data))
 
                 # Render the entire column with proper ordering
                 start_order = 0 if side == "left" else 1
                 wrapper = self._render_column(
-                    form=form,
+                    form=effective_form,
                     header_label=label,
                     start_order=start_order,
-                    wrapper_id=f"{form.name}-inputs-wrapper",
+                    wrapper_id=f"{effective_form.name}-inputs-wrapper",
+                    side=side,
                 )
-
-                # If refresh returned a warning, include it in the response
-                if isinstance(refresh_result, tuple) and len(refresh_result) == 2:
-                    alert, _ = refresh_result
-                    # Return both the alert and the wrapper
-                    return fh.Div(alert, wrapper)
-                else:
-                    # No warning, just return the wrapper
-                    return wrapper
+                return wrapper
 
             return handler
 
@@ -461,15 +490,16 @@ window.__fhpfRightPrefix = {json.dumps(self.right_form.base_prefix)};
             ("left", self.left_form, self.left_label),
             ("right", self.right_form, self.right_label),
         ]:
+            side = cast(Side, side)
             assert form is not None
 
-            # Reset route
-            reset_path = f"/compare/{self.name}/{side}/reset"
+            # Reset route (use template_name for shared routes)
+            reset_path = f"/compare/{self.template_name}/{side}/reset"
             reset_handler = create_reset_handler(form, side, label)
             app.route(reset_path, methods=["POST"])(reset_handler)
 
-            # Refresh route
-            refresh_path = f"/compare/{self.name}/{side}/refresh"
+            # Refresh route (use template_name for shared routes)
+            refresh_path = f"/compare/{self.template_name}/{side}/refresh"
             refresh_handler = create_refresh_handler(form, side, label)
             app.route(refresh_path, methods=["POST"])(refresh_handler)
 
@@ -511,15 +541,60 @@ window.__fhpfRightPrefix = {json.dumps(self.right_form.base_prefix)};
         """
         form = self.left_form if side == "left" else self.right_form
 
+        # For shared template routes, server-side reset cannot reliably restore
+        # per-instance initial values. Prefer the client-side snapshot reset,
+        # consistent with PydanticForm.reset_button() for dynamic forms.
+        if action == "reset" and self.template_name != self.name:
+            confirm_message = (
+                "Are you sure you want to reset the form to its initial values? "
+                "Any unsaved changes will be lost."
+            )
+            wrapper_js = json.dumps(f"{form.name}-inputs-wrapper")
+            prefix_js = json.dumps(form.base_prefix)
+            confirm_js = json.dumps(confirm_message)
+            button_attrs = {
+                "type": "button",
+                "onclick": (
+                    "return window.fhpfResetForm ? "
+                    f"window.fhpfResetForm({wrapper_js}, {prefix_js}, {confirm_js}) : false;"
+                ),
+                "uk_tooltip": "Reset the form fields to their original values",
+                "cls": mui.ButtonT.destructive,
+            }
+            button_attrs.update(kwargs)
+            return mui.Button(mui.UkIcon("history"), text, **button_attrs)
+
         # Create prefix-based selector
         prefix_selector = f"form [name^='{form.base_prefix}']"
 
-        # Set default attributes
-        kwargs.setdefault("hx_post", f"/compare/{self.name}/{side}/{action}")
+        # Set default attributes (use template_name for shared routes)
+        kwargs.setdefault("hx_post", f"/compare/{self.template_name}/{side}/{action}")
         kwargs.setdefault("hx_target", f"#{form.name}-inputs-wrapper")
         kwargs.setdefault("hx_swap", "innerHTML")
         kwargs.setdefault("hx_include", prefix_selector)
         kwargs.setdefault("hx_preserve", "scroll")
+
+        # Send form name when routing via templates so the handler can parse the
+        # correct prefix / render the correct wrapper IDs.
+        should_send_form_name = False
+        if self.template_name != self.name:
+            should_send_form_name = True
+        else:
+            form_template_name = getattr(form, "template_name", None)
+            if form_template_name and form_template_name != form.name:
+                should_send_form_name = True
+
+        if should_send_form_name:
+            existing_vals = kwargs.get("hx_vals")
+            if existing_vals:
+                try:
+                    merged = dict(json.loads(existing_vals))
+                except Exception:
+                    merged = {}
+                merged.setdefault("fhpf_form_name", form.name)
+                kwargs["hx_vals"] = json.dumps(merged)
+            else:
+                kwargs["hx_vals"] = json.dumps({"fhpf_form_name": form.name})
 
         # Delegate to the underlying form's button method
         button_method = getattr(form, f"{action}_button")
