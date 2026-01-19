@@ -36,27 +36,49 @@ template.register_routes(app)
 
 ROW_IDS = [1, 2]
 
+# Template ComparisonForm - registers routes ONCE under its name
+template_left = PydanticForm(
+    form_name="compare_template_left",
+    model_class=Doc,
+    initial_values={"clauses": [{"content": "Reference clause"}]},
+)
+template_right = PydanticForm(
+    form_name="compare_template_right",
+    model_class=Doc,
+    initial_values={"clauses": [{"content": "Generated clause"}]},
+)
+template_comparison = ComparisonForm(
+    name="compare_template",  # Routes registered under this name
+    left_form=template_left,
+    right_form=template_right,
+    # template_name defaults to "compare_template"
+    copy_right=True,
+)
+template_comparison.register_routes(app)
+
+# Dynamic ComparisonForms - reuse template routes via template_name
 comparison_forms: list[tuple[int, ComparisonForm[Doc]]] = []
 for row_id in ROW_IDS:
     left_form = PydanticForm(
         form_name=f"compare_left_{row_id}",
         model_class=Doc,
-        initial_values={"clauses": [{"content": "Reference clause"}]},
-        template_name="doc_template",
+        initial_values={"clauses": [{"content": f"Reference clause {row_id}"}]},
+        template_name="compare_template_left",  # Reuse PydanticForm routes
     )
     right_form = PydanticForm(
         form_name=f"compare_right_{row_id}",
         model_class=Doc,
-        initial_values={"clauses": [{"content": "Generated clause"}]},
-        template_name="doc_template",
+        initial_values={"clauses": [{"content": f"Generated clause {row_id}"}]},
+        template_name="compare_template_right",  # Reuse PydanticForm routes
     )
     comparison = ComparisonForm(
         name=f"compare_{row_id}",
         left_form=left_form,
         right_form=right_form,
+        template_name="compare_template",  # Reference the template's name
         copy_right=True,
     )
-    comparison.register_routes(app)
+    # Note: NO register_routes() call - routes are shared via template_name
     comparison_forms.append((row_id, comparison))
 
 

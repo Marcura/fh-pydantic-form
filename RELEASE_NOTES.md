@@ -1,5 +1,27 @@
 # Release Notes
 
+## Version 0.3.17 (2026-01-19)
+
+### 🎉 New Features
+
+#### ComparisonForm Dynamic Routing via `template_name`
+- **NEW**: `ComparisonForm(..., template_name="...")` allows multiple ComparisonForm instances to share the same registered routes
+- **NEW**: Template routes accept `fhpf_form_name` to render refresh actions for a specific dynamic form instance
+- **PATTERN**: Same pattern as `PydanticForm.template_name` - register routes once on a template, reuse for dynamic instances
+
+### 🔧 Improvements
+
+#### ComparisonForm Handler Enhancements
+- **IMPROVED**: Refresh handlers support `fhpf_form_name` for dynamic form prefix handling
+- **IMPROVED**: Buttons include `fhpf_form_name` when routing through shared ComparisonForm template routes
+- **IMPROVED**: Reset buttons use the client-side snapshot reset for dynamic instances (so each row resets to its own initial values)
+
+### 📚 Documentation
+- **UPDATED**: README.md with ComparisonForm `template_name` documentation
+- **UPDATED**: `examples/dynamic_forms_example.py` demonstrating ComparisonForm template routes
+
+---
+
 ## Version 0.3.16 (2026-01-19)
 
 ### ⚠️ Breaking Changes

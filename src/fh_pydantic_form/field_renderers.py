@@ -1966,6 +1966,13 @@ class ListFieldRenderer(BaseFieldRenderer):
                 refresh_url = self._refresh_endpoint_override
                 refresh_vals = None
                 refresh_include = "closest form"
+                # For dynamic forms using template routes, still need to send fhpf_form_name
+                route_form_name = (
+                    self._route_form_name if hasattr(self, "_route_form_name") else None
+                )
+                if route_form_name and route_form_name != form_name:
+                    refresh_vals = json.dumps({"fhpf_form_name": form_name})
+                    refresh_include = f"[name^='{form_name}_']"
             else:
                 route_form_name = (
                     self._route_form_name if hasattr(self, "_route_form_name") else None

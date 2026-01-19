@@ -110,11 +110,13 @@ def test_render_column_order(
     comparison, start_order, expected_header_order, expected_first_field_order
 ):
     """Test that column rendering produces correct CSS order values."""
+    side = "left" if start_order == 0 else "right"
     col = comparison._render_column(
         form=comparison.left_form if start_order == 0 else comparison.right_form,
         header_label="Test Label",
         start_order=start_order,
         wrapper_id="test-wrapper",
+        side=side,
     )
 
     html = col.__html__()
@@ -138,6 +140,7 @@ def test_render_column_data_path_attributes(comparison):
         header_label="Left",
         start_order=0,
         wrapper_id="left-wrapper",
+        side="left",
     )
 
     html = col.__html__()
@@ -156,7 +159,11 @@ def test_render_column_excludes_fields(example_model):
     comp = ComparisonForm("test", form, PydanticForm("right", example_model))
 
     col = comp._render_column(
-        form=form, header_label="Test", start_order=0, wrapper_id="test-wrapper"
+        form=form,
+        header_label="Test",
+        start_order=0,
+        wrapper_id="test-wrapper",
+        side="left",
     )
 
     html = col.__html__()
