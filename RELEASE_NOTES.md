@@ -1,5 +1,14 @@
 # Release Notes
 
+## Version 0.3.18 (2026-01-21)
+
+### 🔧 Bug Fixes
+
+#### Form Parsing
+- **FIXED**: Sanitize `base_prefix` to handle dots in form names during parsing
+
+---
+
 ## Version 0.3.17 (2026-01-19)
 
 ### 🎉 New Features
