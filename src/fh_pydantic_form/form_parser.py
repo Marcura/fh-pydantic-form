@@ -22,6 +22,10 @@ from fh_pydantic_form.type_helpers import (
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_prefix(prefix: str) -> str:
+    return prefix.replace(".", "_") if prefix else prefix
+
+
 def _identify_list_fields(model_class) -> Dict[str, Dict[str, Any]]:
     """
     Identifies list fields in a model and their item types.
@@ -74,6 +78,9 @@ def _parse_non_list_fields(
     result: Dict[str, Any] = {}
     exclude_fields = exclude_fields or []
     keep_skip_json_pathset = keep_skip_json_pathset or set()
+
+    # Sanitize base_prefix to match HTML field name rendering
+    base_prefix = _sanitize_prefix(base_prefix)
 
     # Helper function to check if a SkipJsonSchema field should be kept
     def _should_keep_skip_field(path_segments: List[str]) -> bool:
@@ -504,6 +511,9 @@ def _parse_list_fields(
         Dictionary with parsed list fields
     """
     exclude_fields = exclude_fields or []
+
+    # Sanitize base_prefix to match HTML field name rendering
+    base_prefix = _sanitize_prefix(base_prefix)
 
     # Skip if no list fields defined
     if not list_field_defs:
