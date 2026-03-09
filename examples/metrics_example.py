@@ -267,20 +267,18 @@ def format_metrics_dict() -> str:
         # Build the dictionary representation with only present fields
         dict_parts = []
 
-        if "metric" in entry:  # type: ignore
-            metric_val = entry["metric"]  # type: ignore
+        if "metric" in entry:
+            metric_val = entry["metric"]
             if isinstance(metric_val, str):
                 dict_parts.append(f'"metric": "{metric_val}"')
             else:
                 dict_parts.append(f'"metric": {metric_val}')
 
-        if "color" in entry:  # type: ignore
-            dict_parts.append(f'"color": "{entry["color"]}"')  # type: ignore
+        if "color" in entry:
+            dict_parts.append(f'"color": "{entry["color"]}"')
 
-        if "comment" in entry:  # type: ignore
-            comment = entry["comment"].replace(  # type: ignore
-                '"', '\\"'
-            )  # Escape quotes
+        if "comment" in entry:
+            comment = entry["comment"].replace('"', '\\"')  # Escape quotes
             dict_parts.append(f'"comment": "{comment}"')
 
         # Format the entry

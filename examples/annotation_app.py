@@ -111,7 +111,7 @@ SAMPLE_DOCUMENTS = {
 
 def insert_sample_documents():
     for doc_id, doc_data in SAMPLE_DOCUMENTS.items():
-        initial_annotation: DocumentExtraction = doc_data["initial_extraction"]  # type: ignore
+        initial_annotation: DocumentExtraction = doc_data["initial_extraction"]  # type: ignore[invalid-assignment]
         annotations.upsert(
             {
                 "document_id": doc_id,

@@ -441,7 +441,7 @@ class TestEdgeCases:
     def test_circular_reference_handling(self, simple_test_model):
         """Test handling of dictionaries with circular references."""
         circular_dict = {"name": "Circular User", "age": 30}
-        circular_dict["self"] = circular_dict  # Circular reference
+        circular_dict["self"] = circular_dict  # type: ignore[invalid-assignment]  # Circular reference
 
         # Should not crash during construction
         form = PydanticForm("test", simple_test_model, initial_values=circular_dict)

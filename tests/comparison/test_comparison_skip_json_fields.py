@@ -26,11 +26,11 @@ class TestComparisonFormSkipJsonSchema:
                 default=["tag1"], description="Tags for the address"
             )
             # SkipJsonSchema fields - normally hidden but can be selectively shown
-            internal_id: SkipJsonSchema[str] = Field(  # type: ignore
+            internal_id: SkipJsonSchema[str] = Field(
                 default_factory=lambda: f"addr_{uuid4().hex[:8]}",
                 description="Internal address tracking ID (system use only)",
             )
-            audit_notes: SkipJsonSchema[List[str]] = Field(  # type: ignore
+            audit_notes: SkipJsonSchema[List[str]] = Field(
                 default_factory=list,
                 description="Internal audit notes (system use only)",
             )
@@ -48,28 +48,28 @@ class TestComparisonFormSkipJsonSchema:
             is_active: bool = Field(description="Is the customer active")
 
             # SkipJsonSchema fields - normally hidden
-            document_id: SkipJsonSchema[str] = Field(  # type: ignore
+            document_id: SkipJsonSchema[str] = Field(
                 default_factory=lambda: f"doc_{uuid4().hex[:12]}",
                 description="Document tracking ID (system generated)",
             )
-            created_at: SkipJsonSchema[datetime.datetime] = Field(  # type: ignore
+            created_at: SkipJsonSchema[datetime.datetime] = Field(
                 default_factory=datetime.datetime.now,
                 description="Creation timestamp (system managed)",
             )
-            version: SkipJsonSchema[int] = Field(  # type: ignore
+            version: SkipJsonSchema[int] = Field(
                 default=1, description="Document version (system managed)"
             )
-            security_flags: SkipJsonSchema[List[str]] = Field(  # type: ignore
+            security_flags: SkipJsonSchema[List[str]] = Field(
                 default_factory=lambda: ["verified", "approved"],
                 description="Security flags (admin only)",
             )
 
             # Nested models with SkipJsonSchema fields
-            main_address: address_model = Field(  # type: ignore
+            main_address: address_model = Field(  # type: ignore[invalid-type-form]
                 default_factory=address_model,
-                description="Main address",  # type: ignore
+                description="Main address",
             )
-            other_addresses: List[address_model] = Field(  # type: ignore
+            other_addresses: List[address_model] = Field(  # type: ignore[invalid-type-form]
                 default_factory=list, description="Other addresses"
             )
 

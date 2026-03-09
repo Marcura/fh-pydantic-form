@@ -19,20 +19,20 @@ class TestSkipJsonSchemaIntegration:
         """Model simulating Document base class with SkipJsonSchema fields."""
 
         class DocumentBase(BaseModel):
-            id: SkipJsonSchema[Optional[str]] = Field(  # type: ignore
+            id: SkipJsonSchema[Optional[str]] = Field(
                 default_factory=lambda: str(uuid4()), description="Document ID"
             )
-            created_at: SkipJsonSchema[datetime.datetime] = Field(  # type: ignore
+            created_at: SkipJsonSchema[datetime.datetime] = Field(
                 default_factory=datetime.datetime.now, description="Creation timestamp"
             )
-            updated_at: SkipJsonSchema[datetime.datetime] = Field(  # type: ignore
+            updated_at: SkipJsonSchema[datetime.datetime] = Field(
                 default_factory=datetime.datetime.now,
                 description="Last update timestamp",
             )
-            version: SkipJsonSchema[int] = Field(  # type: ignore
+            version: SkipJsonSchema[int] = Field(
                 default=1, description="Document version"
             )
-            metadata: SkipJsonSchema[Dict[str, Any]] = Field(  # type: ignore
+            metadata: SkipJsonSchema[Dict[str, Any]] = Field(
                 default_factory=dict, description="Additional metadata"
             )
 
@@ -44,7 +44,7 @@ class TestSkipJsonSchemaIntegration:
     ) -> Type[BaseModel]:
         """User model inheriting from DocumentBase."""
 
-        class UserDocument(document_base_model):  # type: ignore
+        class UserDocument(document_base_model):  # type: ignore[unsupported-base]
             name: str = Field(description="User's full name")
             email: str = Field(description="User's email address")
             age: Optional[int] = Field(None, description="User's age")
@@ -64,18 +64,18 @@ class TestSkipJsonSchemaIntegration:
             city: str
             country: str = "USA"
             postal_code: Optional[str] = None
-            internal_id: SkipJsonSchema[Optional[str]] = Field(  # type: ignore
+            internal_id: SkipJsonSchema[Optional[str]] = Field(
                 default_factory=lambda: str(uuid4()), description="Internal address ID"
             )
 
-        class ComplexDocument(document_base_model):  # type: ignore
+        class ComplexDocument(document_base_model):  # type: ignore[unsupported-base]
             title: str
             content: str
             author: str
             published: bool = False
             addresses: List[Address] = Field(default_factory=list)
             primary_address: Optional[Address] = None
-            internal_notes: SkipJsonSchema[List[str]] = Field(  # type: ignore
+            internal_notes: SkipJsonSchema[List[str]] = Field(
                 default_factory=list, description="Internal notes not exposed in API"
             )
 
@@ -162,13 +162,13 @@ class TestSkipJsonSchemaIntegration:
         # Should validate successfully
         model = user_document_model.model_validate(parsed)
 
-        assert model.name == "Jane Smith"  # type: ignore
-        assert model.email == "jane@example.com"  # type: ignore
-        assert model.id == "validation-test-uuid"  # type: ignore
-        assert model.version == 1  # type: ignore
-        assert isinstance(model.created_at, datetime.datetime)  # type: ignore
-        assert isinstance(model.updated_at, datetime.datetime)  # type: ignore
-        assert model.metadata == {}  # type: ignore
+        assert model.name == "Jane Smith"
+        assert model.email == "jane@example.com"
+        assert model.id == "validation-test-uuid"
+        assert model.version == 1
+        assert isinstance(model.created_at, datetime.datetime)
+        assert isinstance(model.updated_at, datetime.datetime)
+        assert model.metadata == {}
 
     def test_complex_model_with_nested_skip_fields(
         self, complex_document_model: Type[BaseModel], mocker
@@ -217,8 +217,8 @@ class TestSkipJsonSchemaIntegration:
 
         # Validate the model
         model = complex_document_model.model_validate(parsed)
-        assert model.title == "Test Document"  # type: ignore
-        assert model.internal_notes == []  # type: ignore  # SkipJsonSchema field with list default
+        assert model.title == "Test Document"
+        assert model.internal_notes == []  # SkipJsonSchema field with list default
 
     def test_skip_fields_with_initial_values(
         self, user_document_model: Type[BaseModel]
@@ -298,16 +298,16 @@ class TestSkipJsonSchemaIntegration:
         """Test multiple levels of inheritance with SkipJsonSchema fields."""
 
         class BaseModel1(BaseModel):
-            base1_id: SkipJsonSchema[str] = Field(default="base1")  # type: ignore
+            base1_id: SkipJsonSchema[str] = Field(default="base1")
             base1_field: str = "base1_value"
 
         class BaseModel2(BaseModel1):
-            base2_id: SkipJsonSchema[str] = Field(default="base2")  # type: ignore
+            base2_id: SkipJsonSchema[str] = Field(default="base2")
             base2_field: str = "base2_value"
 
         class ConcreteModel(BaseModel2):
             concrete_field: str
-            concrete_meta: SkipJsonSchema[Dict[str, Any]] = Field(default_factory=dict)  # type: ignore
+            concrete_meta: SkipJsonSchema[Dict[str, Any]] = Field(default_factory=dict)
 
         form = PydanticForm("test_inherit", ConcreteModel)
         rendered_str = str(form.render_inputs())
@@ -332,12 +332,12 @@ class TestSkipJsonSchemaIntegration:
     @pytest.mark.parametrize(
         "field_type,default_value",
         [
-            (SkipJsonSchema[str], ""),  # type: ignore
-            (SkipJsonSchema[int], 0),  # type: ignore
-            (SkipJsonSchema[bool], False),  # type: ignore
-            (SkipJsonSchema[float], 0.0),  # type: ignore
-            (SkipJsonSchema[list], []),  # type: ignore
-            (SkipJsonSchema[dict], {}),  # type: ignore
+            (SkipJsonSchema[str], ""),
+            (SkipJsonSchema[int], 0),
+            (SkipJsonSchema[bool], False),
+            (SkipJsonSchema[float], 0.0),
+            (SkipJsonSchema[list], []),
+            (SkipJsonSchema[dict], {}),
         ],
     )
     def test_various_skip_field_types(self, field_type: Any, default_value: Any):
@@ -409,7 +409,7 @@ class TestSkipJsonSchemaIntegration:
 
         class FailingModel(BaseModel):
             name: str
-            failing_skip: SkipJsonSchema[str] = Field(default_factory=failing_factory)  # type: ignore
+            failing_skip: SkipJsonSchema[str] = Field(default_factory=failing_factory)
 
         # Patch logger to verify warning is logged
         mock_logger = mocker.patch("fh_pydantic_form.type_helpers.logger")
