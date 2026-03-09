@@ -1,7 +1,7 @@
 from typing import Optional
 
-import fasthtml.common as fh  # type: ignore
-import monsterui.all as mui  # type: ignore
+import fasthtml.common as fh
+import monsterui.all as mui
 import pytest
 from pydantic import ValidationError
 from starlette.testclient import TestClient

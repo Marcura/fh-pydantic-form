@@ -9,8 +9,8 @@ import datetime  # noqa: E402
 from enum import Enum, IntEnum  # noqa: E402
 from typing import List, Literal, Optional  # noqa: E402
 
-import fasthtml.common as fh  # type: ignore  # noqa: E402
-import monsterui.all as mui  # type: ignore  # noqa: E402
+import fasthtml.common as fh  # noqa: E402
+import monsterui.all as mui  # noqa: E402
 import pytest  # noqa: E402
 from pydantic import BaseModel, Field, ValidationError  # noqa: E402
 from pydantic.json_schema import SkipJsonSchema  # noqa: E402
