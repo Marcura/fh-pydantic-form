@@ -44,7 +44,7 @@ class TestSkipJsonSchemaIntegration:
     ) -> Type[BaseModel]:
         """User model inheriting from DocumentBase."""
 
-        class UserDocument(document_base_model):  # type: ignore[unsupported-base]
+        class UserDocument(document_base_model):  # ty: ignore[unsupported-base]
             name: str = Field(description="User's full name")
             email: str = Field(description="User's email address")
             age: Optional[int] = Field(None, description="User's age")
@@ -68,7 +68,7 @@ class TestSkipJsonSchemaIntegration:
                 default_factory=lambda: str(uuid4()), description="Internal address ID"
             )
 
-        class ComplexDocument(document_base_model):  # type: ignore[unsupported-base]
+        class ComplexDocument(document_base_model):  # ty: ignore[unsupported-base]
             title: str
             content: str
             author: str

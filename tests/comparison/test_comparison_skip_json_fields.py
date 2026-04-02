@@ -65,12 +65,12 @@ class TestComparisonFormSkipJsonSchema:
             )
 
             # Nested models with SkipJsonSchema fields
-            main_address: address_model = Field(  # type: ignore[invalid-type-form]
+            main_address: address_model = Field(  # ty: ignore[invalid-type-form]
                 default_factory=address_model,
                 description="Main address",
             )
-            other_addresses: List[address_model] = Field(  # type: ignore[invalid-type-form]
-                default_factory=list, description="Other addresses"
+            other_addresses: List[address_model] = (  # ty: ignore[invalid-type-form]
+                Field(default_factory=list, description="Other addresses")
             )
 
         return CustomerData
