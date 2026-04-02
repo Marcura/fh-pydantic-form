@@ -173,9 +173,13 @@ class ComplexSchema(BaseModel):
     )
 
     # List[Literal] - renders as pills with dropdown (NEW!)
-    selected_regions: List[Literal["EMEA", "APAC", "AMERICAS", "OTHER"]] = Field(
-        default_factory=lambda: ["EMEA"],
-        description="Selected regions for the customer (pill/tag selector)",
+    selected_regions: List[
+        Literal["EMEA", "APAC", "AMERICAS", "OTHER"]
+    ] = (  # ty: ignore[invalid-assignment]
+        Field(
+            default_factory=lambda: ["EMEA"],
+            description="Selected regions for the customer (pill/tag selector)",
+        )
     )
 
     # List[Enum] - also renders as pills with dropdown (NEW!)
